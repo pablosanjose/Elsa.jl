@@ -1,5 +1,7 @@
 module QBox
 
+function transform!() end
+
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays
 using Requires
 
@@ -13,6 +15,11 @@ export TreeSearch, SimpleSearch
 export System, Model, Onsite, Hopping, hamiltonian, Mesh
 export plot
 export @SMatrix, @SVector, SMatrix, SVector
+
+function __init__()
+    # @require Makie="ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a" @eval import Makie
+    @require Makie="ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a" include("plot.jl")
+end
 
 abstract type LatticeOption end
 abstract type LatticePresets end
@@ -28,6 +35,5 @@ include("system.jl")
 include("mesh.jl")
 include("algorithms_lattice.jl")
 include("convert.jl")
-@require Makie="ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a" include("plot.jl")
 
 end
