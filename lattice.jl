@@ -279,13 +279,13 @@ selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) 
 supercellmatrix(s::Supercell{<:UniformScaling}, lat::Lattice{T,E,L}) where {T,E,L} = SMatrix{L,L}(s.matrix.λ .* one(SMatrix{L,L,Int}))
 supercellmatrix(s::Supercell{<:SMatrix}, lat::Lattice{T,E,L}) where {T,E,L} = s.matrix
 
-function transform!(l::L, f::F) where {L<:Lattice, F<:Function}
+function transformlattice!(l::L, f::F) where {L<:Lattice, F<:Function}
     transform!.(l.sublats, f)
     isunlinked(l) || transform!(l.links, f)
     l.bravais = transform(l.bravais, f)
     return l
 end
-transform(l::Lattice, f::F) where F<:Function = transform!(deepcopy(l), f)
+transformlattice(l::Lattice, f::F) where F<:Function = transformlattice!(deepcopy(l), f)
 
 #######################################################################
 # Apply LatticeOptions

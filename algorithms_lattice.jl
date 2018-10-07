@@ -202,7 +202,7 @@ function linkprecompute(lr::LinkRules{<:BoxIteratorSearch}, lat::Lattice)
     # Build an OffsetArray for each sublat s : maps[s] = oa[cells..., iold] = inew, where cells are oldsystem cells, not fill cells
     nslist = lr.alg.nslist
     iterated2old = lr.alg.iterated2old
-    maps = [(range = _maprange(boundingbox(lr.alg.iter), nsites, iterated2old);
+    maps = [(range = _maprange(boundingboxiter(lr.alg.iter), nsites, iterated2old);
              OffsetArray(zeros(Int, map(length, range)), range))
             for nsites in nslist]
     for (s, register) in enumerate(lr.alg.iter.registers), (inew, (cell, iold)) in enumerate(register.cellinds)

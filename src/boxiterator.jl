@@ -27,7 +27,7 @@ end
 IteratorSize(::BoxIterator) = SizeUnknown()
 IteratorEltype(::BoxIterator) = HasElType()
 eltype(::BoxIterator{N}) where {N} = NTuple{N,Int}
-boundingbox(b::BoxIterator) = (b.npos, b.ppos)
+boundingboxiter(b::BoxIterator) = (b.npos, b.ppos)
 
 function BoxIterator(seed::NTuple{N}; maxiterations::Union{Int,Missing} = missing, nregisters::Int = 0) where {N} 
     BoxIterator(seed, maxiterations, MVector(1, 2),
@@ -69,7 +69,7 @@ function Base.iterate(b::BoxIterator{N}, s::BoxIteratorState{N}) where {N}
     facedone = itrange === nothing
     if facedone
         alldone = !any(b.pmoves) && !any(b.nmoves) || isless(b.maxiter, s.iteration)
-        if alldone  # Last shells in all directions were empty, trim from boundingbox
+        if alldone  # Last shells in all directions were empty, trim from boundingboxiter
             b.npos .+= 1
             b.ppos .-= 1
             return nothing
