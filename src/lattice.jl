@@ -15,7 +15,7 @@ Sublat{T,E}() where {T,E} = Sublat(missing, SVector{E,T}[])
 nsites(s::Sublat) = length(s.sites)
 # dim(s::Sublat{T,E}) where {T,E} = E
 
-transform!(s::S, f::F) where {S<:Sublat, F<:Function} = (s.sites .= f.(s.sites); s)
+_transform!(s::S, f::F) where {S<:Sublat, F<:Function} = (s.sites .= f.(s.sites); s)
 flatten(ss::Sublat...) = Sublat(ss[1].name, vcat((s.sites for s in ss)...))
 
 #######################################################################
@@ -78,7 +78,7 @@ sources(s::Slink) = 1:(length(s.srcpointers)-1)
 
 @inline _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
-function transform!(s::Slink, f::F) where F<:Function 
+function _transform!(s::Slink, f::F) where F<:Function 
     frdr(rdr) = _rdr(f(rdr[1] - 0.5 * rdr[2]), f(rdr[1] + 0.5 * rdr[2]))
     s.rdr .= frdr.(s.rdr)
     return s
@@ -107,7 +107,7 @@ nlinks(ss::Array{<:Slink}, i) = nlinks(ss[i])
 
 Base.isempty(ilink::Ilink) = nlinks(ilink) == 0
 
-transform!(i::IL, f::F) where {IL<:Ilink, F<:Function} = (transform!.(i.slinks, f); i)
+_transform!(i::IL, f::F) where {IL<:Ilink, F<:Function} = (_transform!.(i.slinks, f); i)
 
 #######################################################################
 # Links struct
@@ -126,7 +126,7 @@ nuniquelinks(links::Links) = nlinks(links.intralink) + nlinks(links.interlinks)
 nsublats(links::Links) = size(links.intralink.slinks, 1)
 # @inline nsiteslist(links::Links) = [nsites(links.intralink.slinks[s, s]) for s in 1:nsublats(links)]
 
-transform!(l::L, f::F) where {L<:Links, F<:Function} = (transform!(l.intralink, f); transform!.(l.interlinks, f); return l)
+_transform!(l::L, f::F) where {L<:Links, F<:Function} = (_transform!(l.intralink, f); _transform!.(l.interlinks, f); return l)
 
 ################################################################################
 ## Dim LatticeOption
@@ -279,13 +279,13 @@ selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) 
 supercellmatrix(s::Supercell{<:UniformScaling}, lat::Lattice{T,E,L}) where {T,E,L} = SMatrix{L,L}(s.matrix.λ .* one(SMatrix{L,L,Int}))
 supercellmatrix(s::Supercell{<:SMatrix}, lat::Lattice{T,E,L}) where {T,E,L} = s.matrix
 
-function transform!(l::L, f::F) where {L<:Lattice, F<:Function}
-    transform!.(l.sublats, f)
-    isunlinked(l) || transform!(l.links, f)
+function _transform!(l::L, f::F) where {L<:Lattice, F<:Function}
+    _transform!.(l.sublats, f)
+    isunlinked(l) || _transform!(l.links, f)
     l.bravais = transform(l.bravais, f)
     return l
 end
-transform(l::Lattice, f::F) where F<:Function = transform!(deepcopy(l), f)
+transform(l::Lattice, f::F) where F<:Function = _transform!(deepcopy(l), f)
 
 #######################################################################
 # Apply LatticeOptions
@@ -321,7 +321,7 @@ function lattice!(lat::Lattice{T,E,L}, l::LatticeConstant) where {T,E,L}
         rescale = let factor = l.a / norm(lat.bravais.matrix[:,1])
             r -> factor * r
         end
-        transform!(lat, rescale)
+        _transform!(lat, rescale)
     end
     return lat 
 end

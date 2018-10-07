@@ -1,6 +1,6 @@
 module QBox
 
-function transform!() end
+function _transform!() end
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays
 using Requires
@@ -10,7 +10,7 @@ import SparseArrays: sparse!
 
 export Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
        FillRegion, LinkRules, Dim, Precision,
-       transform, transform!, lattice!, combine
+       transform, _transform!, lattice!, combine
 export TreeSearch, SimpleSearch
 export System, Model, Onsite, Hopping, hamiltonian, MeshBrillouin
 export plot

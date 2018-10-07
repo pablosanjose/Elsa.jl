@@ -46,10 +46,10 @@ lattice_presets = Dict(
             ltop = Lattice(sAtop, sBtop, bravais, Dim(3), LinkRules(linkrangeintralayer), Supercell(sctop))
             lbot = Lattice(sAbot, sBbot, bravais, Dim(3), LinkRules(linkrangeintralayer), Supercell(scbot))
             let R = @SMatrix[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]
-                transform!(ltop, r -> R * r)
+                _transform!(ltop, r -> R * r)
             end
             let R = @SMatrix[cos(θ/2) sin(θ/2) 0; -sin(θ/2) cos(θ/2) 0; 0 0 1]
-                transform!(lbot, r -> R * r)
+                _transform!(lbot, r -> R * r)
             end
             combine!(lbot, ltop)
         end
