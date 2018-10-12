@@ -14,8 +14,7 @@ function lighten(c, v = 0.66)
     darken(c, -v)
 end
 
-# plot(lat::Lattice; highquality::Bool = false, kwargs...) = highquality ? _plothi(lat, kwargs...) : _plotlow(lat, kwargs...)
- function plot(lat::Lattice; highquality = false, resolution = (1024, 1024), kwargs...) #siteradius = 0.2, siteborder = 15)
+ function plot(lat::Lattice; highquality = false, resolution = (1024, 1024), kwargs...)
     scene = Scene(resolution = resolution)
     colors = collect(take(colorscheme, nsublats(lat)))
 
@@ -23,7 +22,6 @@ end
         sites = sublat.sites
         highquality ? drawsites_hi!(scene, sites, color; kwargs...) : drawsites_lo!(scene, sites, color; kwargs...)
     end
-        
 
     for ci in CartesianIndices(lat.links.intralink.slinks)
         i, j = Tuple(ci)
@@ -34,9 +32,15 @@ end
             drawlinks_lo!(scene, slink.rdr, (col1, col2); kwargs...)
     end
 
-    cam3d!(scene; eyeposition = Vec3f0(0, 0, 3))
+    b1, b2 = boundingboxlat(lat)
+    lookat = (b1 + b2)/2
+    eye = lookat + SVector(0.,0.,2.)*norm((b1 - b2)[1:2])
+    @show eye, lookat
+
+    cam3d!(scene)
     scale!(scene)
-    center!(scene)
+    # center!(scene) 
+    update_cam!(scene, Vec3f0(eye), Vec3f0(lookat), Vec3f0(0,1,0))
     
     return scene
 end
@@ -54,23 +58,23 @@ function drawsites_hi!(scene, sites, color; siteradius = 0.2)
 end
 
 function drawlinks_lo!(scene, rdr, (col1, col2); siteradius = 0.2, siteborder = 15)
+    isempty(rdr) && return nothing
     segments = [fullsegment(r, dr, siteradius * 0.99) for (r, dr) in rdr]
     colsegments = collect(take(cycle((col1, col2)), 2 * length(segments)))
-    isempty(segments) || linesegments!(scene, segments, linewidth = siteborder, color = colsegments)
+    linesegments!(scene, segments, linewidth = siteborder, color = colsegments)
     return nothing
 end
 
 function drawlinks_hi!(scene, rdr, (col1, col2); siteradius = 0.2, linkradius = 0.1)
-    cylinder = GLNormalMesh(Makie.Cylinder{3, Float32}(Point3f0(0., 0., 0.), Point3f0(0., 0, 1.), Float32(1)), 12)
+    isempty(rdr) && return nothing
     # positions = view(rdr, :, 1)
     positions = [Point3f0(r) for (r, _) in rdr]
-    segments = [halfsegment(r, dr, siteradius * 0.99) for (r, dr) in rdr]
+    segments = [halfsegment(r, dr, 0) for (r, dr) in rdr]
     scales = [Vec3f0(linkradius, linkradius, norm(dr)) for dr in segments]
-    if isempty(segments) 
-        meshscatter!(scene, positions, markersize = scales, rotations = segments, color = col1)
-        scales .*= -1f0
-        meshscatter!(scene, positions, markersize = scales, rotations = segments, color = col2)
-    end
+    cylinder = GLNormalMesh(Makie.Cylinder{3, Float32}(Point3f0(0., 0., 0.), Point3f0(0., 0, 1.), Float32(1)), 12)
+    meshscatter!(scene, positions, marker = cylinder, markersize = scales, rotations = segments, color = col2)
+    cylinder = GLNormalMesh(Makie.Cylinder{3, Float32}(Point3f0(0., 0., 0.), Point3f0(0., 0, -1.), Float32(1)), 12)
+    meshscatter!(scene, positions,  marker = cylinder, markersize = scales, rotations = segments, color = col1)
     return nothing
 end
 

@@ -276,6 +276,18 @@ linkgenerator_r1r2(ilink::Ilink) = ((rdr[1] -rdr[2]/2, rdr[1] + rdr[2]/2) for s 
 selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) where {T,E,L} =
    Bravais(SMatrix{E,L,T}(lat.bravais.matrix[:,bools]))
 
+function boundingboxlat(lat::Lattice{T,E}) where {T,E}
+    bmin = zero(MVector{E, T})
+    bmax = zero(MVector{E, T})
+    foreach(sl -> foreach(s -> _boundingboxlat!(bmin, bmax, s), sl.sites), lat.sublats)
+    return (bmin, bmax)
+end
+@inline function _boundingboxlat!(bmin, bmax, site) 
+    bmin .= min.(bmin, site)
+    bmax .= max.(bmax, site)
+    return nothing
+end
+
 supercellmatrix(s::Supercell{<:UniformScaling}, lat::Lattice{T,E,L}) where {T,E,L} = SMatrix{L,L}(s.matrix.λ .* one(SMatrix{L,L,Int}))
 supercellmatrix(s::Supercell{<:SMatrix}, lat::Lattice{T,E,L}) where {T,E,L} = s.matrix
 
