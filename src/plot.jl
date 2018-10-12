@@ -33,7 +33,7 @@ function plot(lat::Lattice; resolution = (1024, 1024), siteradius = 0.2, sitebor
         col1, col2 = colors[i], colors[j]
         slink = lat.links.intralink.slinks[ci]
         for (r, dr) in slink.rdr
-            links = [Point(r) => Point(r + dr/2) for (r, dr) in slink.rdr]
+            links = [Point(r - dr/2) => Point(r + dr/2) for (r, dr) in slink.rdr]
             linesegments!(links, color = col1)
         end
         # links = [Point3f0(r) => Point3f0(r + dr/2) for (r, dr) in slink.rdr]
