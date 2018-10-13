@@ -53,6 +53,8 @@ using QBox: nsites, nuniquelinks
 @test QBox.nuniquelinks(Lattice(:square, LinkRules(2), Supercell(31))) == 6074
 @test QBox.nuniquelinks(Lattice(:bcc, LinkRules(1), FillRegion(:spheroid, (10,4,4)))) == 8216
 
+@test LinkRules(1.2, 1, (2,3)) isa LinkRules{QBox.AutomaticRangeSearch,Tuple{Tuple{Int64,Int64},Tuple{Int64,String}}}
+
 @test begin
     lat1 = Lattice(:honeycomb, LinkRules(1/sqrt(3)), FillRegion(:circle, 7))
     lat2 = Lattice(:square, LinkRules(2), FillRegion(:circle, 6))
