@@ -43,6 +43,7 @@ using QBox: nsites, nuniquelinks
 @test Sublat("A", @SVector[3f0,3f0], (3,4)) isa Sublat{Float32,2}
 @test Sublat{Float64}("A", (3f0,3)) isa Sublat{Float64,2}
 
+@test Lattice(:honeycomb, Dim(3), Precision(Float32)) isa Lattice{Float32,3,2}
 @test QBox.nsites(Lattice(:honeycomb, FillRegion(:square, 300))) == 207946
 @test QBox.nsites(Lattice(:square, Supercell(31))) == 961
 @test QBox.nsites(Lattice(:bcc, FillRegion(:spheroid, (10,4,4)))) == 1365
