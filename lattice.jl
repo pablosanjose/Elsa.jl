@@ -305,7 +305,7 @@ function lattice!(lat::Lattice, s::Sublat)
     return lat
 end
 
-lattice!(lat::Lattice{T,E,L,EL}, d::Dim{E2}) where {T,E,L,EL,E2} = convert(Lattice{T,E2,L,E2*L}, lat)
+lattice!(lat::Lattice{T,E,L,EL}, d::Dim{E2}) where {T,E,L,EL,E2} = lat #convert(Lattice{T,E2,L,E2*L}, lat)
 
 lattice!(lat::Lattice{T,E,L,EL}, p::Precision{T2}) where {T,E,L,EL,T2} = 
     convert(Lattice{T2,E,L,EL}, lat)

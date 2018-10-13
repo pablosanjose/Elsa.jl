@@ -15,8 +15,12 @@ convert(::Type{T}, l::Lattice) where T<:Lattice = T(l)
 convert(::Type{T}, l::T) where T<:LatticeOption = l
 convert(::Type{T}, l::LatticeOption) where T<:LatticeOption = T(l)
 
-# convert(::Type{Matrix{Slink{T,E}}}, nsublats::Int) where {T,E} =
-#     [Slink{T,E}() for i in 1:nsublats, j in 1:nsublats]
+convert(::Type{T}, l::T) where T<:Links = l
+convert(::Type{T}, l::Links) where T<:Links = T(l)
+convert(::Type{T}, l::T) where T<:Ilink = l
+convert(::Type{T}, l::Ilink) where T<:Ilink = T(l)
+convert(::Type{T}, l::T) where T<:Slink = l
+convert(::Type{T}, l::Slink) where T<:Slink = T(l)
 
 # Constructors for conversion
 
@@ -27,15 +31,15 @@ Bravais{T,E,L,EL}(b::Bravais) where {T,E,L,EL} =
     Bravais(padrightbottom(b.matrix, SMatrix{E,L,T,EL}))
 
 function Slink{T,E}(s::Slink) where {T,E}
-    rdr = Vector{Tuple{SVector{E,T}, SVector{E,T}}}(undef, length(s.rdr))
-    @inbounds for (i, ri) in enumerate(s.rdr)
-        rdr[i] = (padright(ri[1], zero(T), Val(E)), padright(ri[2], zero(T), Val(E)))
-    end
-    Slink(s.i, s.j, rdr, s.ni, s.linklists)
+    rdr = Tuple{SVector{E,T}, SVector{E,T}}[(padright(r, zero(T), Val(E)), padright(dr, zero(T), Val(E))) for (r, dr) in s.rdr]
+    Slink(s.targets, s.srcpointers, rdr)
 end
 
+Links{T,E,L}(l::Links) where {T,E,L} = 
+    Links{T,E,L}(l.intralink, l.interlinks)
+
 Ilink{T,E,L}(i::Ilink) where {T,E,L} =
-    Ilink(padright(i.ndist, zero(T), E), convert(Matrix{Slink{T,E}}, i.slinks))
+    Ilink(padright(i.ndist, zero(Int), Val(L)), convert(Matrix{Slink{T,E}}, i.slinks))
 
 Lattice{T,E,L,EL}(l::Lattice) where {T,E,L,EL} = 
     Lattice{T,E,L,EL}(l.sublats, l.bravais, l.links)
