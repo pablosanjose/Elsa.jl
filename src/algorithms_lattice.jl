@@ -262,14 +262,14 @@ end
 # Notation: i0 = index of that site in original lattice (in sublat s1)
 # Notation: ndist = ndist of the new unit under consideration
 # Notation: ndold_intercell = that same ndist translated to an ndist in the original lattice
-# Notation: ndold_intracell = ndist within the new unit cell (celliter) translated to an ndist in the original lattice
+# Notation: ndold_intracell = ndist within the new unit cell (celliter) written as an ndist in the original lattice
 # Notation: Δnold = ndist of the new site expressed in the original lattice, but within its new unit cell
 function add_neighbors!(slink, lr::LinkRules{<:BoxIteratorSearch}, maps, (dist, ndist, isinter), (s1, s2), (i, r1))
     (celliter, iold) = lr.alg.iter.registers[s1].cellinds[i]
     ndold_intercell = lr.alg.open2old * ndist
     ndold_intracell = lr.alg.iterated2old * SVector(celliter)
-    dist = bravaismatrix(lr.alg.bravais) * (ndold_intercell + ndold_intracell)
     Δnold = ndold_intracell - ndold_intercell
+    dist = bravaismatrix(lr.alg.bravais) * Δnold
     
     oldlinks = lr.alg.links
 

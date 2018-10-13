@@ -10,58 +10,67 @@ function darken(rgba::T, v = 0.66) where T
     b = max(0, min(rgba.b * (1 - v), 1))
     T(r,g,b,rgba.alpha)
 end
-function lighten(c, v = 0.66)
-    darken(c, -v)
+function lighten(rgba, v = 0.66)
+    darken(rgba, -v)
 end
+transparent(rgba::T, v = 0.5) where T = T(rgba.r, rgba.g, rgba.b, rgba.alpha * v) 
 
- function plot(lat::Lattice; highquality = false, resolution = (1024, 1024), kwargs...)
+ function plot(lat::Lattice; resolution = (1024, 1024), kwargs...)
     scene = Scene(resolution = resolution)
     colors = collect(take(colorscheme, nsublats(lat)))
-
-    for (sublat, color) in zip(lat.sublats, colors)
-        sites = sublat.sites
-        highquality ? drawsites_hi!(scene, sites, color; kwargs...) : drawsites_lo!(scene, sites, color; kwargs...)
-    end
-
-    for ci in CartesianIndices(lat.links.intralink.slinks)
-        i, j = Tuple(ci)
-        col1, col2 = darken(colors[j], 0.1), darken(colors[i], 0.1)
-        slink = lat.links.intralink.slinks[ci]
-        highquality ? 
-            drawlinks_hi!(scene, slink.rdr, (col1, col2); kwargs...) : 
-            drawlinks_lo!(scene, slink.rdr, (col1, col2); kwargs...)
+    
+    plotcell!(scene, lat, lat.links.intralink, colors; dimming = 0, kwargs...)
+    for ilink in lat.links.interlinks
+        plotcell!(scene, lat, ilink, colors; kwargs...)
     end
 
     b1, b2 = boundingboxlat(lat)
     lookat = (b1 + b2)/2
     eye = lookat + SVector(0.,0.,2.)*norm((b1 - b2)[1:2])
-    @show eye, lookat
 
     cam3d!(scene)
     scale!(scene)
-    # center!(scene) 
     update_cam!(scene, Vec3f0(eye), Vec3f0(lookat), Vec3f0(0,1,0))
     
     return scene
+ end
+
+ function plotcell!(scene, lat, ilink, colors; shaded = false, dimming = 0.75, kwargs...)
+    celldist = bravaismatrix(lat) * ilink.ndist
+    for (sublat, color) in zip(lat.sublats, colors)
+        colordimmed = transparent(color, 1 - dimming)
+        sites = [Point3f0(celldist + site) for site in sublat.sites]
+        shaded ? drawsites_hi!(scene, sites, colordimmed; kwargs...) : drawsites_lo!(scene, sites, colordimmed; kwargs...)
+    end
+
+    for ci in CartesianIndices(ilink.slinks)
+        i, j = Tuple(ci)
+        col1, col2 = darken(colors[j], 0.1), darken(colors[i], 0.1)
+        col1 = transparent(col1, 1 - dimming)
+        slink = ilink.slinks[ci]
+        shaded ? 
+            drawlinks_hi!(scene, slink.rdr, (col1, col2); kwargs...) : 
+            drawlinks_lo!(scene, slink.rdr, (col1, col2); kwargs...)
+    end
+    return nothing
 end
 
-function drawsites_lo!(scene, sites, color; siteradius = 0.2, siteborder = 15)
+function drawsites_lo!(scene, sites, color; siteradius = 0.2, strokewidth = 15)
     isempty(sites) || scatter!(scene, sites, 
-        strokewidth = siteborder, markersize = 2siteradius, color = color, strokecolor = darken(color, 0.3))
+        markersize = 2siteradius, color = color, strokewidth = strokewidth, strokecolor = darken(color, 0.3))
     return nothing
 end
 
 function drawsites_hi!(scene, sites, color; siteradius = 0.2)
-    isempty(sites) || meshscatter!(scene, sites, 
-        markersize = siteradius, color = color, strokecolor = darken(color, 0.3))
+    isempty(sites) || meshscatter!(scene, sites, markersize = siteradius, color = color)
     return nothing
 end
 
-function drawlinks_lo!(scene, rdr, (col1, col2); siteradius = 0.2, siteborder = 15)
+function drawlinks_lo!(scene, rdr, (col1, col2); siteradius = 0.2, strokewidth = 15)
     isempty(rdr) && return nothing
     segments = [fullsegment(r, dr, siteradius * 0.99) for (r, dr) in rdr]
     colsegments = collect(take(cycle((col1, col2)), 2 * length(segments)))
-    linesegments!(scene, segments, linewidth = siteborder, color = colsegments)
+    linesegments!(scene, segments, linewidth = strokewidth, color = colsegments)
     return nothing
 end
 
