@@ -2,14 +2,14 @@
 # Sublattice (Sublat) : a group of identical sites (e.g. same orbitals)
 #######################################################################
 struct Sublat{T,E} <: LatticeOption
-    name::Union{String,Missing}
+    name::Union{Symbol,Missing}
     sites::Vector{SVector{E,T}}
 end
 
 Sublat(vs...) = Sublat(missing, toSVectors(vs...))
-Sublat(name::String, vs::(<:Union{Tuple, AbstractVector{<:Number}})...) = Sublat(name, toSVectors(vs...))
+Sublat(name::Symbol, vs::(<:Union{Tuple, AbstractVector{<:Number}})...) = Sublat(name, toSVectors(vs...))
 Sublat{T}(vs...) where {T} = Sublat(missing, toSVectors(T, vs...))
-Sublat{T}(name::String, vs...) where {T} = Sublat(name, toSVectors(T, vs...))
+Sublat{T}(name::Symbol, vs...) where {T} = Sublat(name, toSVectors(T, vs...))
 Sublat{T,E}() where {T,E} = Sublat(missing, SVector{E,T}[])
 
 nsites(s::Sublat) = length(s.sites)
@@ -235,9 +235,9 @@ LinkRules(l::Links, i::BoxIterator{N}, open2old, iterated2old, bravais, nslist; 
     
 lrnormalise(::Missing) = missing
 lrnormalise(l::NTuple{N,Any}) where N = ntuple(n -> _lrnormalise(l[n]), Val(N))
+_lrnormalise(l::Tuple{Int,Int}) = tuplesort(l)
 _lrnormalise(l::Tuple) = l
 _lrnormalise(l) = (l, l)
-
 
 #############################  EXPORTED  ##############################
 # Lattice : group of sublattices + Bravais vectors + links
@@ -295,6 +295,19 @@ end
 
 supercellmatrix(s::Supercell{<:UniformScaling}, lat::Lattice{T,E,L}) where {T,E,L} = SMatrix{L,L}(s.matrix.λ .* one(SMatrix{L,L,Int}))
 supercellmatrix(s::Supercell{<:SMatrix}, lat::Lattice{T,E,L}) where {T,E,L} = s.matrix
+
+matchingsublats(lat::Lattice, lr::LinkRules) = matchingsublats(sublatnames(lat), lr.sublats)
+function matchingsublats(sublatnames, lrsublats)
+    match = Tuple{Int,Int}[]
+    for (s1, s2) in lrsublats
+        m1 = _matchingsublats(s1, sublatnames)
+        m2 = _matchingsublats(s2, sublatnames)
+        m1 isa Int && m2 isa Int && push!(match, (m1,m2))
+    end
+    return sort!(match)
+end
+_matchingsublats(s::Int, sublatnames) = s1 <= length(sublatnames) ? s : nothing
+_matchingsublats(s, sublatnames) = findfirst(isequal(s), sublatnames)
 
 function _transform!(l::L, f::F) where {L<:Lattice, F<:Function}
     _transform!.(l.sublats, f)

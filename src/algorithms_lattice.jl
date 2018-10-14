@@ -99,7 +99,7 @@ cellrange(links::Links) = isempty(links.interlinks) ? 0 : maximum(max(abs.(ilink
 
 @inline isvalidlink(isinter::Bool, (s1, s2)) = isinter || s1 <= s2
 @inline isvalidlink(isinter::Bool, (s1, s2), (i, j)::Tuple{Int,Int}) = isinter || s1 < s2 || i < j
-@inline isvalidlink(isinter::Bool, (s1, s2), lr::LinkRules) = isvalidlink(isinter, (s1, s2)) && !((s1, s2) in lr.excludesubs || (s2, s1) in lr.excludesubs)
+@inline isvalidlink(isinter::Bool, (s1, s2), lr::LinkRules) = isvalidlink(isinter, (s1, s2))
 
 function clearlinks!(lat::Lattice{T,E,L,EL}) where {T,E,L,EL}
     lat.links = emptylinks(lat)

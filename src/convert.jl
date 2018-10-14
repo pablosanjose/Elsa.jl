@@ -44,5 +44,5 @@ Ilink{T,E,L}(i::Ilink) where {T,E,L} =
 Lattice{T,E,L,EL}(l::Lattice) where {T,E,L,EL} = 
     Lattice{T,E,L,EL}(l.sublats, l.bravais, l.links)
 
-LinkRules{S}(lr::LinkRules{AutomaticRangeSearch}) where S<:SimpleSearch = LinkRules(SimpleSearch(lr.alg.range), lr.excludesubs, lr.mincells, lr.maxsteps)
-LinkRules{T}(lr::LinkRules{AutomaticRangeSearch}) where T<:TreeSearch = LinkRules(TreeSearch(lr.alg.range), lr.excludesubs, lr.mincells, lr.maxsteps)
+LinkRules{S}(lr::LinkRules{AutomaticRangeSearch}) where S<:SimpleSearch = LinkRules(SimpleSearch(lr.alg.range), lr.sublats, lr.mincells, lr.maxsteps)
+LinkRules{T}(lr::LinkRules{AutomaticRangeSearch}) where T<:TreeSearch = LinkRules(TreeSearch(lr.alg.range), lr.sublats, lr.mincells, lr.maxsteps)

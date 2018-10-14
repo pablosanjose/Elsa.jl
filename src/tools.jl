@@ -37,7 +37,7 @@ toSVectors(vs...) = [promote(toSVector.(vs)...)...]
 @inline tuplejoin(x) = x
 @inline tuplejoin(x, y) = (x..., y...)
 @inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
-
+tuplesort((a,b)::Tuple{Int,Int}) = a > b ? (b, a) : (a, b)
 # @inline tupleintersect(x, y, z...) = tupleintersect(x, tupleintersect(y, z...))
 # @inline tupleintersect(x::NTuple{N,T}, y::NTuple{M,T}) where {N,M,T} = ntuple(i -> x[i] in y ? x[i] : zero(T), Val(N))
 
