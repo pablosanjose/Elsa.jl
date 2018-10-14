@@ -99,12 +99,13 @@ cellrange(links::Links) = isempty(links.interlinks) ? 0 : maximum(max(abs.(ilink
 
 @inline isvalidlink(isinter::Bool, (s1, s2)) = isinter || s1 <= s2
 @inline isvalidlink(isinter::Bool, (s1, s2), (i, j)::Tuple{Int,Int}) = isinter || s1 < s2 || i < j
-@inline isvalidlink(isinter::Bool, (s1, s2), lr::LinkRules) = isvalidlink(isinter, (s1, s2))
+@inline isvalidlink(isinter::Bool, (s1, s2), validsublats) = 
+    isvalidlink(isinter, (s1, s2)) && ((s1, s2) in validsublats || (s2, s1) in validsublats)
 
-function clearlinks!(lat::Lattice{T,E,L,EL}) where {T,E,L,EL}
-    lat.links = emptylinks(lat)
-    return lat
-end
+# function clearlinks!(lat::Lattice{T,E,L,EL}) where {T,E,L,EL}
+#     lat.links = emptylinks(lat)
+#     return lat
+# end
 
 function link!(lat::Lattice, lr::LinkRules{AutomaticRangeSearch})
     if nsites(lat) < 200 # Heuristic cutoff
@@ -116,7 +117,7 @@ function link!(lat::Lattice, lr::LinkRules{AutomaticRangeSearch})
 end
 
 function link!(lat::Lattice{T,E,L}, lr::LinkRules{S}) where {T,E,L,S<:SearchAlgorithm}
-    clearlinks!(lat)
+    # clearlinks!(lat)
     pre = linkprecompute(lr, lat)
     br = bravaismatrix(lat)
     ndist_zero = zero(SVector{L,Int})
@@ -162,12 +163,13 @@ function buildIlink(lat::Lattice{T,E}, lr, pre, (dist, ndist)) where {T,E}
     isinter = any(n -> n != 0, ndist)
     nsl = nsublats(lat)
 
-    emptyslink = Slink{T,E}()
+    emptyslink = zero(Slink{T,E})
     slinks = fill(emptyslink, nsl, nsl)
     # slinks = Union{Slink{T,E},Nothing}[nothing for _ in 1:nsl, _ in 1:nsl]
-    
+   
+    validsublats = matchingsublats(lat, lr)
     for s1 in 1:nsl, s2 in 1:nsl
-        isvalidlink(isinter, (s1, s2), lr) || continue
+        isvalidlink(isinter, (s1, s2), validsublats) || continue
         slinks[s2, s1] = buildSlink(lat, lr, pre, (dist, ndist, isinter), (s1, s2))
     end
     return Ilink(ndist, slinks)
@@ -273,10 +275,10 @@ function add_neighbors!(slink, lr::LinkRules{<:BoxIteratorSearch}, maps, (dist, 
     
     oldlinks = lr.alg.links
 
-    isvalidlink(false, (s1, s2), lr) &&
+    isvalidlink(false, (s1, s2)) &&
         _add_neighbors_ilink!(slink, oldlinks.intralink, maps[s2], isinter, (s1, s2), (i, iold, Δnold), dist)
     for ilink in oldlinks.interlinks
-        isvalidlink(true, (s1, s2), lr) &&
+        isvalidlink(true, (s1, s2)) &&
             _add_neighbors_ilink!(slink, ilink, maps[s2], isinter, (s1, s2), (i, iold, Δnold + ilink.ndist), dist)
     end
     return nothing
