@@ -306,18 +306,18 @@ function matchingsublats(lat::Lattice, lr::LinkRules{S,Missing}) where S
     match = vec([i.I for i in CartesianIndices((ns, ns))])
     return match
 end
-matchingsublats(lat::Lattice, lr::LinkRules{S,T}) where {S,T} = matchingsublats(sublatnames(lat), lr.sublats)
-function matchingsublats(sublatnames, lrsublats::Vector)
+matchingsublats(lat::Lattice, lr::LinkRules{S,T}) where {S,T} = _matchingsublats(sublatnames(lat), lr.sublats)
+function _matchingsublats(sublatnames, lrsublats)
     match = Tuple{Int,Int}[]
     for (s1, s2) in lrsublats
-        m1 = _matchingsublats(s1, sublatnames)
-        m2 = _matchingsublats(s2, sublatnames)
+        m1 = __matchingsublats(s1, sublatnames)
+        m2 = __matchingsublats(s2, sublatnames)
         m1 isa Int && m2 isa Int && push!(match, tuplesort((m1, m2)))
     end
     return sort!(match)
 end
-_matchingsublats(s::Int, sublatnames) = s <= length(sublatnames) ? s : nothing
-_matchingsublats(s, sublatnames) = findfirst(isequal(s), sublatnames)
+__matchingsublats(s::Int, sublatnames) = s <= length(sublatnames) ? s : nothing
+__matchingsublats(s, sublatnames) = findfirst(isequal(s), sublatnames)
 
 function _transform!(l::L, f::F) where {L<:Lattice, F<:Function}
     _transform!.(l.sublats, f)
