@@ -271,7 +271,7 @@ vectorsastuples(br::Bravais{T,E,L}) where {T,E,L} = ntuple(l -> round.((br.matri
 nsites(lat::Lattice) = isempty(lat.sublats) ? 0 : sum(nsites(sublat) for sublat in lat.sublats)
 nsiteslist(lat::Lattice) = [nsites(sublat) for sublat in lat.sublats]
 nsublats(lat::Lattice)::Int = length(lat.sublats)
-sublatnames(lat::Lattice) = [slat.name for slat in lat.sublats]
+sublatnames(lat::Lattice) = Union{Symbol,Missing}[slat.name for slat in lat.sublats]
 nuniquelinks(lat::Lattice) = nuniquelinks(lat.links)
 isunlinked(lat::Lattice) = nuniquelinks(lat.links) == 0
 @inline bravaismatrix(lat::Lattice) = bravaismatrix(lat.bravais)
@@ -302,11 +302,11 @@ function matchingsublats(sublatnames, lrsublats)
     for (s1, s2) in lrsublats
         m1 = _matchingsublats(s1, sublatnames)
         m2 = _matchingsublats(s2, sublatnames)
-        m1 isa Int && m2 isa Int && push!(match, (m1,m2))
+        m1 isa Int && m2 isa Int && push!(match, (m1, m2))
     end
     return sort!(match)
 end
-_matchingsublats(s::Int, sublatnames) = s1 <= length(sublatnames) ? s : nothing
+_matchingsublats(s::Int, sublatnames) = s <= length(sublatnames) ? s : nothing
 _matchingsublats(s, sublatnames) = findfirst(isequal(s), sublatnames)
 
 function _transform!(l::L, f::F) where {L<:Lattice, F<:Function}
