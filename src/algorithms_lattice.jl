@@ -99,12 +99,13 @@ cellrange(links::Links) = isempty(links.interlinks) ? 0 : maximum(max(abs.(ilink
 
 @inline isvalidlink(isinter::Bool, (s1, s2)) = isinter || s1 <= s2
 @inline isvalidlink(isinter::Bool, (s1, s2), (i, j)::Tuple{Int,Int}) = isinter || s1 < s2 || i < j
-@inline isvalidlink(isinter::Bool, (s1, s2), lr::LinkRules) = isvalidlink(isinter, (s1, s2)) && !((s1, s2) in lr.excludesubs || (s2, s1) in lr.excludesubs)
+@inline isvalidlink(isinter::Bool, (s1, s2), validsublats) = 
+    isvalidlink(isinter, (s1, s2)) && ((s1, s2) in validsublats || (s2, s1) in validsublats)
 
-function clearlinks!(lat::Lattice{T,E,L,EL}) where {T,E,L,EL}
-    lat.links = emptylinks(lat)
-    return lat
-end
+# function clearlinks!(lat::Lattice{T,E,L,EL}) where {T,E,L,EL}
+#     lat.links = emptylinks(lat)
+#     return lat
+# end
 
 function link!(lat::Lattice, lr::LinkRules{AutomaticRangeSearch})
     if nsites(lat) < 200 # Heuristic cutoff
@@ -116,7 +117,7 @@ function link!(lat::Lattice, lr::LinkRules{AutomaticRangeSearch})
 end
 
 function link!(lat::Lattice{T,E,L}, lr::LinkRules{S}) where {T,E,L,S<:SearchAlgorithm}
-    clearlinks!(lat)
+    # clearlinks!(lat)
     pre = linkprecompute(lr, lat)
     br = bravaismatrix(lat)
     ndist_zero = zero(SVector{L,Int})
@@ -162,12 +163,13 @@ function buildIlink(lat::Lattice{T,E}, lr, pre, (dist, ndist)) where {T,E}
     isinter = any(n -> n != 0, ndist)
     nsl = nsublats(lat)
 
-    emptyslink = Slink{T,E}()
+    emptyslink = zero(Slink{T,E})
     slinks = fill(emptyslink, nsl, nsl)
     # slinks = Union{Slink{T,E},Nothing}[nothing for _ in 1:nsl, _ in 1:nsl]
-    
+   
+    validsublats = matchingsublats(lat, lr)
     for s1 in 1:nsl, s2 in 1:nsl
-        isvalidlink(isinter, (s1, s2), lr) || continue
+        isvalidlink(isinter, (s1, s2), validsublats) || continue
         slinks[s2, s1] = buildSlink(lat, lr, pre, (dist, ndist, isinter), (s1, s2))
     end
     return Ilink(ndist, slinks)
@@ -260,24 +262,25 @@ end
 
 # Notation: celliter = ndist of the filling BoxIterator for a given site i0
 # Notation: i0 = index of that site in original lattice (in sublat s1)
-# Notation: ndist = ndist of the new unit under consideration
-# Notation: ndold_intercell = that same ndist translated to an ndist in the original lattice
-# Notation: ndold_intracell = ndist within the new unit cell (celliter) written as an ndist in the original lattice
-# Notation: Δnold = ndist of the new site expressed in the original lattice, but within its new unit cell
+# Notation: ndist = ndist of the new unit under consideration (different from the equivalent ndistold)
+# Notation: ndold_intercell = that same ndist translated to an ndist in the original lattice, i.e. ndistold
+# Notation: ndold_intracell = ndistold of old unitcell containing site i
+# Notation: ndold_intracell_shifted = same as ndold_intracell but shifted by -ndist of the new neighboring cell
+# Notation: dist = distold of old unit cell containing new site i in the new unit cell
 function add_neighbors!(slink, lr::LinkRules{<:BoxIteratorSearch}, maps, (dist, ndist, isinter), (s1, s2), (i, r1))
     (celliter, iold) = lr.alg.iter.registers[s1].cellinds[i]
     ndold_intercell = lr.alg.open2old * ndist
     ndold_intracell = lr.alg.iterated2old * SVector(celliter)
-    Δnold = ndold_intracell - ndold_intercell
-    dist = bravaismatrix(lr.alg.bravais) * Δnold
+    ndold_intracell_shifted = ndold_intracell - ndold_intercell
+    dist = bravaismatrix(lr.alg.bravais) * ndold_intracell
     
     oldlinks = lr.alg.links
 
-    isvalidlink(false, (s1, s2), lr) &&
-        _add_neighbors_ilink!(slink, oldlinks.intralink, maps[s2], isinter, (s1, s2), (i, iold, Δnold), dist)
+    isvalidlink(false, (s1, s2)) &&
+        _add_neighbors_ilink!(slink, oldlinks.intralink, maps[s2], isinter, (s1, s2), (i, iold, ndold_intracell_shifted), dist)
     for ilink in oldlinks.interlinks
-        isvalidlink(true, (s1, s2), lr) &&
-            _add_neighbors_ilink!(slink, ilink, maps[s2], isinter, (s1, s2), (i, iold, Δnold + ilink.ndist), dist)
+        isvalidlink(true, (s1, s2)) &&
+            _add_neighbors_ilink!(slink, ilink, maps[s2], isinter, (s1, s2), (i, iold, ndold_intracell_shifted + ilink.ndist), dist)
     end
     return nothing
 end

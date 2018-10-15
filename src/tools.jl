@@ -33,11 +33,15 @@ toSVectors(vs...) = [promote(toSVector.(vs)...)...]
 @inline padrightbottom(s::SMatrix{E,L}, st::Type{SMatrix{E2,L2,T2,EL2}}) where {E,L,E2,L2,T2,EL2} =
     SMatrix{E2,L2,T2,EL2}(ntuple(i -> _padrightbottom((i - 1) % E2 + 1, i ÷ E2 + 1, zero(T2), s), Val(EL2)))
 @inline _padrightbottom(i, j, zero, s::SMatrix{E,L}) where {E,L} = i > E || j > L ? zero : s[i,j]
+function padrightbottom(m::Matrix{T}, im, jm) where T
+    i0, j0 = size(m)
+    [i <= i0 && j<= j0 ? m[i,j] : zero(T) for i in 1:im, j in 1:jm]
+end
 
 @inline tuplejoin(x) = x
 @inline tuplejoin(x, y) = (x..., y...)
 @inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
-
+tuplesort((a,b)::Tuple{Int,Int}) = a > b ? (b, a) : (a, b)
 # @inline tupleintersect(x, y, z...) = tupleintersect(x, tupleintersect(y, z...))
 # @inline tupleintersect(x::NTuple{N,T}, y::NTuple{M,T}) where {N,M,T} = ntuple(i -> x[i] in y ? x[i] : zero(T), Val(N))
 

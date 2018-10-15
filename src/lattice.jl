@@ -2,14 +2,14 @@
 # Sublattice (Sublat) : a group of identical sites (e.g. same orbitals)
 #######################################################################
 struct Sublat{T,E} <: LatticeOption
-    name::Union{String,Missing}
+    name::Union{Symbol,Missing}
     sites::Vector{SVector{E,T}}
 end
 
 Sublat(vs...) = Sublat(missing, toSVectors(vs...))
-Sublat(name::String, vs::(<:Union{Tuple, AbstractVector{<:Number}})...) = Sublat(name, toSVectors(vs...))
+Sublat(name::Symbol, vs::(<:Union{Tuple, AbstractVector{<:Number}})...) = Sublat(name, toSVectors(vs...))
 Sublat{T}(vs...) where {T} = Sublat(missing, toSVectors(T, vs...))
-Sublat{T}(name::String, vs...) where {T} = Sublat(name, toSVectors(T, vs...))
+Sublat{T}(name::Symbol, vs...) where {T} = Sublat(name, toSVectors(T, vs...))
 Sublat{T,E}() where {T,E} = Sublat(missing, SVector{E,T}[])
 
 nsites(s::Sublat) = length(s.sites)
@@ -68,6 +68,7 @@ function Slink{T,E}(nsrcsites = 0; coordination::Int = 2*E) where {T,E}
     return Slink{T,E}(targets, srcpointers, rdr)
 end
 
+Base.zero(::Type{Slink{T,E}}) where {T,E} = Slink{T,E}()
 Base.isempty(slink::Slink) = isempty(slink.targets)
 nlinks(slink::Slink) = length(slink.targets)
 
@@ -95,19 +96,23 @@ end
 function emptyilink(ndist::SVector{L,Int}, sublats::Vector{Sublat{T,E}}) where {T,E,L}
     isinter = !iszero(ndist)
     ns = length(sublats)
-    emptyslink = Slink{T,E}()
-    slinks = [ifelse(isvalidlink(isinter, (s1, s2)), Slink{T,E}(nsites(sublats[s1])), emptyslink) 
-              for s2 in 1:ns, s1 in 1:ns]
+    emptyslink = zero(Slink{T,E})
+    # slinks = [ifelse(isvalidlink(isinter, (s1, s2)), Slink{T,E}(nsites(sublats[s1])), emptyslink) 
+    #           for s2 in 1:ns, s1 in 1:ns]
+    slinks = fill(emptyslink, ns, ns)
     return Ilink(ndist, slinks)
 end
 
 nlinks(ilinks::Vector{<:Ilink}) = isempty(ilinks) ? 0 : sum(nlinks(ilink) for ilink in ilinks)
 nlinks(ilink::Ilink) = isempty(ilink.slinks) ? 0 : sum(nlinks(ilink.slinks, i) for i in eachindex(ilink.slinks))
 nlinks(ss::Array{<:Slink}, i) = nlinks(ss[i])
+nsublats(ilink::Ilink) = size(ilink.slinks, 1)
 
 Base.isempty(ilink::Ilink) = nlinks(ilink) == 0
 
 _transform!(i::IL, f::F) where {IL<:Ilink, F<:Function} = (_transform!.(i.slinks, f); i)
+
+resizeilink(ilink::IL, ns) where {IL<:Ilink} = IL(ilink.ndist, padrightbottom(ilink.slinks, ns, ns))
 
 #######################################################################
 # Links struct
@@ -123,7 +128,7 @@ emptylinks(sublats::Vector{Sublat{T,E}}, bravais::Bravais{T,E,L}) where {T,E,L} 
 
 nuniquelinks(links::Links) = nlinks(links.intralink) + nlinks(links.interlinks)
    
-nsublats(links::Links) = size(links.intralink.slinks, 1)
+nsublats(links::Links) = nsublats(links.intralink)
 # @inline nsiteslist(links::Links) = [nsites(links.intralink.slinks[s, s]) for s in 1:nsublats(links)]
 
 _transform!(l::L, f::F) where {L<:Links, F<:Function} = (_transform!(l.intralink, f); _transform!.(l.interlinks, f); return l)
@@ -216,24 +221,29 @@ struct BoxIteratorSearch{T,E,L,N,EL,O<:SMatrix,C<:SMatrix} <: SearchAlgorithm
     nslist::Vector{Int}
 end
 
-struct LinkRules{S<:SearchAlgorithm} <: LatticeOption
+struct LinkRules{S<:SearchAlgorithm, SL} <: LatticeOption
     alg::S
-    excludesubs::Vector{Tuple{Int,Int}}
+    sublats::SL
     mincells::Int  # minimum range to search in using BoxIterator
     maxsteps::Int
 end
-
-LinkRules(alg::S;
-    excludesubs = Tuple{Int,Int}[],
-    mincells = 0,
-    maxsteps = 100_000_000) where S<:SearchAlgorithm =
-    LinkRules{S}(alg, excludesubs, abs(mincells), maxsteps)
-
-LinkRules(r = 10.0; range = r,  kw...) = LinkRules(AutomaticRangeSearch(abs(range)); kw...)
+LinkRules(range; kw...) = LinkRules(; range = range, kw...)
+LinkRules(range, sublats...; kw...) = LinkRules(; range = range, sublats = sublats, kw...)
+LinkRules(; range = 10.0, sublats = missing, kw...) = 
+    LinkRules(AutomaticRangeSearch(abs(range)), lrnormalise(sublats); kw...)
+LinkRules(alg::S; kw...) where S<:SearchAlgorithm = LinkRules(alg, missing; kw...)
+LinkRules(alg::S, sublats; mincells = 0, maxsteps = 100_000_000) where S<:SearchAlgorithm =
+    LinkRules(alg, sublats, abs(mincells), maxsteps)
 
 LinkRules(l::Links, i::BoxIterator{N}, open2old, iterated2old, bravais, nslist; kw...) where {N} = 
     LinkRules(BoxIteratorSearch(l, i, open2old, iterated2old, bravais, nslist); kw...)
     
+lrnormalise(::Missing) = missing
+lrnormalise(l::NTuple{N,Any}) where N = ntuple(n -> _lrnormalise(l[n]), Val(N))
+_lrnormalise(l::Tuple{Int,Int}) = tuplesort(l)
+_lrnormalise(l::Tuple) = l
+_lrnormalise(l) = (l, l)
+
 #############################  EXPORTED  ##############################
 # Lattice : group of sublattices + Bravais vectors + links
 #######################################################################
@@ -266,7 +276,7 @@ vectorsastuples(br::Bravais{T,E,L}) where {T,E,L} = ntuple(l -> round.((br.matri
 nsites(lat::Lattice) = isempty(lat.sublats) ? 0 : sum(nsites(sublat) for sublat in lat.sublats)
 nsiteslist(lat::Lattice) = [nsites(sublat) for sublat in lat.sublats]
 nsublats(lat::Lattice)::Int = length(lat.sublats)
-sublatnames(lat::Lattice) = [slat.name for slat in lat.sublats]
+sublatnames(lat::Lattice) = Union{Symbol,Missing}[slat.name for slat in lat.sublats]
 nuniquelinks(lat::Lattice) = nuniquelinks(lat.links)
 isunlinked(lat::Lattice) = nuniquelinks(lat.links) == 0
 @inline bravaismatrix(lat::Lattice) = bravaismatrix(lat.bravais)
@@ -291,6 +301,24 @@ end
 supercellmatrix(s::Supercell{<:UniformScaling}, lat::Lattice{T,E,L}) where {T,E,L} = SMatrix{L,L}(s.matrix.λ .* one(SMatrix{L,L,Int}))
 supercellmatrix(s::Supercell{<:SMatrix}, lat::Lattice{T,E,L}) where {T,E,L} = s.matrix
 
+function matchingsublats(lat::Lattice, lr::LinkRules{S,Missing}) where S 
+    ns = nsublats(lat)
+    match = vec([i.I for i in CartesianIndices((ns, ns))])
+    return match
+end
+matchingsublats(lat::Lattice, lr::LinkRules{S,T}) where {S,T} = _matchingsublats(sublatnames(lat), lr.sublats)
+function _matchingsublats(sublatnames, lrsublats)
+    match = Tuple{Int,Int}[]
+    for (s1, s2) in lrsublats
+        m1 = __matchingsublats(s1, sublatnames)
+        m2 = __matchingsublats(s2, sublatnames)
+        m1 isa Int && m2 isa Int && push!(match, tuplesort((m1, m2)))
+    end
+    return sort!(match)
+end
+__matchingsublats(s::Int, sublatnames) = s <= length(sublatnames) ? s : nothing
+__matchingsublats(s, sublatnames) = findfirst(isequal(s), sublatnames)
+
 function _transform!(l::L, f::F) where {L<:Lattice, F<:Function}
     _transform!.(l.sublats, f)
     isunlinked(l) || _transform!(l.links, f)
@@ -303,30 +331,40 @@ transform(l::Lattice, f::F) where F<:Function = _transform!(deepcopy(l), f)
 # Apply LatticeOptions
 #######################################################################
 
-lattice!(lat::Lattice) = lat
+lattice!(lat::Lattice, o1::LatticeOption, opts...) = lattice!(_lattice!(lat, o1), opts...)
 
-lattice!(lat::Lattice, o1::LatticeOption, o2, opts...) = lattice!(lattice!(lat, o1), o2, opts...)
+lattice!(lat::Lattice) = resizeslinks!(lat)
 
-function lattice!(lat::Lattice, b::Bravais)
+# Ensire the size of Slink matrices in lat.links matches the number of sublats. Do it only at the end.
+function resizeslinks!(lat::Lattice)
+    ns = nsublats(lat)
+    nsublats(lat.links.intralink) == ns || (lat.links.intralink = resizeilink(lat.links.intralink, ns))
+    for (n, ilink) in enumerate(lat.links.interlinks)
+        nsublats(ilink) == ns || (lat.links.interlink[n] = resizeilink(ilink, ns))
+    end
+    return lat
+end
+
+function _lattice!(lat::Lattice, b::Bravais)
     lat.bravais = b
     return lat
 end
 
-function lattice!(lat::Lattice, s::Sublat)
+function _lattice!(lat::Lattice, s::Sublat)
     push!(lat.sublats, s)
     return lat
 end
 
-lattice!(lat::Lattice{T,E,L,EL}, d::Dim{E2}) where {T,E,L,EL,E2} = convert(Lattice{T,E2,L,E2*L}, lat)
+_lattice!(lat::Lattice{T,E,L,EL}, d::Dim{E2}) where {T,E,L,EL,E2} = convert(Lattice{T,E2,L,E2*L}, lat)
 
-lattice!(lat::Lattice{T,E,L,EL}, p::Precision{T2}) where {T,E,L,EL,T2} = 
+_lattice!(lat::Lattice{T,E,L,EL}, p::Precision{T2}) where {T,E,L,EL,T2} = 
     convert(Lattice{T2,E,L,EL}, lat)
 
-lattice!(lat::Lattice, sc::Supercell) = expand_unitcell(lat, sc)
+_lattice!(lat::Lattice, sc::Supercell) = expand_unitcell(lat, sc)
 
-lattice!(lat::Lattice, lr::LinkRules) = link!(lat, lr)
+_lattice!(lat::Lattice, lr::LinkRules) = link!(lat, lr)
 
-function lattice!(lat::Lattice{T,E,L}, l::LatticeConstant) where {T,E,L}
+function _lattice!(lat::Lattice{T,E,L}, l::LatticeConstant) where {T,E,L}
     if L == 0 
         @warn("Cannot redefine the LatticeConstant of a non-periodic lattice")
     else
@@ -338,7 +376,7 @@ function lattice!(lat::Lattice{T,E,L}, l::LatticeConstant) where {T,E,L}
     return lat 
 end
 
-function lattice!(lat::Lattice{T,E}, fr::FillRegion{E}) where {T,E}
+function _lattice!(lat::Lattice{T,E}, fr::FillRegion{E}) where {T,E}
     fill_region(lat, fr)
 end
 

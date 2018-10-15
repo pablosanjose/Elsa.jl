@@ -17,11 +17,11 @@ lattice_presets = Dict(
     :triangular => () ->
         Lattice(Sublat((0.,0.)), Bravais((cos(pi/3), sin(pi/3)),(-cos(pi/3), sin(pi/3)))),
     :honeycomb => () ->
-        Lattice(Sublat("A", (0.0, -0.5/sqrt(3.0))),
-        Sublat("B", (0.0, 0.5/sqrt(3.0))), Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3)))),
+        Lattice(Sublat(:A, (0.0, -0.5/sqrt(3.0))),
+        Sublat(:B, (0.0, 0.5/sqrt(3.0))), Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3)))),
     :graphene => () ->
-        Lattice(Sublat("A", (0.0, -0.5/sqrt(3.0))),
-        Sublat("B", (0.0, 0.5/sqrt(3.0))), Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3))), 
+        Lattice(Sublat(:A, (0.0, -0.5/sqrt(3.0))),
+        Sublat(:B, (0.0, 0.5/sqrt(3.0))), Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3))), 
         LinkRules(1/√3)),
     :cubic => () ->
         Lattice(Sublat((0., 0., 0.)), Bravais((1., 0., 0.), (0., 1., 0.), (0., 0., 1.))),
@@ -33,10 +33,10 @@ lattice_presets = Dict(
         function (;twistindex = 1, twistindices = (twistindex, 0), interlayerdistance = 1.0, linkrangeintralayer = 1/sqrt(3))
             (m, r) = twistindices
             θ = acos((3m^2 + 3m*r +r^2/2)/(3m^2 + 3m*r + r^2))
-            sAbot = Sublat("Ab", (0.0, -0.5/sqrt(3.0), - interlayerdistance / 2))
-            sBbot = Sublat("Bb", (0.0,  0.5/sqrt(3.0), - interlayerdistance / 2))
-            sAtop = Sublat("At", (0.0, -0.5/sqrt(3.0),   interlayerdistance / 2))
-            sBtop = Sublat("Bt", (0.0,  0.5/sqrt(3.0),   interlayerdistance / 2))
+            sAbot = Sublat(:Ab, (0.0, -0.5/sqrt(3.0), - interlayerdistance / 2))
+            sBbot = Sublat(:Bb, (0.0,  0.5/sqrt(3.0), - interlayerdistance / 2))
+            sAtop = Sublat(:At, (0.0, -0.5/sqrt(3.0),   interlayerdistance / 2))
+            sBtop = Sublat(:Bt, (0.0,  0.5/sqrt(3.0),   interlayerdistance / 2))
             bravais = Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3)))
             if gcd(r, 3) == 1
                 scbot, sctop = @SMatrix[m -(m+r); (m+r) 2m+r], @SMatrix[m+r -m; m 2m+r]

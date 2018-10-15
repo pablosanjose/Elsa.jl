@@ -26,12 +26,12 @@ transparent(rgba::T, v = 0.5) where T = T(rgba.r, rgba.g, rgba.b, rgba.alpha * v
 
     b1, b2 = boundingboxlat(lat)
     lookat = (b1 + b2)/2
-    eye = lookat + SVector(0.,0.,2.)*norm((b1 - b2)[1:2])
+    eye = lookat + SVector(0.,-.1,2.)*norm((b1 - b2)[1:2])
 
     cam3d!(scene)
     scale!(scene)
     update_cam!(scene, Vec3f0(eye), Vec3f0(lookat), Vec3f0(0,1,0))
-    
+
     return scene
  end
 
@@ -46,7 +46,7 @@ transparent(rgba::T, v = 0.5) where T = T(rgba.r, rgba.g, rgba.b, rgba.alpha * v
     for ci in CartesianIndices(ilink.slinks)
         i, j = Tuple(ci)
         col1, col2 = darken(colors[j], 0.1), darken(colors[i], 0.1)
-        col1 = transparent(col1, 1 - dimming)
+        col2 = transparent(col2, 1 - dimming)
         slink = ilink.slinks[ci]
         shaded ? 
             drawlinks_hi!(scene, slink.rdr, (col1, col2); kwargs...) : 
