@@ -4,6 +4,15 @@ using Base.Iterators: take, cycle
 
 const colorscheme = cycle(map(t -> RGBAf0(t...), ((0.410,0.067,0.031),(0.860,0.400,0.027),(0.940,0.780,0.000),(0.640,0.760,0.900),(0.310,0.370,0.650),(0.600,0.550,0.810),(0.150,0.051,0.100),(0.870,0.530,0.640),(0.720,0.130,0.250))))
 
+
+Point3D(r::SVector{3,T}) where T = Point3f0(r)
+Point3D(r::SVector{N,T}) where {N,T} = Point3f0(padright(r, zero(Float32), Val(3)))
+Vec3D(r::SVector{3,T}) where T = Vec3f0(r)
+Vec3D(r::SVector{N,T}) where {N,T} = Vec3f0(padright(r, zero(Float32), Val(3)))
+
+normxy(sv::SVector{3}) = norm(sv[1:2])
+normxy(sv) = norm(sv)
+
 function darken(rgba::T, v = 0.66) where T
     r = max(0, min(rgba.r * (1 - v), 1))
     g = max(0, min(rgba.g * (1 - v), 1))
@@ -15,49 +24,58 @@ function lighten(rgba, v = 0.66)
 end
 transparent(rgba::T, v = 0.5) where T = T(rgba.r, rgba.g, rgba.b, rgba.alpha * v) 
 
- function plot(lat::Lattice; resolution = (1024, 1024), kwargs...)
-    scene = Scene(resolution = resolution)
+function plot(lat::Lattice; resolution = (1024, 1024), allintra = false, allcells = true, intralinks = true, interlinks = true, kwargs...)
     colors = collect(take(colorscheme, nsublats(lat)))
     
-    plotcell!(scene, lat, lat.links.intralink, colors; dimming = 0, kwargs...)
-    for ilink in lat.links.interlinks
-        plotcell!(scene, lat, ilink, colors; kwargs...)
-    end
-
-    b1, b2 = boundingboxlat(lat)
-    lookat = (b1 + b2)/2
-    eye = lookat + SVector(0.,-.1,2.)*norm((b1 - b2)[1:2])
-
+    scene = Scene(resolution = resolution)
     cam3d!(scene)
     scale!(scene)
-    update_cam!(scene, Vec3f0(eye), Vec3f0(lookat), Vec3f0(0,1,0))
+    
+    celldist0 = bravaismatrix(lat) * lat.links.intralink.ndist
+    for ilink in lat.links.interlinks
+        celldist = bravaismatrix(lat) * ilink.ndist
+        allintra && plotlinks!(scene, lat.links.intralink, celldist, colors; kwargs...)
+        interlinks && plotlinks!(scene, ilink, celldist0, colors; kwargs...)
+        allcells && plotsites!(scene, lat, celldist, colors; kwargs...)
+    end
+    intralinks && plotlinks!(scene, lat.links.intralink, celldist0, colors; dimming = 0, kwargs...)
+    plotsites!(scene, lat, celldist0, colors; dimming = 0, kwargs...)
+
+    b1, b2 = boundingboxlat(lat)
+    lookat = Vec3D((b1 + b2)/2)
+    eye = lookat + Vec3f0(0.,0.,2.)*normxy(b1 - b2)
+
+    update_cam!(scene, eye, lookat, Vec3f0(0,1,0))
 
     return scene
  end
 
- function plotcell!(scene, lat, ilink, colors; shaded = false, dimming = 0.75, kwargs...)
-    celldist = bravaismatrix(lat) * ilink.ndist
+
+ function plotsites!(scene, lat, celldist, colors; shaded = false, dimming = 0.75, kwargs...)
     for (sublat, color) in zip(lat.sublats, colors)
         colordimmed = transparent(color, 1 - dimming)
-        sites = [Point3f0(celldist + site) for site in sublat.sites]
+        sites = [Point3D(celldist + site) for site in sublat.sites]
         shaded ? drawsites_hi!(scene, sites, colordimmed; kwargs...) : drawsites_lo!(scene, sites, colordimmed; kwargs...)
     end
+end
 
+function plotlinks!(scene, ilink, celldist, colors; shaded = false, dimming = 0.75, kwargs...)
     for ci in CartesianIndices(ilink.slinks)
         i, j = Tuple(ci)
         col1, col2 = darken(colors[j], 0.1), darken(colors[i], 0.1)
         col2 = transparent(col2, 1 - dimming)
+        iszero(celldist) || (col1 = transparent(col1, 1 - dimming))
         slink = ilink.slinks[ci]
         shaded ? 
-            drawlinks_hi!(scene, slink.rdr, (col1, col2); kwargs...) : 
-            drawlinks_lo!(scene, slink.rdr, (col1, col2); kwargs...)
+            drawlinks_hi!(scene, slink.rdr, celldist, (col1, col2); kwargs...) : 
+            drawlinks_lo!(scene, slink.rdr, celldist, (col1, col2); kwargs...)
     end
     return nothing
 end
 
-function drawsites_lo!(scene, sites, color; siteradius = 0.2, strokewidth = 15)
+function drawsites_lo!(scene, sites, color; siteradius = 0.2, strokewidth = 20)
     isempty(sites) || scatter!(scene, sites, 
-        markersize = 2siteradius, color = color, strokewidth = strokewidth, strokecolor = darken(color, 0.3))
+        markersize = 2siteradius, color = color, strokewidth = strokewidth,  strokecolor = darken(color, 1.0))
     return nothing
 end
 
@@ -66,18 +84,18 @@ function drawsites_hi!(scene, sites, color; siteradius = 0.2)
     return nothing
 end
 
-function drawlinks_lo!(scene, rdr, (col1, col2); siteradius = 0.2, strokewidth = 15)
+function drawlinks_lo!(scene, rdr, celldist, (col1, col2); siteradius = 0.2, strokewidth = 15, linkoffset = 0.99)
     isempty(rdr) && return nothing
-    segments = [fullsegment(r, dr, siteradius * 0.99) for (r, dr) in rdr]
+    segments = [fullsegment(celldist + r, dr, siteradius * linkoffset) for (r, dr) in rdr]
     colsegments = collect(take(cycle((col1, col2)), 2 * length(segments)))
     linesegments!(scene, segments, linewidth = strokewidth, color = colsegments)
     return nothing
 end
 
-function drawlinks_hi!(scene, rdr, (col1, col2); siteradius = 0.2, linkradius = 0.1)
+function drawlinks_hi!(scene, rdr, celldist, (col1, col2); siteradius = 0.2, linkradius = 0.1)
     isempty(rdr) && return nothing
     # positions = view(rdr, :, 1)
-    positions = [Point3f0(r) for (r, _) in rdr]
+    positions = [Point3f0(celldist + r) for (r, _) in rdr]
     segments = [halfsegment(r, dr, 0) for (r, dr) in rdr]
     scales = [Vec3f0(linkradius, linkradius, norm(dr)) for dr in segments]
     cylinder = GLNormalMesh(Makie.Cylinder{3, Float32}(Point3f0(0., 0., 0.), Point3f0(0., 0, 1.), Float32(1)), 12)
@@ -89,10 +107,10 @@ end
 
 function fullsegment(r, dr, rad) 
     dr2 = dr*(1 - 2rad/norm(dr))/2
-    return Point3f0(r - dr2) => Point3f0(r + dr2)
+    return Point3D(r - dr2) => Point3D(r + dr2)
 end
 
 function halfsegment(r, dr, rad) 
     dr2 = dr*(1 - 2rad/norm(dr))/2
-    return  Vec3f0(dr2)
+    return  Vec3D(dr2)
 end
