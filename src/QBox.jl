@@ -36,7 +36,7 @@ include("mesh.jl")
 include("algorithms_lattice.jl")
 include("convert.jl")
 
-# include("plot.jl")
-@require Makie="ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a" include("plot.jl")
+include("plot.jl")
+# @require Makie="ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a" include("plot.jl")
 
 end
