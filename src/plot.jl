@@ -16,8 +16,8 @@ function AbstractPlotting.plot!(plot::Plot(Lattice))
     lat = to_value(plot[1])
     colors = collect(take(cycle(plot[:colorscheme][]), nsublats(lat)))
     
-    cam3d!(scene)
-    scale!(scene)
+    cam3d!(plot)
+    scale!(plot)
     
     celldist0 = bravaismatrix(lat) * lat.links.intralink.ndist
     for ilink in lat.links.interlinks
@@ -68,7 +68,7 @@ function drawsites_lo!(plot, sites, color)
 end
 
 function drawsites_hi!(plot, sites, color)
-    isempty(sites) || meshscatter!(scene, sites, markersize = plot[:siteradius], color = color)
+    isempty(sites) || meshscatter!(plot, sites, markersize = plot[:siteradius], color = color)
     return nothing
 end
 
