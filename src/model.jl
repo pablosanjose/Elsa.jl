@@ -202,7 +202,6 @@ sublatdims(m::Model) = m.dims
 function sublatdims(lat::Lattice, m::Model)
     ns = nsublats(m)
     nl = nsublats(lat)
-    # ns <= nl || throw(DimensionMismatch("model contains more non-zero sublats than lattice"))
     (i > ns ? m.defdim : m.dims[i] for i in 1:nl)
 end
 
