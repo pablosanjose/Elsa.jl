@@ -67,7 +67,7 @@ end
 @test begin
     lat1 = Lattice(:honeycomb, LinkRules(1/sqrt(3)))
     lat2 = combine(lat1, lat1)
-    _transform!(lat1, r -> 2r)
+    transform!(lat1, r -> 2r)
     isapprox(lat1.sublats[1].sites[1], 2 * lat2.sublats[1].sites[1])
 end
 
