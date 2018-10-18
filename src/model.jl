@@ -3,88 +3,86 @@
 #######################################################################
 const zerovec = SVector(0.,0.,0.,0.)
 
-abstract type Onsite{IM<:Union{Int,Missing},N} <: ModelTerm end  #N is the number of orbitals
+abstract type Onsite{SL,N} <: ModelTerm end  #N is the number of orbitals
 
 struct NoOnsite <: Onsite{Missing,0}
 end
 @inline (o::NoOnsite)(r::SVector{E,T}, ::Val{N}) where {E,T,N} = zero(SMatrix{N,N,T})
 
-struct OnsiteFunc{IM,N,F<:Function} <: Onsite{IM,N}
-    s::IM
+struct OnsiteFunc{SL,N,F<:Function} <: Onsite{SL,N}
     f::F
+    s::SL  # Sublattices
 end
-OnsiteFunc{IM,N}(s::IM, f::F) where {N,IM,F} = OnsiteFunc{IM,N,F}(s, f)
+OnsiteFunc{SL,N}(f::F, s::SL) where {N,SL,F} = OnsiteFunc{SL,N,F}(f, s)
 @inline (o::OnsiteFunc)(r, ::Val{N}) where {N} = o(r)
 (o::OnsiteFunc)(r::SVector) = o.f(r)
 
-struct OnsiteConst{IM,N,T,NN} <: Onsite{IM,N}
-    s::IM  # Sublattice
+struct OnsiteConst{SL,N,T,NN} <: Onsite{SL,N}
     o::SMatrix{N,N,T,NN}
+    s::SL  # Sublattices
 end
 @inline (o::OnsiteConst)(r, ::Val{N}) where {N} = o(r)
 (o::OnsiteConst)(r::SVector) = o.o
 
-Onsite(arg::Union{Function, AbstractArray, Number}) = Onsite(missing, arg)  # Default
-Onsite(s, f::Function) = _OnsiteFunc(s, f, f(zerovec))
-_OnsiteFunc(s, f::Function, sample::SMatrix{N,N}) where {N} = _OnsiteFunc(Val(N), s, f)
-_OnsiteFunc(s, f::Function, sample) = _OnsiteFunc(Val(1), s, r -> @SMatrix[f(r)])
-_OnsiteFunc(::Val{N}, s::IM, f::F) where {IM,N,F<:Function} = OnsiteFunc{IM,N,F}(s,f)
-Onsite(s, v::SMatrix) = OnsiteConst(s,v)
-Onsite(s, v::T) where {T<:Number} = OnsiteConst(s, SMatrix{1,1,T}(v))
-function Onsite(s, v::AbstractMatrix{T}) where T<:Number
+Onsite(o, s...) = _Onsite(o, to_ints_or_missing(s))
+_Onsite(f::Function, s) = _OnsiteFunc(f, f(zerovec), s)
+    _OnsiteFunc(f::Function, sample::SMatrix{N,N}, s) where {N} = _OnsiteFunc(Val(N), f, s)
+    _OnsiteFunc(f::Function, sample, s) = _OnsiteFunc(Val(1), r -> @SMatrix[f(r)], s)
+    _OnsiteFunc(::Val{N}, f::F, s::SL) where {SL,N,F<:Function} = OnsiteFunc{SL,N,F}(f, s)
+_Onsite(v::SMatrix, s) = OnsiteConst(v, s)
+_Onsite(v::T, s) where {T<:Number} = OnsiteConst(SMatrix{1,1,T}(v), s)
+function Onsite(v::AbstractMatrix{T}, s) where T<:Number
     n,m = size(v)
-    return OnsiteConst(s, SMatrix{n,n,T,n*n}(v))
+    return OnsiteConst(SMatrix{n,n,T,n*n}(v), s)
 end
-#To allow Onsite(1,[2])
-function Onsite(s, v::AbstractVector{T}) where T<:Number
-    return OnsiteConst(s, SMatrix{1,1,T,1}(v))
+function Onsite(v::AbstractVector{T}, s) where T<:Number
+    return OnsiteConst(SMatrix{1,1,T,1}(v), s)
 end
 
-
-onsitedims(::Onsite{IM,N}) where {IM,N} = N
+onsitedims(::Onsite{SL,N}) where {SL,N} = N
 
 #######################################################################
 # Hopping
 #######################################################################
 
-abstract type Hopping{IM<:Union{Tuple{Int,Int},Missing},N,M} <: ModelTerm end
+abstract type Hopping{SL,N,M} <: ModelTerm end
 
 struct NoHopping <: Hopping{Missing,0,0}
 end
 @inline (h::NoHopping)(rdr::Tuple{S,S}, ::Val{M}, ::Val{N}) where {E,T,M,N,S<:SVector{E,T}} = zero(SMatrix{M,N,T})
 
-struct HoppingFunc{IM,N,M,F<:Function} <: Hopping{IM,N,M}
-    ss::IM   # Sublattices
+struct HoppingFunc{SL,N,M,F<:Function} <: Hopping{SL,N,M}
     f::F
+    ss::SL   # Sublattices
 end
-HoppingFunc{IM,N,M}(ss::IM, f::F) where {N,M,IM,F} = HoppingFunc{IM,N,M,F}(ss, f)
+HoppingFunc{SL,N,M}(ss::SL, f::F) where {N,M,SL,F} = HoppingFunc{SL,N,M,F}(ss, f)
 @inline (h::HoppingFunc)(rdr, ::Val{M}, ::Val{N}) where {M,N} = h(rdr)
 (h::HoppingFunc)((r, dr)::Tuple{S,S}) where {S<:SVector} = h.f(r, dr)
 
-struct HoppingConst{IM,N,M,T,NM} <: Hopping{IM,N,M}
-    ss::IM   # Sublattices
+struct HoppingConst{SL,N,M,T,NM} <: Hopping{SL,N,M}
     h::SMatrix{N,M,T,NM}
+    ss::SL   # Sublattices
 end
 @inline (h::HoppingConst)(rdr, ::Val{M}, ::Val{N}) where {M,N} = h(rdr)
 (h::HoppingConst)((r, dr)::Tuple{S,S}) where {S<:SVector} = h.h
 
-Hopping(arg::Union{Function, AbstractArray, Number}) = Hopping(missing, arg)  # Default
-Hopping(ss, f::Function) = _HoppingFunc(ss, f, f(zerovec, zerovec))
-_HoppingFunc(ss, f::Function, sample::SMatrix{N,M}) where {N,M} = _HoppingFunc(Val(N), Val(M), ss, f)
-_HoppingFunc(ss, f::Function, sample) = _HoppingFunc(Val(1), Val(1), ss, (r, dr) -> @SMatrix[f(r, dr)])
-_HoppingFunc(::Val{N}, ::Val{M}, ss::IM, f::F) where {IM,N,M,F<:Function} = HoppingFunc{IM,N,M,F}(ss,f)
-Hopping(ss, v::T) where {T<:Number} = HoppingConst(ss, SMatrix{1,1,T}(v))
-Hopping(ss, v::SMatrix{N,M}) where {N,M} = HoppingConst(ss, v)
-function Hopping(ss, v::AbstractMatrix{T}) where T<:Number
+Hopping(h, ss...) = _Hopping(h, to_tuples_or_missing(ss))
+_Hopping(f::Function, ss) = _HoppingFunc(f, f(zerovec, zerovec), ss)
+    _HoppingFunc(f::Function, sample::SMatrix{N,M}, ss) where {N,M} = _HoppingFunc(Val(N), Val(M), f, ss)
+    _HoppingFunc(f::Function, sample, ss) = _HoppingFunc(Val(1), Val(1), (r, dr) -> @SMatrix[f(r, dr)], ss)
+    _HoppingFunc(::Val{N}, ::Val{M}, f::F, ss::SL) where {SL,N,M,F<:Function} = HoppingFunc{SL,N,M,F}(f, ss)
+_Hopping(v::T, ss) where {T<:Number} = HoppingConst(SMatrix{1,1,T}(v), ss)
+_Hopping(v::SMatrix{N,M}, ss) where {N,M} = HoppingConst(v, ss)
+function _Hopping(v::AbstractMatrix{T}, ss) where {T<:Number}
     n,m = size(v)
-    return HoppingConst(ss, SMatrix{n,m,T,n*m}(v))
+    return HoppingConst(SMatrix{n,m,T,n*m}(v), ss)
 end
-function Hopping(ss, v::AbstractVector{T}) where T<:Number
+function _Hopping(v::AbstractVector{T}, ss) where {T<:Number,S}
     n = length(v)
-    return HoppingConst(ss, SMatrix{n,1,T,n}(v))
+    return HoppingConst(SMatrix{n,1,T,n}(v), ss)
 end
 
-hoppingdims(::Hopping{IM,N,M}) where {IM,N,M} = (N,M)
+hoppingdims(::Hopping{SL,N,M}) where {SL,N,M} = (N,M)
 
 #######################################################################
 # Model
@@ -102,9 +100,9 @@ struct Model{OS<:Tuple, HS<:Tuple, O, H}
 end
 
 Model(terms...) = _model((), (), (NoOnsite(),), (NoHopping(),), terms...)
-_model(os::Tuple, hs::Tuple, defo::Tuple, defh::Tuple, o::Onsite{Int}, terms...) = 
+_model(os::Tuple, hs::Tuple, defo::Tuple, defh::Tuple, o::Onsite{<:Tuple}, terms...) = 
     _model(tuplejoin(os, (o,)), hs, defo, defh, terms...)
-_model(os::Tuple, hs::Tuple, defo::Tuple, defh::Tuple, h::Hopping{Tuple{Int,Int}}, terms...) = 
+_model(os::Tuple, hs::Tuple, defo::Tuple, defh::Tuple, h::Hopping{<:Tuple}, terms...) = 
     _model(os, tuplejoin(hs, (h,)), defo, defh, terms...)
 _model(os::Tuple, hs::Tuple, defo::Tuple, defh::Tuple, o::Onsite{Missing}, terms...) = 
     _model(os, hs, (o,), defh, terms...)
@@ -115,22 +113,27 @@ function _model(os::OS, hs::HS, (defons,)::Tuple{O}, (defhop,)::Tuple{H}) where 
     defdim = onsitedims(defons)
     subs = 0
     for o in os
-        subs = max(subs, o.s)
+        subs = max(subs, maximum(o.s))
     end
     for h in hs
-        subs = max(subs, h.ss[1], h.ss[2])
+        subs = max(subs, tuplemaximum(h.ss))
     end
     hptr = zeros(Int, subs, subs)
     optr = zeros(Int, subs)
     dims = zeros(Int, subs)
     
     for (i, o) in enumerate(os)
-        optr[o.s] = i
-        dims[o.s] = onsitedims(o)
+        odims = onsitedims(o)
+        for s in o.s
+            optr[s] = i
+            dims[s] = odims
+        end
     end
     for (i, h) in enumerate(hs)
-        hptr[h.ss[1], h.ss[2]] = i
-        checkdims!(dims, h)     
+        for ss in h.ss
+            hptr[ss[1], ss[2]] = i
+            checkdims!(dims, h) 
+        end    
     end
     
     defdim = checkdefaultdim(defdim, defhop, dims)
@@ -140,13 +143,14 @@ function _model(os::OS, hs::HS, (defons,)::Tuple{O}, (defhop,)::Tuple{H}) where 
     Model{OS,HS,O,H}(os, hs, optr, hptr, dims, defons, defhop, defdim)
 end
 
-function checkdims!(dims, h::Hopping{Tuple{Int,Int}})
-    s2, s1 = h.ss
-    d2, d1 = dims[s2], dims[s1]
-    hd2, hd1 = hoppingdims(h)
-    s2 != s1 || hd2 == hd1 || throw(DimensionMismatch("same-sublattice hopping must be a square matrix or scalar"))
-    d2 == hd2 || (d2 == 0 ? (dims[s2] = hd2) : throw(DimensionMismatch("inconsistent model dimensions")))
-    d1 == hd1 || (d1 == 0 ? (dims[s1] = hd1) : throw(DimensionMismatch("inconsistent model dimensions")))
+function checkdims!(dims, h::Hopping{<:Tuple})
+    for (s2, s1) in h.ss
+        d2, d1 = dims[s2], dims[s1]
+        hd2, hd1 = hoppingdims(h)
+        s2 != s1 || hd2 == hd1 || throw(DimensionMismatch("same-sublattice hopping must be a square matrix or scalar"))
+        d2 == hd2 || (d2 == 0 ? (dims[s2] = hd2) : throw(DimensionMismatch("inconsistent model dimensions")))
+        d1 == hd1 || (d1 == 0 ? (dims[s1] = hd1) : throw(DimensionMismatch("inconsistent model dimensions")))
+    end
     return
 end
 checkdefaultdim(defdim, defh::NoHopping, dims) = defdim
@@ -203,8 +207,8 @@ function sublatdims(lat::Lattice, m::Model)
 end
 
 dagger(h::NoHopping) = h
-dagger(h::HoppingFunc{IM,N,M}) where {IM,N,M} = HoppingFunc{IM,N,M}(h.ss, daggerF2(h.f))
-dagger(h::HoppingConst) = HoppingConst(h.ss, h.h')
+dagger(h::HoppingFunc{SL,N,M}) where {SL,N,M} = HoppingFunc{SL,N,M}(daggerF2(h.f), h.ss)
+dagger(h::HoppingConst) = HoppingConst(h.h', h.ss)
 daggerF2(f::Function) = (r,dr) -> f(r,-dr)'
 
 #######################################################################
@@ -219,7 +223,7 @@ function Base.show(io::IO, model::Model)
     Default hoppings : $(hasdefaulthopping(model))")
 end
 
-nzonsites(m::Model) = [o.s for o in m.onsites]
-nzhoppings(m::Model) = [h.ss for h in m.hoppings]
+nzonsites(m::Model) = vectornonzeros(m.optr)
+nzhoppings(m::Model) = matrixnonzeros(m.hptr)
 hasdefaultonsite(m::Model) = isa(m.defonsite, NoOnsite) ? "No" : "Yes"
 hasdefaulthopping(m::Model) = isa(m.defhopping, NoHopping) ? "No" : "Yes"

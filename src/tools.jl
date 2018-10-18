@@ -34,9 +34,43 @@ end
 @inline tuplejoin(x) = x
 @inline tuplejoin(x, y) = (x..., y...)
 @inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
-tuplesort((a,b)::Tuple{Int,Int}) = a > b ? (b, a) : (a, b)
+tuplesort((a,b)::Tuple{<:Number,<:Number}) = a > b ? (b, a) : (a, b)
+tuplesort(t::Tuple) = t
+tuplesort(::Missing) = missing
+
+to_tuples_or_missing(::Missing) = missing
+to_tuples_or_missing(::Tuple{}) = missing
+to_tuples_or_missing(l::NTuple{N,Any}) where N = ntuple(n -> _to_tuples_or_missing(l[n]), Val(N))
+_to_tuples_or_missing(l::Tuple{T1,T2}) where {T1, T2} = l
+_to_tuples_or_missing(l) = (l, l)
+to_ints_or_missing(::Missing) = missing
+to_ints_or_missing(::Tuple{}) = missing
+to_ints_or_missing(l::NTuple{N,Int}) where N = l
+function tuplemaximum(ts::NTuple{N, Tuple{Int,Int}}) where {N}
+    m = ts[1][1]
+    for (x, y) in ts
+        m = max(m, x, y)
+    end
+    return m
+end
 
 allsame(x) = all(y -> y == first(x), x)
+
+function matrixnonzeros(m::Matrix)
+    ids = Tuple{Int,Int}[]
+    @inbounds for j in 1:size(m, 2), i in j:size(m,1)
+        (iszero(m[i,j]) && iszero(m[j,i])) || push!(ids, (j,i))
+    end
+    return ids
+end
+
+function vectornonzeros(v::Vector)
+    ids = Int[]
+    @inbounds for (i,e) in enumerate(v)
+        iszero(e) || push!(ids, i)
+    end
+    return ids
+end
 
 function filldiag!(matrix::AbstractMatrix, matrices)
     sizes = map(size, matrices)
