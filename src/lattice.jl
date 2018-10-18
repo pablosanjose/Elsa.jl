@@ -319,13 +319,13 @@ end
 __matchingsublats(s::Int, sublatnames) = s <= length(sublatnames) ? s : nothing
 __matchingsublats(s, sublatnames) = findfirst(isequal(s), sublatnames)
 
-function _transform!(l::L, f::F) where {L<:Lattice, F<:Function}
+function transform!(l::L, f::F) where {L<:Lattice, F<:Function}
     _transform!.(l.sublats, f)
     isunlinked(l) || _transform!(l.links, f)
     l.bravais = transform(l.bravais, f)
     return l
 end
-transform(l::Lattice, f::F) where F<:Function = _transform!(deepcopy(l), f)
+transform(l::Lattice, f::F) where F<:Function = transform!(deepcopy(l), f)
 
 #######################################################################
 # Apply LatticeOptions
