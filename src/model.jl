@@ -31,11 +31,11 @@ _Onsite(f::Function, s) = _OnsiteFunc(f, f(zerovec), s)
     _OnsiteFunc(::Val{N}, f::F, s::SL) where {SL,N,F<:Function} = OnsiteFunc{SL,N,F}(f, s)
 _Onsite(v::SMatrix, s) = OnsiteConst(v, s)
 _Onsite(v::T, s) where {T<:Number} = OnsiteConst(SMatrix{1,1,T}(v), s)
-function Onsite(v::AbstractMatrix{T}, s) where T<:Number
+function _Onsite(v::AbstractMatrix{T}, s) where T<:Number
     n,m = size(v)
     return OnsiteConst(SMatrix{n,n,T,n*n}(v), s)
 end
-function Onsite(v::AbstractVector{T}, s) where T<:Number
+function _Onsite(v::AbstractVector{T}, s) where T<:Number
     return OnsiteConst(SMatrix{1,1,T,1}(v), s)
 end
 

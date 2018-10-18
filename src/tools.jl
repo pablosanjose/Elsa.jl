@@ -54,7 +54,7 @@ function tuplemaximum(ts::NTuple{N, Tuple{Int,Int}}) where {N}
     return m
 end
 
-allsame(x) = all(y -> y == first(x), x)
+allsame(x) = all(isequal(first(x)), x)
 
 function matrixnonzeros(m::Matrix)
     ids = Tuple{Int,Int}[]

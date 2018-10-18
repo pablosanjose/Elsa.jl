@@ -40,8 +40,8 @@ using QBox: nsites, nuniquelinks
 @test Sublat{Float32}((3,4.), [3,3]) isa Sublat{Float32,2}
 @test Sublat{Float64}(@SVector[3f0,3f0]) isa Sublat{Float64,2}
 
-@test Sublat("A", @SVector[3f0,3f0], (3,4)) isa Sublat{Float32,2}
-@test Sublat{Float64}("A", (3f0,3)) isa Sublat{Float64,2}
+@test Sublat(:A, @SVector[3f0,3f0], (3,4)) isa Sublat{Float32,2}
+@test Sublat{Float64}(:A, (3f0,3)) isa Sublat{Float64,2}
 
 @test Lattice(:honeycomb, Dim(3), Precision(Float32)) isa Lattice{Float32,3,2}
 @test QBox.nsites(Lattice(:honeycomb, FillRegion(:square, 300))) == 207946
@@ -53,7 +53,7 @@ using QBox: nsites, nuniquelinks
 @test QBox.nuniquelinks(Lattice(:square, LinkRules(2), Supercell(31))) == 6074
 @test QBox.nuniquelinks(Lattice(:bcc, LinkRules(1), FillRegion(:spheroid, (10,4,4)))) == 8216
 
-@test LinkRules(1.2, 1, (2,3)) isa LinkRules{QBox.AutomaticRangeSearch,Tuple{Tuple{Int64,Int64},Tuple{Int64,String}}}
+@test LinkRules(1.2, 1, (2,3)) isa LinkRules{QBox.AutomaticRangeSearch,Tuple{Tuple{Int64,Int64},Tuple{Int64,Int64}}}
 @test LinkRules(1, sublats = (1, (2, 3))).sublats == ((1, 1), (2, 3)) 
 
 @test begin

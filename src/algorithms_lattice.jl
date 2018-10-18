@@ -322,8 +322,8 @@ function check_compatible_bravais(bs::NTuple{N,B}) where {N,B<:Bravais}
     return(first(bs))
 end
 function ==(b1::B, b2::B) where {T,E,L,B<:Bravais{T,E,L}}
-    vs1 = MVector(ntuple(i -> b1.matrix[:,i], Val(L))); sort!(vs1)
-    vs2 = MVector(ntuple(i -> b2.matrix[:,i], Val(L))); sort!(vs2)
+    vs1 = MVector{L,SVector{E,T}}(ntuple(i -> b1.matrix[:,i], Val(L))); sort!(vs1)
+    vs2 = MVector{L,SVector{E,T}}(ntuple(i -> b2.matrix[:,i], Val(L))); sort!(vs2)
     # Caution: potential problem for equal bravais modulo signs
     all(vs->isapprox(vs[1],vs[2]), zip(vs1,vs2))
 end
