@@ -230,19 +230,13 @@ end
 LinkRules(range; kw...) = LinkRules(; range = range, kw...)
 LinkRules(range, sublats...; kw...) = LinkRules(; range = range, sublats = sublats, kw...)
 LinkRules(; range = 10.0, sublats = missing, kw...) = 
-    LinkRules(AutomaticRangeSearch(abs(range)), lrnormalise(sublats); kw...)
+    LinkRules(AutomaticRangeSearch(abs(range)), tuplesort(to_tuples_or_missing(sublats)); kw...)
 LinkRules(alg::S; kw...) where S<:SearchAlgorithm = LinkRules(alg, missing; kw...)
 LinkRules(alg::S, sublats; mincells = 0, maxsteps = 100_000_000) where S<:SearchAlgorithm =
     LinkRules(alg, sublats, abs(mincells), maxsteps)
 
 LinkRules(l::Links, i::BoxIterator{N}, open2old, iterated2old, bravais, nslist; kw...) where {N} = 
     LinkRules(BoxIteratorSearch(l, i, open2old, iterated2old, bravais, nslist); kw...)
-    
-lrnormalise(::Missing) = missing
-lrnormalise(l::NTuple{N,Any}) where N = ntuple(n -> _lrnormalise(l[n]), Val(N))
-_lrnormalise(l::Tuple{Int,Int}) = tuplesort(l)
-_lrnormalise(l::Tuple) = l
-_lrnormalise(l) = (l, l)
 
 #############################  EXPORTED  ##############################
 # Lattice : group of sublattices + Bravais vectors + links
