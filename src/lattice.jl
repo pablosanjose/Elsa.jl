@@ -1,7 +1,7 @@
 #######################################################################
 # Sublattice (Sublat) : a group of identical sites (e.g. same orbitals)
 #######################################################################
-struct Sublat{T,E} <: LatticeOption
+struct Sublat{T,E} <: LatticeDirective
     name::Union{Symbol,Missing}
     sites::Vector{SVector{E,T}}
 end
@@ -21,7 +21,7 @@ flatten(ss::Sublat...) = Sublat(ss[1].name, vcat((s.sites for s in ss)...))
 #######################################################################
 # Bravais
 #######################################################################
-struct Bravais{T,E,L,EL} <: LatticeOption
+struct Bravais{T,E,L,EL} <: LatticeDirective
     matrix::SMatrix{E,L,T,EL}
 end
 
@@ -134,9 +134,9 @@ nsublats(links::Links) = nsublats(links.intralink)
 transform!(l::L, f::F) where {L<:Links, F<:Function} = (transform!(l.intralink, f); transform!.(l.interlinks, f); return l)
 
 ################################################################################
-## Dim LatticeOption
+## Dim LatticeDirective
 ################################################################################
-struct Dim{E} <: LatticeOption
+struct Dim{E} <: LatticeDirective
 end
 
 Dim(e::Int) = Dim{e}()
@@ -144,14 +144,14 @@ Dim(e::Int) = Dim{e}()
 ################################################################################
 ## Dim LatticeConstant
 ################################################################################
-struct LatticeConstant{T} <: LatticeOption
+struct LatticeConstant{T} <: LatticeDirective
     a::T
 end
 
 ################################################################################
-## FillRegion LatticeOption
+## FillRegion LatticeDirective
 ################################################################################
-struct FillRegion{E,F<:Function,N} <: LatticeOption
+struct FillRegion{E,F<:Function,N} <: LatticeDirective
     region::F
     seed::SVector{E, Float64}
     excludeaxes::NTuple{N,Int}
@@ -166,14 +166,14 @@ FillRegion{E}(region::F;
         FillRegion{E,F,N}(region, SVector(seed), excludeaxes, maxsteps)
 
 ################################################################################
-##   Precision LatticeOption
+##   Precision LatticeDirective
 ################################################################################
-struct Precision{T<:Number} <: LatticeOption
+struct Precision{T<:Number} <: LatticeDirective
     t::Type{T}
 end
 
 ################################################################################
-##   Supercell LatticeOption
+##   Supercell LatticeDirective
 ################################################################################
 """
     Supercell(inds::NTuple{N,Int}...)
@@ -184,7 +184,7 @@ Define a supercell in terms of a rescaling of the original unit cell, or a new s
 lattice vectors v_i = v0_j * inds_ij. inds_ij are Integers, so that the new lattice 
 vectors v_i are commensurate with the old v_j
 """
-struct Supercell{S} <: LatticeOption
+struct Supercell{S} <: LatticeDirective
     matrix::S
 end
 
@@ -193,7 +193,7 @@ Supercell(vs::(<:Union{Tuple,SVector})...) = Supercell(toSMatrix(Int, vs...))
 Supercell(rescalings::Vararg{Number,N}) where {N} = Supercell(SMatrix{N,N,Int}(Diagonal(SVector(rescalings))))
 
 #######################################################################
-## LinkRules LatticeOption : directives to create links in a lattice
+## LinkRules LatticeDirective : directives to create links in a lattice
 #######################################################################
 abstract type SearchAlgorithm end
 
@@ -221,7 +221,7 @@ struct BoxIteratorSearch{T,E,L,N,EL,O<:SMatrix,C<:SMatrix} <: SearchAlgorithm
     nslist::Vector{Int}
 end
 
-struct LinkRules{S<:SearchAlgorithm, SL} <: LatticeOption
+struct LinkRules{S<:SearchAlgorithm, SL} <: LatticeDirective
     alg::S
     sublats::SL
     mincells::Int  # minimum range to search in using BoxIterator
@@ -252,10 +252,10 @@ Lattice(name::Symbol) = Lattice(Preset(name))
 Lattice(name::Symbol, opts...) = lattice!(Lattice(name), opts...)
 Lattice(preset::Preset) = lattice_presets[preset.name](; preset.kwargs...)
 Lattice(preset::Preset, opts...) = lattice!(Lattice(preset), opts...)
-Lattice(opts::LatticeOption...) = lattice!(seedlattice(Lattice{Float64,0,0,0}, opts...), opts...)
+Lattice(opts::LatticeDirective...) = lattice!(seedlattice(Lattice{Float64,0,0,0}, opts...), opts...)
 
 # Vararg here is necessary in v0.7-alpha (instead of ...) to make these type-unstable recursions fast
-seedlattice(::Type{S}, opts::Vararg{<:LatticeOption,N}) where {S, N} = _seedlattice(seedtype(S, opts...))
+seedlattice(::Type{S}, opts::Vararg{<:LatticeDirective,N}) where {S, N} = _seedlattice(seedtype(S, opts...))
 _seedlattice(::Type{Lattice{T,E,L,EL}}) where {T,E,L,EL} = Lattice(Sublat{T,E}[], Bravais(zero(SMatrix{E,L,T,EL})))
 seedtype(::Type{T}, t, ts::Vararg{<:Any, N}) where {T,N} = seedtype(seedtype(T, t), ts...)
 seedtype(::Type{Lattice{T,E,L,EL}}, ::Sublat{T2,E2}) where {T,E,L,EL,T2,E2} = Lattice{T,E2,L,E2*L}
@@ -322,10 +322,10 @@ end
 transform(l::Lattice, f::F) where F<:Function = transform!(deepcopy(l), f)
 
 #######################################################################
-# Apply LatticeOptions
+# Apply LatticeDirectives
 #######################################################################
 
-lattice!(lat::Lattice, o1::LatticeOption, opts...) = lattice!(_lattice!(lat, o1), opts...)
+lattice!(lat::Lattice, o1::LatticeDirective, opts...) = lattice!(_lattice!(lat, o1), opts...)
 
 lattice!(lat::Lattice) = adjust_slinks_to_sublats!(lat)
 

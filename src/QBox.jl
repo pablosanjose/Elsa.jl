@@ -13,7 +13,7 @@ export TreeSearch, SimpleSearch
 export System, Model, Onsite, Hopping, hamiltonian, MeshBrillouin
 export @SMatrix, @SVector, SMatrix, SVector
 
-abstract type LatticeOption end
+abstract type LatticeDirective end
 abstract type LatticePresets end
 abstract type ModelTerm end
 
