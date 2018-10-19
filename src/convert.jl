@@ -12,8 +12,8 @@
 convert(::Type{T}, l::T) where T<:Lattice = l
 convert(::Type{T}, l::Lattice) where T<:Lattice = T(l)
 
-convert(::Type{T}, l::T) where T<:LatticeOption = l
-convert(::Type{T}, l::LatticeOption) where T<:LatticeOption = T(l)
+convert(::Type{T}, l::T) where T<:LatticeDirective = l
+convert(::Type{T}, l::LatticeDirective) where T<:LatticeDirective = T(l)
 
 convert(::Type{T}, l::T) where T<:Links = l
 convert(::Type{T}, l::Links) where T<:Links = T(l)
