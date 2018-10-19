@@ -1,6 +1,23 @@
 #######################################################################
 # Sublattice (Sublat) : a group of identical sites (e.g. same orbitals)
 #######################################################################
+"""
+    Sublat([name::Symbol = missing, ]sites...)
+
+Create a `LatticeDirective` that adds a sublattice, of name `name`, with
+sites at positions `sites`.
+
+A type `T` for coordinates can also be specified using `Sublat{T}(...)`.
+
+# Examples
+```jldoctest
+julia> Sublat(:A, (0, 0), (1, 1), (1, -1))
+Sublat{Int64,2}(:A, SArray{Tuple{2},Int64,1,2}[[0, 0], [1, 1], [1, -1]])
+
+julia> Sublat{Float32}(:A, (0, 0), (1, 1), (1, -1))
+Sublat{Float32,2}(:A, StaticArrays.SArray{Tuple{2},Float32,1,2}[[0.0, 0.0], [1.0, 1.0], [1.0, -1.0]])
+```
+"""
 struct Sublat{T,E} <: LatticeDirective
     name::Union{Symbol,Missing}
     sites::Vector{SVector{E,T}}
@@ -151,6 +168,32 @@ end
 ################################################################################
 ## FillRegion LatticeDirective
 ################################################################################
+"""
+    FillRegion(regionname::Symbol, args...)
+    FillRegion{E}(region::Function; seed = zero(SVector{E,Float64}), excludeaxes = (), maxsteps = 100_000_000)
+
+Create a `LatticeDirective` to fill a region in `E`-dimensional space defined by 
+`region(r) == true`, where `f` can alternatively be defined by a region `regionname`,
+as `QBox.region_presets[regionname](args...; kw...)`.
+
+Fill search starts at position `seed`, and takes a maximum of `maxsteps` along all lattice
+Bravais vectors, excluding those specified by `excludeaxes::NTuple{N,Int}`
+
+# Examples
+```jldoctest
+julia> r = FillRegion(:circle, 10); r.region([10,10])
+false
+
+julia> r = FillRegion(:square, 20); r.region([10,10])
+true
+
+julia> Tuple(keys(QBox.region_presets))
+(:ellipse, :circle, :sphere, :cuboid, :cube, :rectangle, :spheroid, :square)
+
+julia> r = FillRegion{3}(r -> 0<=r[1]<=1 && abs(r[2]) <= sec(r[1]); excludeaxes = (3,)); r.region((0,1,2))
+true
+```
+"""
 struct FillRegion{E,F<:Function,N} <: LatticeDirective
     region::F
     seed::SVector{E, Float64}
@@ -161,13 +204,25 @@ end
 FillRegion(name::Symbol, args...; kw...) = region_presets[name](args...; kw...)
 
 FillRegion{E}(region::F;
-    seed::Union{AbstractVector,Tuple} = zeros(SVector{E,Float64}),
+    seed::Union{AbstractVector,Tuple} = zero(SVector{E,Float64}),
     excludeaxes::NTuple{N,Int} = (), maxsteps = 100_000_000) where {E,F,N} =
         FillRegion{E,F,N}(region, SVector(seed), excludeaxes, maxsteps)
 
 ################################################################################
 ##   Precision LatticeDirective
 ################################################################################
+"""
+    Precision(type)
+
+Create a `LatticeDirective` especifying the numeric `type` of space coordinates and 
+other derived quantities.
+
+# Examples
+```jldoctest
+julia> Precision(Float32)
+Precision{Float32}(Float32)
+```
+"""
 struct Precision{T<:Number} <: LatticeDirective
     t::Type{T}
 end
@@ -177,12 +232,16 @@ end
 ################################################################################
 """
     Supercell(inds::NTuple{N,Int}...)
-    Supercell(inds::NTuple{N,Int}...)
     Supercell(rescaling::Int)
 
-Define a supercell in terms of a rescaling of the original unit cell, or a new set of
-lattice vectors v_i = v0_j * inds_ij. inds_ij are Integers, so that the new lattice 
-vectors v_i are commensurate with the old v_j
+Create a `LatticeDirective` that defines a supercell in terms of a rescaling of the 
+original unit cell, or a new set of lattice vectors `v[i] = inds[i][j] * v0[j]`.
+
+# Examples
+```jldoctest
+julia> Supercell((1,2), (3,4))
+Supercell{StaticArrays.SArray{Tuple{2,2},Int64,2,4}}([1 3; 2 4])
+```
 """
 struct Supercell{S} <: LatticeDirective
     matrix::S
