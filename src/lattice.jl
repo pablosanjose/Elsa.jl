@@ -64,7 +64,7 @@ struct Bravais{T,E,L,EL} <: LatticeDirective
     matrix::SMatrix{E,L,T,EL}
     (::Type{Bravais})(matrix::SMatrix{E,L,T,EL}) where {T,E,L,EL} =
         L == 0 || rank(matrix) == L ? new{T,E,L,EL}(matrix) : 
-            throw(DomainError("Bravais matrix $matrix is singular"))
+            throw(DomainError("Bravais vectors $(vectorsastuples(lat)) are not linearly independent"))
 end
 
 Bravais(vs...) = Bravais(toSMatrix(vs...))
