@@ -70,7 +70,7 @@ end
 Bravais(vs...) = Bravais(toSMatrix(vs...))
 Bravais(::Type{T}, vs...) where {T} = Bravais(toSMatrix(T, vs...))
 
-@inline transform(b::Bravais{T,2,0,0}, f::F) where {T,L,F<:Function} = b
+@inline transform(b::Bravais{T,E,0,0}, f::F) where {T,E,F<:Function} = b
 function transform(b::Bravais{T,E,L,EL}, f::F) where {T,E,L,EL,F<:Function}
     svecs = let z = zero(SVector{E,T})
         ntuple(i -> f(b.matrix[:, i]) - f(z), Val(L))
