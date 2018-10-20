@@ -9,7 +9,7 @@ Preset(name; kwargs...) = Preset(name, kwargs.data)
 # Lattice presets
 #######################################################################
 
-lattice_presets = Dict(
+latticepresets = Dict(
     :linear => () ->
         Lattice(Sublat((0.,)), Bravais((1.,))),
     :square => () ->
@@ -22,7 +22,7 @@ lattice_presets = Dict(
     :graphene => () ->
         Lattice(Sublat(:A, (0.0, -0.5/sqrt(3.0))),
         Sublat(:B, (0.0, 0.5/sqrt(3.0))), Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3))), 
-        LinkRules(1/√3)),
+        LinkRule(1/√3)),
     :cubic => () ->
         Lattice(Sublat((0., 0., 0.)), Bravais((1., 0., 0.), (0., 1., 0.), (0., 0., 1.))),
     :fcc => () ->
@@ -43,19 +43,19 @@ lattice_presets = Dict(
             else
                 scbot, sctop = @SMatrix[m+r/3 -r/3; r/3 m+2r/3], @SMatrix[m+2r/3 r/3; -r/3 m+r/3]
             end
-            ltop = Lattice(sAtop, sBtop, bravais, Dim(3), LinkRules(linkrangeintralayer), Supercell(sctop))
-            lbot = Lattice(sAbot, sBbot, bravais, Dim(3), LinkRules(linkrangeintralayer), Supercell(scbot))
+            ltop = Lattice(sAtop, sBtop, bravais, Dim(3), LinkRule(linkrangeintralayer), Supercell(sctop))
+            lbot = Lattice(sAbot, sBbot, bravais, Dim(3), LinkRule(linkrangeintralayer), Supercell(scbot))
             let R = @SMatrix[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]
                 transform!(ltop, r -> R * r)
             end
             let R = @SMatrix[cos(θ/2) sin(θ/2) 0; -sin(θ/2) cos(θ/2) 0; 0 0 1]
                 transform!(lbot, r -> R * r)
             end
-            combine!(lbot, ltop)
+            combine_nocopy(lbot, ltop)
         end
     )
 
-region_presets = Dict(
+regionpresets = Dict(
     :circle => (radius = 10.0, ; kw...) -> FillRegion{2}(_region_ellipse((radius, radius)); kw...),
     :ellipse => (radii = (10.0, 15.0), ; kw...) -> FillRegion{2}(_region_ellipse(radii); kw...),
     :square => (side = s, ; kw...) -> FillRegion{2}(_region_rectangle((side, side)); kw...),
@@ -90,7 +90,7 @@ end
 # Model presets
 #######################################################################
 
-model_presets = Dict(
+modelpresets = Dict(
     :kinetic2D => ((; mass = 1, a0 = 1) -> Model(
             Onsite(r-> (2.0 ./ (mass.*a0^2)) .* eye(SMatrix{2,2, Float64})),
             Hopping((r,dr)-> (-1.0 ./ (mass.*a0^2)) .* eye(SMatrix{2,2, Float64}))))

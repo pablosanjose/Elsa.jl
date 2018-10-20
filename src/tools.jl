@@ -4,8 +4,10 @@ extended_eps() = 10_000*eps(Float64)
 toSMatrix() = toSMatrix(Float64)
 toSMatrix(::Type{T}) where {T} = zero(SMatrix{0,0,T,0})
 toSMatrix(::Type{T}, s::SMatrix{N,M}) where {T,N,M} = convert(SMatrix{N,M,T}, s)
+toSMatrix(::Type{T}, m::AbstractMatrix) where {T} = convert(SMatrix{size(m,1), size(m,2), T}, m)
 toSMatrix(::Type{T}, vs...) where {T} = hcat(toSVector.(T, vs)...)
 toSMatrix(vs...) = hcat(toSVector.(vs)...)
+toSMatrix(m::AbstractMatrix) = convert(SMatrix{size(m,1), size(m,2), eltype(m)}, m)
 
 toSVector(::Type{T} = Float64) where {T} = SVector{0,T}()
 toSVector(v) = isempty(v) ? toSVector() : _toSVector(v)
@@ -24,7 +26,7 @@ toSVectors(vs...) = [promote(toSVector.(vs)...)...]
     SVector{E2, T2}(ntuple(i -> i > E ? x : T2(sv[i]), Val(E2)))
 
 @inline padrightbottom(s::SMatrix{E,L}, st::Type{SMatrix{E2,L2,T2,EL2}}) where {E,L,E2,L2,T2,EL2} =
-    SMatrix{E2,L2,T2,EL2}(ntuple(i -> _padrightbottom((i - 1) % E2 + 1, i ÷ E2 + 1, zero(T2), s), Val(EL2)))
+    SMatrix{E2,L2,T2,EL2}(ntuple(k -> _padrightbottom((k - 1) % E2 + 1, (k - 1) ÷ E2 + 1, zero(T2), s), Val(EL2)))
 @inline _padrightbottom(i, j, zero, s::SMatrix{E,L}) where {E,L} = i > E || j > L ? zero : s[i,j]
 function padrightbottom(m::Matrix{T}, im, jm) where T
     i0, j0 = size(m)

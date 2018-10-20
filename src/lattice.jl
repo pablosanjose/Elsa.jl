@@ -4,17 +4,18 @@
 """
     Sublat([name::Symbol = missing, ]sites...)
 
-Create a `LatticeDirective` that adds a sublattice, of name `name`, with
-sites at positions `sites`.
+Create a `Sublat{T,E} <: LatticeDirective` that adds a sublattice, of 
+name `name`, with sites at positions `sites` in `E` dimensional space.
 
 A type `T` for coordinates can also be specified using `Sublat{T}(...)`.
+For higher efficiency write `sites` as `Tuple`s or `SVector`s.
 
 # Examples
 ```jldoctest
 julia> Sublat(:A, (0, 0), (1, 1), (1, -1))
 Sublat{Int64,2}(:A, SArray{Tuple{2},Int64,1,2}[[0, 0], [1, 1], [1, -1]])
 
-julia> Sublat{Float32}(:A, (0, 0), (1, 1), (1, -1))
+julia> Sublat(Float32, :A, (0, 0), (1, 1), (1, -1))
 Sublat{Float32,2}(:A, StaticArrays.SArray{Tuple{2},Float32,1,2}[[0.0, 0.0], [1.0, 1.0], [1.0, -1.0]])
 ```
 """
@@ -25,8 +26,8 @@ end
 
 Sublat(vs...) = Sublat(missing, toSVectors(vs...))
 Sublat(name::Symbol, vs::(<:Union{Tuple, AbstractVector{<:Number}})...) = Sublat(name, toSVectors(vs...))
-Sublat{T}(vs...) where {T} = Sublat(missing, toSVectors(T, vs...))
-Sublat{T}(name::Symbol, vs...) where {T} = Sublat(name, toSVectors(T, vs...))
+Sublat(::Type{T}, vs...) where {T} = Sublat(missing, toSVectors(T, vs...))
+Sublat(::Type{T}, name::Symbol, vs...) where {T} = Sublat(name, toSVectors(T, vs...))
 Sublat{T,E}() where {T,E} = Sublat(missing, SVector{E,T}[])
 
 nsites(s::Sublat) = length(s.sites)
@@ -38,20 +39,44 @@ flatten(ss::Sublat...) = Sublat(ss[1].name, vcat((s.sites for s in ss)...))
 #######################################################################
 # Bravais
 #######################################################################
+"""
+    Bravais(vecs...)
+    Bravais(mat)
+
+Create a `Bravais{T,E,L,EL} <: LatticeDirective` that adds `L` Bravais vectors 
+`vecs` in `E` dimensional space, alternatively given as the columns of matrix 
+`mat`.
+
+A type `T` for vector elements can also be specified using `Bravais(T, vecs...)`. 
+For higher efficiency write `vecs` as `Tuple`s or `SVector`s and `mat` 
+as `SMatrix`.
+
+# Examples
+```jldoctest
+julia> Bravais((1, 2), (3, 4))
+Bravais{Int64,2,2,4}([1 3; 2 4])
+
+julia> Bravais{Float64}(@SMatrix[1 2; 3 4])
+Bravais{Float64,2,2,4}([1.0 2.0; 3.0 4.0])
+```
+"""
 struct Bravais{T,E,L,EL} <: LatticeDirective
     matrix::SMatrix{E,L,T,EL}
+    (::Type{Bravais})(matrix::SMatrix{E,L,T,EL}) where {T,E,L,EL} =
+        L == 0 || rank(matrix) == L ? new{T,E,L,EL}(matrix) : 
+            throw(DomainError("Bravais matrix $matrix is singular"))
 end
 
 Bravais(vs...) = Bravais(toSMatrix(vs...))
-Bravais{T}(vs...) where {T} = Bravais(toSMatrix(T, vs...))
+Bravais(::Type{T}, vs...) where {T} = Bravais(toSMatrix(T, vs...))
 
 @inline transform(b::Bravais{T,2,0,0}, f::F) where {T,L,F<:Function} = b
 function transform(b::Bravais{T,E,L,EL}, f::F) where {T,E,L,EL,F<:Function}
-    vecs = let z = zero(SVector{E,T})
+    svecs = let z = zero(SVector{E,T})
         ntuple(i -> f(b.matrix[:, i]) - f(z), Val(L))
     end
-    matrix = hcat(vecs...)
-    return Bravais{T,E,L,EL}(matrix)
+    matrix = hcat(svecs...)
+    return Bravais(matrix)
 end
 
 #######################################################################
@@ -153,6 +178,18 @@ transform!(l::L, f::F) where {L<:Links, F<:Function} = (transform!(l.intralink, 
 ################################################################################
 ## Dim LatticeDirective
 ################################################################################
+"""
+    Dim(E::Int)
+
+Create a `Dim{E} <: LatticeDirective` that specifies the dimension `E` of a lattice's
+embedding space.
+
+# Examples
+```jldoctest
+julia> Dim(3)
+Dim{3}()
+```
+"""
 struct Dim{E} <: LatticeDirective
 end
 
@@ -161,9 +198,25 @@ Dim(e::Int) = Dim{e}()
 ################################################################################
 ## Dim LatticeConstant
 ################################################################################
+"""
+    LatticeConstant(c[, axis = missing])
+
+Create a `LatticeConstant{T} <: LatticeDirective` that can be used to uniformly 
+rescale a lattice in space, so that the resulting lattice constant along a given
+`axis` is `c`. If `axis` is `missing` or there is no such `axis` in the lattice
+the axis with the maximum lattice constant is chosen.
+
+# Examples
+```jldoctest
+julia> LatticeConstant(2.5)
+LatticeConstant{Float64}(2.5, missing)
+```
+"""
 struct LatticeConstant{T} <: LatticeDirective
     a::T
+    axis::Union{Int,Missing}
 end
+LatticeConstant(a) = LatticeConstant(a, missing)
 
 ################################################################################
 ## FillRegion LatticeDirective
@@ -172,12 +225,12 @@ end
     FillRegion(regionname::Symbol, args...)
     FillRegion{E}(region::Function; seed = zero(SVector{E,Float64}), excludeaxes = (), maxsteps = 100_000_000)
 
-Create a `LatticeDirective` to fill a region in `E`-dimensional space defined by 
-`region(r) == true`, where `f` can alternatively be defined by a region `regionname`,
-as `QBox.region_presets[regionname](args...; kw...)`.
+Create a `FillRegion{E,F,N} <: LatticeDirective` to fill a region in `E`-dimensional 
+space defined by `region(r) == true`, where function `region::F` can alternatively be 
+defined by a region `regionname` as `QBox.regionpresets[regionname](args...; kw...)`.
 
 Fill search starts at position `seed`, and takes a maximum of `maxsteps` along all lattice
-Bravais vectors, excluding those specified by `excludeaxes::NTuple{N,Int}`
+Bravais vectors, excluding those specified by `excludeaxes::NTuple{N,Int}`.
 
 # Examples
 ```jldoctest
@@ -187,7 +240,7 @@ false
 julia> r = FillRegion(:square, 20); r.region([10,10])
 true
 
-julia> Tuple(keys(QBox.region_presets))
+julia> Tuple(keys(QBox.regionpresets))
 (:ellipse, :circle, :sphere, :cuboid, :cube, :rectangle, :spheroid, :square)
 
 julia> r = FillRegion{3}(r -> 0<=r[1]<=1 && abs(r[2]) <= sec(r[1]); excludeaxes = (3,)); r.region((0,1,2))
@@ -201,7 +254,7 @@ struct FillRegion{E,F<:Function,N} <: LatticeDirective
     maxsteps::Int
 end
 
-FillRegion(name::Symbol, args...; kw...) = region_presets[name](args...; kw...)
+FillRegion(name::Symbol, args...; kw...) = regionpresets[name](args...; kw...)
 
 FillRegion{E}(region::F;
     seed::Union{AbstractVector,Tuple} = zero(SVector{E,Float64}),
@@ -212,10 +265,10 @@ FillRegion{E}(region::F;
 ##   Precision LatticeDirective
 ################################################################################
 """
-    Precision(type)
+    Precision(Type)
 
-Create a `LatticeDirective` especifying the numeric `type` of space coordinates and 
-other derived quantities.
+Create a `Precision{T} <: LatticeDirective` especifying the numeric `Type` of space 
+coordinates and other derived quantities.
 
 # Examples
 ```jldoctest
@@ -231,11 +284,18 @@ end
 ##   Supercell LatticeDirective
 ################################################################################
 """
-    Supercell(inds::NTuple{N,Int}...)
+    Supercell(inds...)
+    Supercell(matrix)
     Supercell(rescaling::Int)
 
-Create a `LatticeDirective` that defines a supercell in terms of a rescaling of the 
-original unit cell, or a new set of lattice vectors `v[i] = inds[i][j] * v0[j]`.
+Create a `Supercell{S} <: LatticeDirective` that defines a supercell in terms of a 
+vectors of integer indices `inds...` that relate the new lattice vectors `v` to
+the original ones `v0` as `v[i] = inds[i][j] * v0[j]`. Alternatively, `inds...` can be 
+given as columns of `matrix` or as a uniform `rescaling` so that `mat = rescaling * I`.
+
+For higher efficiency, write `inds...` as several `NTuple{N,Int}` or `SVectors`, and
+`matrix` as an `SMatrix`. Parameter `S <: SMatrix` is the type of the `matrix` stored 
+internally.
 
 # Examples
 ```jldoctest
@@ -252,7 +312,7 @@ Supercell(vs::(<:Union{Tuple,SVector})...) = Supercell(toSMatrix(Int, vs...))
 Supercell(rescalings::Vararg{Number,N}) where {N} = Supercell(SMatrix{N,N,Int}(Diagonal(SVector(rescalings))))
 
 #######################################################################
-## LinkRules LatticeDirective : directives to create links in a lattice
+## LinkRule LatticeDirective : directives to create links in a lattice
 #######################################################################
 abstract type SearchAlgorithm end
 
@@ -280,26 +340,83 @@ struct BoxIteratorSearch{T,E,L,N,EL,O<:SMatrix,C<:SMatrix} <: SearchAlgorithm
     nslist::Vector{Int}
 end
 
-struct LinkRules{S<:SearchAlgorithm, SL} <: LatticeDirective
+"""
+    LinkRule(algorithm[, sublats...]; mincells = 0, maxsteps = 100_000_000)
+    LinkRule(range[, sublats...]; mincells = 0, maxsteps = 100_000_000))
+
+Create a `LinkRule{S,SL} <: LatticeDirective` to compute links between sites in
+sublattices indicated by `sublats::SL` using `algorithm::S <: SearchAlgorithm`. If a 
+linking `range` instead an `algorithm` is given, the algorithm is chosen automatically.
+
+Sublattices `sublats...` to be linked are indicated by pairs of integers or sublattice 
+names (of type `:Symbol`). A single integer or name can be used to indicate 
+intra-sublattice links for that sublattice. `mincells` indicates a minimum cell search 
+distance, and `maxsteps` a maximum number of cells to link.
+
+# Examples
+```jldoctest
+julia> lr = LinkRule(1, (2, :A), 1, (3,1)); (lr.alg.range, lr.sublats)
+(1.0, ((2, :A), (1, 1), (3, 1)))
+
+julia> LinkRule(TreeSearch(2.0))
+LinkRule{TreeSearch,Missing}(TreeSearch(2.0, 10), missing, 0, 100000000)
+```
+"""
+struct LinkRule{S<:SearchAlgorithm, SL} <: LatticeDirective
     alg::S
     sublats::SL
     mincells::Int  # minimum range to search in using BoxIterator
     maxsteps::Int
 end
-LinkRules(range; kw...) = LinkRules(; range = range, kw...)
-LinkRules(range, sublats...; kw...) = LinkRules(; range = range, sublats = sublats, kw...)
-LinkRules(; range = 10.0, sublats = missing, kw...) = 
-    LinkRules(AutomaticRangeSearch(abs(range)), tuplesort(to_tuples_or_missing(sublats)); kw...)
-LinkRules(alg::S; kw...) where S<:SearchAlgorithm = LinkRules(alg, missing; kw...)
-LinkRules(alg::S, sublats; mincells = 0, maxsteps = 100_000_000) where S<:SearchAlgorithm =
-    LinkRules(alg, sublats, abs(mincells), maxsteps)
+LinkRule(range; kw...) = LinkRule(; range = range, kw...)
+LinkRule(range, sublats...; kw...) = LinkRule(; range = range, sublats = sublats, kw...)
+LinkRule(; range = 10.0, sublats = missing, kw...) = 
+    LinkRule(AutomaticRangeSearch(abs(range)), tuplesort(to_tuples_or_missing(sublats)); kw...)
+LinkRule(alg::S; kw...) where S<:SearchAlgorithm = LinkRule(alg, missing; kw...)
+LinkRule(alg::S, sublats; mincells = 0, maxsteps = 100_000_000) where S<:SearchAlgorithm =
+    LinkRule(alg, sublats, abs(mincells), maxsteps)
 
-LinkRules(l::Links, i::BoxIterator{N}, open2old, iterated2old, bravais, nslist; kw...) where {N} = 
-    LinkRules(BoxIteratorSearch(l, i, open2old, iterated2old, bravais, nslist); kw...)
+LinkRule(l::Links, i::BoxIterator{N}, open2old, iterated2old, bravais, nslist; kw...) where {N} = 
+    LinkRule(BoxIteratorSearch(l, i, open2old, iterated2old, bravais, nslist); kw...)
 
-#############################  EXPORTED  ##############################
+#######################################################################
 # Lattice : group of sublattices + Bravais vectors + links
 #######################################################################
+"""
+    Lattice([preset, ]directives...)
+
+Build a `Lattice{T,E,L,EL}` of `L` dimensions in `E`-dimensional embedding 
+spaceof and composed of `T`-typed sites. Optional `preset::Union{Preset, Symbol}`
+is one of the `QBox.latticepresets` or a `Preset(preset, args...)`. 
+The `directives::LatticeDirective...` apply additional build instructions in order.
+
+# Examples
+```jldoctest
+julia> Lattice(Sublat(:C, (1,0), (0,1)), Sublat(:D, (0.5,0.5)), Bravais((1,0), (0,2)), Dim(3))
+Lattice{Float64,3,2} : 2D lattice in 3D space with Float64 sites
+    Bravais vectors : ((1.0, 0.0, 0.0), (0.0, 2.0, 0.0))
+    Number of sites : 3
+    Sublattice names : (:C, :D)
+    Unique Links : 0
+
+julia> Lattice(:honeycomb, LinkRule(1/√3), FillRegion(:circle, 100))
+Lattice{Float64,2,0} : 0D lattice in 2D space with Float64 sites
+    Bravais vectors : ()
+    Number of sites : 72562
+    Sublattice names : (:A, :B)
+    Unique Links : 108445
+
+julia> Lattice(Preset(:honeycomb_bilayer, twistindices=(31,1)), Precision(Float32))
+Lattice{Float32,3,2} : 2D lattice in 3D space with Float32 sites
+    Bravais vectors : ((-0.0f0, 54.56189f0, 0.0f0), (-47.251984f0, 27.280945f0, 0.0f0))
+    Number of sites : 11908
+    Sublattice names : (:Ab, :Bb, :At, :Bt)
+    Unique Links : 18171
+
+julia> Tuple(keys(QBox.latticepresets))
+(:bcc, :graphene, :honeycomb, :cubic, :linear, :fcc, :honeycomb_bilayer, :square, :triangular)
+```
+"""
 mutable struct Lattice{T, E, L, EL}
     sublats::Vector{Sublat{T,E}}
     bravais::Bravais{T,E,L,EL}
@@ -309,13 +426,13 @@ Lattice(sublats::Vector{Sublat{T,E}}, bravais::Bravais{T,E,L}) where {T,E,L} = L
 
 Lattice(name::Symbol) = Lattice(Preset(name))
 Lattice(name::Symbol, opts...) = lattice!(Lattice(name), opts...)
-Lattice(preset::Preset) = lattice_presets[preset.name](; preset.kwargs...)
+Lattice(preset::Preset) = latticepresets[preset.name](; preset.kwargs...)
 Lattice(preset::Preset, opts...) = lattice!(Lattice(preset), opts...)
 Lattice(opts::LatticeDirective...) = lattice!(seedlattice(Lattice{Float64,0,0,0}, opts...), opts...)
 
 # Vararg here is necessary in v0.7-alpha (instead of ...) to make these type-unstable recursions fast
 seedlattice(::Type{S}, opts::Vararg{<:LatticeDirective,N}) where {S, N} = _seedlattice(seedtype(S, opts...))
-_seedlattice(::Type{Lattice{T,E,L,EL}}) where {T,E,L,EL} = Lattice(Sublat{T,E}[], Bravais(zero(SMatrix{E,L,T,EL})))
+_seedlattice(::Type{Lattice{T,E,L,EL}}) where {T,E,L,EL} = Lattice(Sublat{T,E}[], Bravais(SMatrix{E,L,T,EL}(I)))
 seedtype(::Type{T}, t, ts::Vararg{<:Any, N}) where {T,N} = seedtype(seedtype(T, t), ts...)
 seedtype(::Type{Lattice{T,E,L,EL}}, ::Sublat{T2,E2}) where {T,E,L,EL,T2,E2} = Lattice{T,E2,L,E2*L}
 seedtype(::Type{S}, ::Bravais{T2,E,L,EL}) where {T,S<:Lattice{T},T2,E,L,EL} = Lattice{T,E,L,EL}
@@ -354,12 +471,12 @@ end
 supercellmatrix(s::Supercell{<:UniformScaling}, lat::Lattice{T,E,L}) where {T,E,L} = SMatrix{L,L}(s.matrix.λ .* one(SMatrix{L,L,Int}))
 supercellmatrix(s::Supercell{<:SMatrix}, lat::Lattice{T,E,L}) where {T,E,L} = s.matrix
 
-function matchingsublats(lat::Lattice, lr::LinkRules{S,Missing}) where S 
+function matchingsublats(lat::Lattice, lr::LinkRule{S,Missing}) where S 
     ns = nsublats(lat)
     match = vec([i.I for i in CartesianIndices((ns, ns))])
     return match
 end
-matchingsublats(lat::Lattice, lr::LinkRules{S,T}) where {S,T} = _matchingsublats(sublatnames(lat), lr.sublats)
+matchingsublats(lat::Lattice, lr::LinkRule{S,T}) where {S,T} = _matchingsublats(sublatnames(lat), lr.sublats)
 function _matchingsublats(sublatnames, lrsublats)
     match = Tuple{Int,Int}[]
     for (s1, s2) in lrsublats
@@ -372,18 +489,25 @@ end
 __matchingsublats(s::Int, sublatnames) = s <= length(sublatnames) ? s : nothing
 __matchingsublats(s, sublatnames) = findfirst(isequal(s), sublatnames)
 
-function transform!(l::L, f::F) where {L<:Lattice, F<:Function}
-    transform!.(l.sublats, f)
-    isunlinked(l) || transform!(l.links, f)
-    l.bravais = transform(l.bravais, f)
-    return l
-end
-transform(l::Lattice, f::F) where F<:Function = transform!(deepcopy(l), f)
-
 #######################################################################
 # Apply LatticeDirectives
 #######################################################################
+"""
+    lattice!(lat::Lattice, directives::LatticeDirective...)
 
+Apply `directives` to lattice `lat` in order, modifying it in place whenever 
+possible.
+
+# Examples
+```jldoctest
+julia> lattice!(Lattice(:honeycomb), Sublat(:C, (0, 0)))
+Lattice{Float64,2,2} : 2D lattice in 2D space with Float64 sites
+    Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+    Number of sites : 3
+    Sublattice names : (:A, :B, :C)
+    Unique Links : 0
+```
+"""
 lattice!(lat::Lattice, o1::LatticeDirective, opts...) = lattice!(_lattice!(lat, o1), opts...)
 
 lattice!(lat::Lattice) = adjust_slinks_to_sublats!(lat)
@@ -415,13 +539,18 @@ _lattice!(lat::Lattice{T,E,L,EL}, p::Precision{T2}) where {T,E,L,EL,T2} =
 
 _lattice!(lat::Lattice, sc::Supercell) = expand_unitcell(lat, sc)
 
-_lattice!(lat::Lattice, lr::LinkRules) = link!(lat, lr)
+_lattice!(lat::Lattice, lr::LinkRule) = link!(lat, lr)
 
 function _lattice!(lat::Lattice{T,E,L}, l::LatticeConstant) where {T,E,L}
     if L == 0 
-        @warn("Cannot redefine the LatticeConstant of a non-periodic lattice")
+        throw(DimensionMismatch("Cannot redefine the LatticeConstant of a non-periodic lattice"))
     else
-        rescale = let factor = l.a / norm(lat.bravais.matrix[:,1])
+        if ismissing(l.axis) || !(1 <= l.axis <= L) 
+            axisnorm = maximum(norm(bravaismatrix(lat)[:,i]) for i in size(lbravaismatrix(lat), 2))
+        else
+            axisnorm = norm(bravaismatrix(lat)[:, l.axis])
+        end
+        rescale = let factor = l.a / axisnorm
             r -> factor * r
         end
         transform!(lat, rescale)
@@ -443,3 +572,141 @@ Base.show(io::IO, lat::Lattice{T,E,L}) where {T,E,L}=
     Number of sites : $(nsites(lat))
     Sublattice names : $((sublatnames(lat)... ,))
     Unique Links : $(nuniquelinks(lat))")
+
+#######################################################################
+# Transform lattices
+#######################################################################
+"""
+    transform!(lat::Lattice, f::Function)
+
+Transform a `Lattice` `lat` in place so that any site at position `r::SVector`
+is moved to position `f(r)`. Links between sites are preserved.
+
+# Examples
+```jldoctest
+julia> transform!(Lattice(:cubic, LinkRule(1)), r -> 2r + SVector(0,0,r[1]))
+Lattice{Float64,3,3} : 3D lattice in 3D space with Float64 sites
+    Bravais vectors : ((2.0, 0.0, 1.0), (0.0, 2.0, 0.0), (0.0, 0.0, 2.0))
+    Number of sites : 1
+    Sublattice names : (missing,)
+    Unique Links : 6
+```
+"""
+function transform!(l::L, f::F) where {L<:Lattice, F<:Function}
+    transform!.(l.sublats, f)
+    isunlinked(l) || transform!(l.links, f)
+    l.bravais = transform(l.bravais, f)
+    return l
+end
+
+"""
+    transform(lat::Lattice, f::Function)
+
+Create a new `Lattice` as a transformation of lattice `lat` so that any site 
+at position `r::SVector` is moved to position `f(r)`. Links between sites are 
+kept the same as in `lat`.
+
+# Examples
+```jldoctest
+julia> transform(Lattice(:cubic, LinkRule(1)), r -> 2r + SVector(0,0,r[1]))
+Lattice{Float64,3,3} : 3D lattice in 3D space with Float64 sites
+    Bravais vectors : ((2.0, 0.0, 1.0), (0.0, 2.0, 0.0), (0.0, 0.0, 2.0))
+    Number of sites : 1
+    Sublattice names : (missing,)
+    Unique Links : 6
+```
+"""
+transform(l::Lattice, f::F) where F<:Function = transform!(deepcopy(l), f)
+
+#######################################################################
+# Combine lattices
+#######################################################################
+"""
+    combine(lats::Lattice...)
+
+Create a new `Lattice` from a set of lattices `lats...` that include a copy 
+of all the different sublattices of `lats...`. All `lats` must share compatible
+Bravais vectors.
+
+# Examples
+```jldoctest
+julia> combine(Lattice(:honeycomb), Lattice(:triangular))
+Lattice{Float64,2,2} : 2D lattice in 2D space with Float64 sites
+    Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+    Number of sites : 3
+    Sublattice names : (:A, :B, missing)
+    Unique Links : 0
+```
+"""
+function combine(lats::Lattice...) 
+    combine_nocopy(deepcopy.(lats)...)
+end
+
+"""
+    combine_nocopy(lats::Lattice...)
+
+Create a new `Lattice` from a set of lattices `lats...` that include all the 
+original sublattices of `lats...` (not a copy). All `lats` must share compatible
+Bravais vectors.
+
+See also: [`combine`](@ref)
+```
+"""
+function combine_nocopy(lats::Lattice...)
+    bravais = check_compatible_bravais(map(lat -> lat.bravais, lats))
+    combined_sublats = vcat(map(lat -> lat.sublats, lats)...)
+    combined_links = combine_links(lats, combined_sublats)
+    return Lattice(combined_sublats, bravais, combined_links)
+end
+
+function check_compatible_bravais(bs::NTuple{N,B}) where {N,B<:Bravais}
+    allsame(bs) || throw(DimensionMismatch("Cannot combine lattices with different Bravais vectors, $(vectorsastuples.(bs))"))
+    return(first(bs))
+end
+function ==(b1::B, b2::B) where {T,E,L,B<:Bravais{T,E,L}}
+    vs1 = MVector{L,SVector{E,T}}(ntuple(i -> b1.matrix[:,i], Val(L))); sort!(vs1)
+    vs2 = MVector{L,SVector{E,T}}(ntuple(i -> b2.matrix[:,i], Val(L))); sort!(vs2)
+    # Caution: potential problem for equal bravais modulo signs
+    all(vs->isapprox(vs[1],vs[2]), zip(vs1,vs2))
+end
+
+function combine_links(lats::NTuple{N,LL}, combined_sublats) where {N,T,E,L,LL<:Lattice{T,E,L}} 
+    intralink = combine_ilinks(map(l -> l.links.intralink, lats), combined_sublats)
+    interlinks = Ilink{T,E,L}[]
+    ndists = SVector{L,Int}[]
+    for lat in lats, is in lat.links.interlinks
+        if !(is.ndist in ndists)
+            push!(ndists, is.ndist)
+        end
+    end
+    ilinks = Ilink{T,E,L}[]
+    for ndist in ndists
+        resize!(ilinks, 0)
+        for lat in lats
+            push!(ilinks, getilink(lat, ndist))
+        end
+        push!(interlinks, combine_ilinks(ilinks, combined_sublats))
+    end
+    return Links(intralink, interlinks)
+end
+
+function combine_ilinks(is, combined_sublats)
+    allsame(i.ndist for i in is) || throw(DimensionMismatch("Cannot combine Ilinks with different ndist"))
+    ilink = emptyilink(first(is).ndist, combined_sublats)
+    slinkmatrices = map(i -> i.slinks, is)
+    filldiag!(ilink.slinks, slinkmatrices)
+    return ilink
+end
+
+function getilink(lat::Lattice, ndist)
+    if iszero(ndist) 
+        return lat.links.intralink
+    else
+        index = findfirst(i -> i.ndist == ndist, lat.links.interlinks)
+        if index === nothing
+            return emptyilink(ndist, lat.sublats)
+        else 
+            return lat.links.interlinks[index]
+        end
+    end
+end

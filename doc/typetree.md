@@ -1,6 +1,6 @@
 ## Type tree
 
-The `Lattice` type contains site positions of type `T` defined in `E`-dimensional space. The lattice is periodic in `L` dimensions. `Links` between sites are included following a set of `LinkRules`
+The `Lattice` type contains site positions of type `T` defined in `E`-dimensional space. The lattice is periodic in `L` dimensions. `Links` between sites are included following a set of `LinkRule`
 
 ```julia
 struct Lattice{T,E,L,EL}
