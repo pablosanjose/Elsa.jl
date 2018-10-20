@@ -22,7 +22,7 @@ function expand_unitcell(lat::Lattice{T,E,L,EL}, supercell::Supercell) where {T,
     open2old = smat
     iterated2old = one(SMatrix{L,L,Int})
     return isunlinked(lat) ? newlattice : 
-       link!(newlattice, LinkRules(lat.links, iter, open2old, iterated2old, lat.bravais, nsiteslist(lat);
+       link!(newlattice, LinkRule(lat.links, iter, open2old, iterated2old, lat.bravais, nsiteslist(lat);
                                    mincells = cellrange(lat.links)))
 end
 
@@ -48,7 +48,7 @@ function fill_region(lat::Lattice{T,E,L}, fr::FillRegion{E,F,N}) where {T,E,L,F,
     open2old = nmatrix(openaxesbool, Val(N))
     iterated2old = nmatrix(closeaxesbool, Val(filldims))
     return isunlinked(lat) ? newlattice : 
-        link!(newlattice, LinkRules(lat.links, iter, open2old, iterated2old, 
+        link!(newlattice, LinkRule(lat.links, iter, open2old, iterated2old, 
                                     lat.bravais, nsiteslist(lat); mincells = cellrange(lat.links)))
 end
 
@@ -107,16 +107,16 @@ cellrange(links::Links) = isempty(links.interlinks) ? 0 : maximum(max(abs.(ilink
 #     return lat
 # end
 
-function link!(lat::Lattice, lr::LinkRules{AutomaticRangeSearch})
+function link!(lat::Lattice, lr::LinkRule{AutomaticRangeSearch})
     if nsites(lat) < 200 # Heuristic cutoff
-        newlr = convert(LinkRules{SimpleSearch}, lr)
+        newlr = convert(LinkRule{SimpleSearch}, lr)
     else
-        newlr = convert(LinkRules{TreeSearch}, lr)
+        newlr = convert(LinkRule{TreeSearch}, lr)
     end
     return link!(lat, newlr)
 end
 
-function link!(lat::Lattice{T,E,L}, lr::LinkRules{S}) where {T,E,L,S<:SearchAlgorithm}
+function link!(lat::Lattice{T,E,L}, lr::LinkRule{S}) where {T,E,L,S<:SearchAlgorithm}
     # clearlinks!(lat)
     pre = linkprecompute(lr, lat)
     br = bravaismatrix(lat)
@@ -149,7 +149,7 @@ end
 
 # Logic to exlude cells that are not linked to zero cell by any ilink
 isnotlinked(ndist, br, lr) = false # default fallback, used unless lr.alg isa BoxIteratorSearch
-function isnotlinked(ndist, br, lr::LinkRules{B}) where {T,E,L,NL,B<:BoxIteratorSearch{T,E,L,NL}}
+function isnotlinked(ndist, br, lr::LinkRule{B}) where {T,E,L,NL,B<:BoxIteratorSearch{T,E,L,NL}}
     nm = lr.alg.open2old
     ndist0 = nm * ndist
     linked = all((
@@ -193,14 +193,14 @@ function buildSlink(lat::Lattice{T,E}, lr, pre, (dist, ndist, isinter), (s1, s2)
     return slink
 end
 
-linkprecompute(linkrules::LinkRules{<:SimpleSearch}, lat::Lattice) = 
+linkprecompute(linkrules::LinkRule{<:SimpleSearch}, lat::Lattice) = 
     lat.sublats
     
-linkprecompute(linkrules::LinkRules{TreeSearch}, lat::Lattice) = 
+linkprecompute(linkrules::LinkRule{TreeSearch}, lat::Lattice) = 
     ([KDTree(sl.sites, leafsize = linkrules.alg.leafsize) for sl in lat.sublats],
      lat.sublats)
 
-function linkprecompute(lr::LinkRules{<:BoxIteratorSearch}, lat::Lattice)
+function linkprecompute(lr::LinkRule{<:BoxIteratorSearch}, lat::Lattice)
     # Build an OffsetArray for each sublat s : maps[s] = oa[cells..., iold] = inew, where cells are oldsystem cells, not fill cells
     nslist = lr.alg.nslist
     iterated2old = lr.alg.iterated2old
@@ -235,7 +235,7 @@ function findnonzeroinrow(ss, n)
     return 0
 end
 
-function add_neighbors!(slink, lr::LinkRules{SimpleSearch{F}}, sublats, (dist, ndist, isinter), (s1, s2), (i, r1)) where {F}
+function add_neighbors!(slink, lr::LinkRule{SimpleSearch{F}}, sublats, (dist, ndist, isinter), (s1, s2), (i, r1)) where {F}
     for (j, r2) in enumerate(sublats[s2].sites)
         r2 += dist
         if lr.alg.isinrange(r2 - r1) && isvalidlink(isinter, (s1, s2), (i, j))
@@ -246,7 +246,7 @@ function add_neighbors!(slink, lr::LinkRules{SimpleSearch{F}}, sublats, (dist, n
     return nothing
 end
 
-function add_neighbors!(slink, lr::LinkRules{TreeSearch}, (trees, sublats), (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slink, lr::LinkRule{TreeSearch}, (trees, sublats), (dist, ndist, isinter), (s1, s2), (i, r1))
     range = lr.alg.range + extended_eps()
     neighs = inrange(trees[s2], r1 - dist, range)
     sites2 = sublats[s2].sites
@@ -267,7 +267,7 @@ end
 # Notation: ndold_intracell = ndistold of old unitcell containing site i
 # Notation: ndold_intracell_shifted = same as ndold_intracell but shifted by -ndist of the new neighboring cell
 # Notation: dist = distold of old unit cell containing new site i in the new unit cell
-function add_neighbors!(slink, lr::LinkRules{<:BoxIteratorSearch}, maps, (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slink, lr::LinkRule{<:BoxIteratorSearch}, maps, (dist, ndist, isinter), (s1, s2), (i, r1))
     (celliter, iold) = lr.alg.iter.registers[s1].cellinds[i]
     ndold_intercell = lr.alg.open2old * ndist
     ndold_intracell = lr.alg.iterated2old * SVector(celliter)
@@ -300,71 +300,4 @@ function _add_neighbors_ilink!(slink, ilink_old, maps2, isinter, (s1, s2), (i, i
         end
     end
     return nothing
-end
-
-
-#######################################################################
-# Combine lattices
-#######################################################################
-
-function combine(lats::Lattice...) 
-    combine!(deepcopy.(lats)...)
-end
-function combine!(lats::Lattice...)
-    bravais = check_compatible_bravais(map(lat -> lat.bravais, lats))
-    combined_sublats = vcat(map(lat -> lat.sublats, lats)...)
-    combined_links = combine_links(lats, combined_sublats)
-    return Lattice(combined_sublats, bravais, combined_links)
-end
-
-function check_compatible_bravais(bs::NTuple{N,B}) where {N,B<:Bravais}
-    allsame(bs) || throw(DimensionMismatch("Cannot combine lattices with different Bravais vectors, $(vectorsastuples.(bs))"))
-    return(first(bs))
-end
-function ==(b1::B, b2::B) where {T,E,L,B<:Bravais{T,E,L}}
-    vs1 = MVector{L,SVector{E,T}}(ntuple(i -> b1.matrix[:,i], Val(L))); sort!(vs1)
-    vs2 = MVector{L,SVector{E,T}}(ntuple(i -> b2.matrix[:,i], Val(L))); sort!(vs2)
-    # Caution: potential problem for equal bravais modulo signs
-    all(vs->isapprox(vs[1],vs[2]), zip(vs1,vs2))
-end
-
-function combine_links(lats::NTuple{N,LL}, combined_sublats) where {N,T,E,L,LL<:Lattice{T,E,L}} 
-    intralink = combine_ilinks(map(l -> l.links.intralink, lats), combined_sublats)
-    interlinks = Ilink{T,E,L}[]
-    ndists = SVector{L,Int}[]
-    for lat in lats, is in lat.links.interlinks
-        if !(is.ndist in ndists)
-            push!(ndists, is.ndist)
-        end
-    end
-    ilinks = Ilink{T,E,L}[]
-    for ndist in ndists
-        resize!(ilinks, 0)
-        for lat in lats
-            push!(ilinks, getilink(lat, ndist))
-        end
-        push!(interlinks, combine_ilinks(ilinks, combined_sublats))
-    end
-    return Links(intralink, interlinks)
-end
-
-function combine_ilinks(is, combined_sublats)
-    allsame(i.ndist for i in is) || throw(DimensionMismatch("Cannot combine Ilinks with different ndist"))
-    ilink = emptyilink(first(is).ndist, combined_sublats)
-    slinkmatrices = map(i -> i.slinks, is)
-    filldiag!(ilink.slinks, slinkmatrices)
-    return ilink
-end
-
-function getilink(lat::Lattice, ndist)
-    if iszero(ndist) 
-        return lat.links.intralink
-    else
-        index = findfirst(i -> i.ndist == ndist, lat.links.interlinks)
-        if index === nothing
-            return emptyilink(ndist, lat.sublats)
-        else 
-            return lat.links.interlinks[index]
-        end
-    end
 end

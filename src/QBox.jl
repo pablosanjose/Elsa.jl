@@ -6,14 +6,14 @@ using Requires
 import Base: convert, iterate, IteratorSize, IteratorEltype, eltype, ==
 import SparseArrays: sparse!
 
-export Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
-       FillRegion, LinkRules, Dim, Precision,
+export LatticeDirective, Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
+       FillRegion, LinkRule, Dim, Precision,
        transform, transform!, lattice!, combine
 export TreeSearch, SimpleSearch
 export System, Model, Onsite, Hopping, hamiltonian, MeshBrillouin
 export @SMatrix, @SVector, SMatrix, SVector
 
-abstract type LatticeOption end
+abstract type LatticeDirective end
 abstract type LatticePresets end
 abstract type ModelTerm end
 
