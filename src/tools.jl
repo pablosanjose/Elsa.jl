@@ -90,3 +90,22 @@ function filldiag!(matrix::AbstractMatrix, matrices)
     end
     return matrix
 end
+
+function fastrank(s::SMatrix{N,M,T}) where {N,M,T}
+    TF = promote_type(Float64,T)
+    tol = M * N * eps(TF(maximum(s))) # Heuristics    
+    rank = 0
+    columns = MVector(ntuple(i->s[:,i], Val(M)))
+    for i in 1:M
+        col = columns[i]
+        for j in 1:i-1
+            pcol = columns[j]
+            norm2 = sum(abs2, pcol)
+            isapprox(norm2, 0.0) && continue
+            proj = (dot(col, pcol) / norm2)
+            columns[i] -= proj * pcol
+        end
+        norm(columns[i], 1) > tol && (rank += 1)
+    end
+    return rank
+end

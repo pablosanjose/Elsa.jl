@@ -63,8 +63,8 @@ Bravais{Float64,2,2,4}([1.0 2.0; 3.0 4.0])
 struct Bravais{T,E,L,EL} <: LatticeDirective
     matrix::SMatrix{E,L,T,EL}
     (::Type{Bravais})(matrix::SMatrix{E,L,T,EL}) where {T,E,L,EL} =
-        L == 0 || rank(matrix) == L ? new{T,E,L,EL}(matrix) : 
-            throw(DomainError("Bravais vectors $(vectorsastuples(lat)) are not linearly independent"))
+        E >= L && (L == 0 || fastrank(matrix) == L) ? new{T,E,L,EL}(matrix) : 
+            throw(DomainError("Bravais vectors $(vectorsastuples(matrix)) are not linearly independent"))
 end
 
 Bravais(vs...) = Bravais(toSMatrix(vs...))
@@ -441,8 +441,9 @@ seedtype(::Type{Lattice{T,E,L,EL}}, ::Precision{T2}) where {T,E,L,EL,T2} = Latti
 seedtype(::Type{S}, ::FillRegion, ts...) where {S<:Lattice} = S
 seedtype(::Type{L}, opt) where {L<:Lattice} = L
 
-vectorsastuples(lat::Lattice) = vectorsastuples(lat.bravais)
-vectorsastuples(br::Bravais{T,E,L}) where {T,E,L} = ntuple(l -> round.((br.matrix[:,l]... ,), digits = 6), Val(L))
+vectorsastuples(lat::Lattice) = vectorsastuples(lat.bravais.matrix)
+vectorsastuples(br::Bravais) =  vectorsastuples(br.matrix)
+vectorsastuples(mat::SMatrix{E,L}) where {E,L} = ntuple(l -> round.((mat[:,l]... ,), digits = 6), Val(L))
 nsites(lat::Lattice) = isempty(lat.sublats) ? 0 : sum(nsites(sublat) for sublat in lat.sublats)
 nsiteslist(lat::Lattice) = [nsites(sublat) for sublat in lat.sublats]
 nsublats(lat::Lattice)::Int = length(lat.sublats)
