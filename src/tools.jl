@@ -91,11 +91,14 @@ function filldiag!(matrix::AbstractMatrix, matrices)
     return matrix
 end
 
-function fastrank(s::SMatrix{N,M,T}) where {N,M,T}
-    TF = promote_type(Float64,T)
-    tol = M * N * eps(TF(maximum(s))) # Heuristics    
+fastrank(s::SMatrix{N,M,<:Integer}) where {N,M,T} = fastrank(convert(SMatrix{N,M,Float64}, s))
+function fastrank(s::SMatrix{N,M,T}) where {N,M,T<:AbstractFloat}
     rank = 0
+    M == 0 && return rank
+    
+    tol = M * N * eps(maximum(s)) # Heuristic 
     columns = MVector(ntuple(i->s[:,i], Val(M)))
+    
     for i in 1:M
         col = columns[i]
         for j in 1:i-1

@@ -63,7 +63,7 @@ Bravais{Float64,2,2,4}([1.0 2.0; 3.0 4.0])
 struct Bravais{T,E,L,EL} <: LatticeDirective
     matrix::SMatrix{E,L,T,EL}
     (::Type{Bravais})(matrix::SMatrix{E,L,T,EL}) where {T,E,L,EL} =
-        E >= L && (L == 0 || fastrank(matrix) == L) ? new{T,E,L,EL}(matrix) : 
+        arelinearindep(matrix) ? new{T,E,L,EL}(matrix) : 
             throw(DomainError("Bravais vectors $(vectorsastuples(matrix)) are not linearly independent"))
 end
 
@@ -78,6 +78,8 @@ function transform(b::Bravais{T,E,L,EL}, f::F) where {T,E,L,EL,F<:Function}
     matrix = hcat(svecs...)
     return Bravais(matrix)
 end
+
+arelinearindep(matrix::SMatrix{E,L}) where {E,L} = E >= L && (L == 0 || fastrank(matrix) == L)
 
 #######################################################################
 # Sublattice links (Slink) : links between two given sublattices
@@ -417,7 +419,7 @@ julia> Tuple(keys(QBox.latticepresets))
 (:bcc, :graphene, :honeycomb, :cubic, :linear, :fcc, :honeycomb_bilayer, :square, :triangular)
 ```
 """
-mutable struct Lattice{T, E, L, EL}
+mutable struct Lattice{T,E,L,EL}
     sublats::Vector{Sublat{T,E}}
     bravais::Bravais{T,E,L,EL}
     links::Links{T,E,L}
@@ -711,3 +713,26 @@ function getilink(lat::Lattice, ndist)
         end
     end
 end
+
+#######################################################################
+# Wrap lattice
+#######################################################################
+
+function wrap(lat::Lattice{T,E,L}; exceptaxes::NTuple{N,Int} = ()) where {T,E,L,N}
+    newsublats = deepcopy(lat.sublats)
+    newbravais = Bravais(projectaxes(bravaismatrix(lat), exceptaxes))
+    newlinks = wrap(lat.links, exceptaxes)
+    return Lattice(newsublats, newbravais, newlinks)
+end
+
+function wrap(links::Links{T,E,L}, exceptaxes::NTuple{N,Int}) where {T,E,L,N}
+    intralink = Ilink(projectaxes(links.intralink.ndist, exceptaxes), links.intralink.slinks)
+    interlinks = [Ilink(projectaxes(ilink.ndist, exceptaxes), ilink.slinks) for ilink in links.interlinks]
+    return Links(intralink, interlinks)
+end
+
+projectaxes(s::SMatrix{E,L,T}, ::Tuple{}) where {E,L,T} = SMatrix{E,0,T}()
+projectaxes(s::SVector{L,T}, ::Tuple{}) where {L,T} = SVector{0,T}()
+projectaxes(s::SMatrix, axes::NTuple{N,Int}) where  {N} = 
+    hcat(ntuple(i->s[:,axes[i]], Val(N))...)
+projectaxes(v::SVector, axes::NTuple{N,Int}) where {N} = v[SVector(axes)]

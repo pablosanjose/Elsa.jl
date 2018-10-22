@@ -8,7 +8,7 @@ import SparseArrays: sparse!
 
 export LatticeDirective, Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
        FillRegion, LinkRule, Dim, Precision,
-       transform, transform!, lattice!, combine
+       transform, transform!, lattice!, combine, wrap
 export TreeSearch, SimpleSearch
 export System, Model, Onsite, Hopping, hamiltonian, MeshBrillouin
 export @SMatrix, @SVector, SMatrix, SVector
