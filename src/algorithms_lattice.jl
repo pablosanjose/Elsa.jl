@@ -22,8 +22,8 @@ function expand_unitcell(lat::Lattice{T,E,L,EL}, supercell::Supercell) where {T,
     open2old = smat
     iterated2old = one(SMatrix{L,L,Int})
     return isunlinked(lat) ? newlattice : 
-       link!(newlattice, LinkRule(lat.links, iter, open2old, iterated2old, lat.bravais, nsiteslist(lat);
-                                   mincells = cellrange(lat.links)))
+        link!(newlattice, LinkRule(BoxIteratorSearch(lat.links, iter, open2old, 
+            iterated2old, lat.bravais, nsiteslist(lat)); mincells = cellrange(lat.links)))
 end
 
 ################################## _box_fill() ################################
@@ -48,8 +48,8 @@ function fill_region(lat::Lattice{T,E,L}, fr::FillRegion{E,F,N}) where {T,E,L,F,
     open2old = nmatrix(openaxesbool, Val(N))
     iterated2old = nmatrix(closeaxesbool, Val(filldims))
     return isunlinked(lat) ? newlattice : 
-        link!(newlattice, LinkRule(lat.links, iter, open2old, iterated2old, 
-                                    lat.bravais, nsiteslist(lat); mincells = cellrange(lat.links)))
+        link!(newlattice, LinkRule(BoxIteratorSearch(lat.links, iter, open2old, iterated2old, 
+                                    lat.bravais, nsiteslist(lat)); mincells = cellrange(lat.links)))
 end
 
 function _box_fill(::Val{N}, lat::Lattice{T,E,L}, isinregion::F, fillaxesbool, seed0, maxsteps, usecellaspos) where {N,T,E,L,F}
@@ -200,6 +200,9 @@ linkprecompute(linkrules::LinkRule{TreeSearch}, lat::Lattice) =
     ([KDTree(sl.sites, leafsize = linkrules.alg.leafsize) for sl in lat.sublats],
      lat.sublats)
 
+linkprecompute(linkrules::LinkRule{<:WrapSearch}, lat::Lattice) = 
+    nothing
+
 function linkprecompute(lr::LinkRule{<:BoxIteratorSearch}, lat::Lattice)
     # Build an OffsetArray for each sublat s : maps[s] = oa[cells..., iold] = inew, where cells are oldsystem cells, not fill cells
     nslist = lr.alg.nslist
@@ -235,7 +238,7 @@ function findnonzeroinrow(ss, n)
     return 0
 end
 
-function add_neighbors!(slink, lr::LinkRule{SimpleSearch{F}}, sublats, (dist, ndist, isinter), (s1, s2), (i, r1)) where {F}
+function add_neighbors!(slink, lr::LinkRule{<:SimpleSearch}, sublats, (dist, ndist, isinter), (s1, s2), (i, r1))
     for (j, r2) in enumerate(sublats[s2].sites)
         r2 += dist
         if lr.alg.isinrange(r2 - r1) && isvalidlink(isinter, (s1, s2), (i, j))
@@ -255,6 +258,32 @@ function add_neighbors!(slink, lr::LinkRule{TreeSearch}, (trees, sublats), (dist
             r2 = sites2[j] + dist
             push!(slink.targets, j)
             push!(slink.rdr, _rdr(r1, r2))
+        end
+    end
+    return nothing
+end
+
+function add_neighbors!(slink, lr::LinkRule{<:WrapSearch}, ::Nothing, (dist, ndist, isinter), (s1, s2), (i, r1))
+    oldbravais = bravaismatrix(lr.alg.bravais)
+    unwrappedaxes = lr.alg.unwrappedaxes
+    add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), lr.alg.links.intralink, oldbravais, unwrappedaxes; checkduplicates = false)
+    for ilink in lr.alg.links.interlinks
+        add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes; checkduplicates = true)
+    end
+    return nothing
+end
+
+function add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes; checkduplicates::Bool = true)
+    oldslink = ilink.slinks[s2, s1]
+    if !isempty(oldslink) && keepelements(ilink.ndist, unwrappedaxes) == ndist
+        olddist = oldbravais * zeroout(ilink.ndist, unwrappedaxes)
+        for (j, rdr_old) in neighbors_rdr(oldslink, i)
+            if isvalidlink(isinter, (s1, s2), (i, j))
+                # if !checkduplicates || !(j in neighbors_rdr(slink,i))
+                    push!(slink.targets, j)
+                    push!(slink.rdr, (rdr_old[1] - olddist / 2, rdr_old[2] - olddist))
+                # end
+            end
         end
     end
     return nothing

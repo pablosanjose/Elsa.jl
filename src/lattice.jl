@@ -81,6 +81,8 @@ end
 
 arelinearindep(matrix::SMatrix{E,L}) where {E,L} = E >= L && (L == 0 || fastrank(matrix) == L)
 
+keepaxes(br::Bravais, unwrappedaxes) = Bravais(keepcolumns(bravaismatrix(br), unwrappedaxes))
+
 #######################################################################
 # Sublattice links (Slink) : links between two given sublattices
 #######################################################################
@@ -117,7 +119,10 @@ Base.isempty(slink::Slink) = isempty(slink.targets)
 nlinks(slink::Slink) = length(slink.targets)
 
 # @inline nsites(s::Slink) = isempty(slink) ? error("Unable to extract number of sites from Slink") : length(s.srcpointers) - 1
-neighbors_rdr(s::Slink, i) = ((s.targets[j], s.rdr[j]) for j in (s.srcpointers[i]):(s.srcpointers[i+1]-1))
+function neighbors_rdr(s::Slink, i) 
+        range = isempty(s) ? (1:0) : ((s.srcpointers[i]):(s.srcpointers[i+1]-1))
+        return ((s.targets[j], s.rdr[j]) for j in range)
+end
 neighbors_rdr(s::Slink) = ((s.targets[j], s.rdr[j]) for i in 1:(length(s.srcpointers)-1) for j in (s.srcpointers[i]):(s.srcpointers[i+1]-1))
 sources(s::Slink) = 1:(length(s.srcpointers)-1)
 
@@ -329,6 +334,12 @@ struct TreeSearch <: SearchAlgorithm
 end
 TreeSearch(range; leafsize = 10) = TreeSearch(abs(range), leafsize)
 
+struct WrapSearch{T,E,L,EL,N} <: SearchAlgorithm
+    links::Links{T,E,L}
+    bravais::Bravais{T,E,L,EL}
+    unwrappedaxes::NTuple{N,Int}
+end
+
 struct AutomaticRangeSearch <: SearchAlgorithm
     range::Float64
 end
@@ -377,9 +388,6 @@ LinkRule(; range = 10.0, sublats = missing, kw...) =
 LinkRule(alg::S; kw...) where S<:SearchAlgorithm = LinkRule(alg, missing; kw...)
 LinkRule(alg::S, sublats; mincells = 0, maxsteps = 100_000_000) where S<:SearchAlgorithm =
     LinkRule(alg, sublats, abs(mincells), maxsteps)
-
-LinkRule(l::Links, i::BoxIterator{N}, open2old, iterated2old, bravais, nslist; kw...) where {N} = 
-    LinkRule(BoxIteratorSearch(l, i, open2old, iterated2old, bravais, nslist); kw...)
 
 #######################################################################
 # Lattice : group of sublattices + Bravais vectors + links
@@ -720,19 +728,8 @@ end
 
 function wrap(lat::Lattice{T,E,L}; exceptaxes::NTuple{N,Int} = ()) where {T,E,L,N}
     newsublats = deepcopy(lat.sublats)
-    newbravais = Bravais(projectaxes(bravaismatrix(lat), exceptaxes))
-    newlinks = wrap(lat.links, exceptaxes)
-    return Lattice(newsublats, newbravais, newlinks)
+    newbravais = keepaxes(lat.bravais, exceptaxes)
+    newlat = lattice!(Lattice(newsublats, newbravais), 
+                      LinkRule(WrapSearch(lat.links, lat.bravais, exceptaxes)))
+    return newlat
 end
-
-function wrap(links::Links{T,E,L}, exceptaxes::NTuple{N,Int}) where {T,E,L,N}
-    intralink = Ilink(projectaxes(links.intralink.ndist, exceptaxes), links.intralink.slinks)
-    interlinks = [Ilink(projectaxes(ilink.ndist, exceptaxes), ilink.slinks) for ilink in links.interlinks]
-    return Links(intralink, interlinks)
-end
-
-projectaxes(s::SMatrix{E,L,T}, ::Tuple{}) where {E,L,T} = SMatrix{E,0,T}()
-projectaxes(s::SVector{L,T}, ::Tuple{}) where {L,T} = SVector{0,T}()
-projectaxes(s::SMatrix, axes::NTuple{N,Int}) where  {N} = 
-    hcat(ntuple(i->s[:,axes[i]], Val(N))...)
-projectaxes(v::SVector, axes::NTuple{N,Int}) where {N} = v[SVector(axes)]

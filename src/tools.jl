@@ -112,3 +112,17 @@ function fastrank(s::SMatrix{N,M,T}) where {N,M,T<:AbstractFloat}
     end
     return rank
 end
+
+keepcolumns(s::SMatrix{E,L,T}, ::Tuple{}) where {E,L,T} = SMatrix{E,0,T}()
+keepcolumns(s::SMatrix, cols::NTuple{N,Int}) where  {N} = 
+    hcat(ntuple(i->s[:,cols[i]], Val(N))...)
+keepelements(s::SVector{L,T}, ::Tuple{}) where {L,T} = SVector{0,T}()
+keepelements(v::SVector, cols::NTuple{N,Int}) where {N} = v[SVector(cols)]
+
+zeroout(v::SVector{N,T}, ::Tuple{}) where {N,T} = v
+zeroout(v::SVector{S,T}, elements::NTuple{N,Int}) where {S,N,T} = 
+    SVector{S,T}(ntuple(i -> i in elements ? zero(T) : v[i], Val(S)))
+
+# zerooutexcept(v::SVector{N,T}, ::Tuple{}) where {N,T} = zero(SVector{N,T}) 
+# zerooutexcept(v::SVector{S,T}, elements::NTuple{N,Int}) where {S,N,T} = 
+#     SVector{S,T}(ntuple(i -> i in elements ? v[i] : zero(T), Val(S)))
