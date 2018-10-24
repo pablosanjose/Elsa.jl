@@ -138,7 +138,6 @@ function appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), slink, hop, 
         coloffset = (src - 1) * N
         h = hop(rdr, Val(M), Val(N))
         for inds in CartesianIndices(h)
-            # @show (rowoffsetblock + rowoffset + inds[1], coloffsetblock + coloffset + inds[2], hop)
             append!(I, rowoffsetblock + rowoffset + inds[1])
             append!(J, coloffsetblock + coloffset + inds[2])
         end

@@ -242,8 +242,7 @@ function add_neighbors!(slink, lr::LinkRule{<:SimpleSearch}, sublats, (dist, ndi
     for (j, r2) in enumerate(sublats[s2].sites)
         r2 += dist
         if lr.alg.isinrange(r2 - r1) && isvalidlink(isinter, (s1, s2), (i, j))
-            push!(slink.targets, j)
-            push!(slink.rdr, _rdr(r1, r2))
+            unsafe_pushlink!(slink, i, j, _rdr(r1, r2))
         end
     end
     return nothing
@@ -256,8 +255,7 @@ function add_neighbors!(slink, lr::LinkRule{TreeSearch}, (trees, sublats), (dist
     for j in neighs
         if isvalidlink(isinter, (s1, s2), (i, j))
             r2 = sites2[j] + dist
-            push!(slink.targets, j)
-            push!(slink.rdr, _rdr(r1, r2))
+            unsafe_pushlink!(slink, i, j, _rdr(r1, r2))
         end
     end
     return nothing
@@ -266,23 +264,20 @@ end
 function add_neighbors!(slink, lr::LinkRule{<:WrapSearch}, ::Nothing, (dist, ndist, isinter), (s1, s2), (i, r1))
     oldbravais = bravaismatrix(lr.alg.bravais)
     unwrappedaxes = lr.alg.unwrappedaxes
-    add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), lr.alg.links.intralink, oldbravais, unwrappedaxes; checkduplicates = false)
+    add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), lr.alg.links.intralink, oldbravais, unwrappedaxes, true)
     for ilink in lr.alg.links.interlinks
-        add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes; checkduplicates = true)
+        add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, false)
     end
     return nothing
 end
 
-function add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes; checkduplicates::Bool = true)
+function add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, skipdupcheck)
     oldslink = ilink.slinks[s2, s1]
     if !isempty(oldslink) && keepelements(ilink.ndist, unwrappedaxes) == ndist
         olddist = oldbravais * zeroout(ilink.ndist, unwrappedaxes)
         for (j, rdr_old) in neighbors_rdr(oldslink, i)
             if isvalidlink(isinter, (s1, s2), (i, j))
-                # if !checkduplicates || !(j in neighbors_rdr(slink,i))
-                    push!(slink.targets, j)
-                    push!(slink.rdr, (rdr_old[1] - olddist / 2, rdr_old[2] - olddist))
-                # end
+                unsafe_pushlink!(slink, i, j, (rdr_old[1] - olddist / 2, rdr_old[2] - olddist), skipdupcheck)
             end
         end
     end
@@ -323,8 +318,7 @@ function _add_neighbors_ilink!(slink, ilink_old, maps2, isinter, (s1, s2), (i, i
         if isvalid
             j = maps2[Tuple(ndist_old)..., jold]
             if j != 0 && isvalidlink(isinter, (s1, s2), (i, j))
-                push!(slink.targets, j)
-                push!(slink.rdr, (rdr_old[1] + dist, rdr_old[2]))
+                unsafe_pushlink!(slink, i, j, (rdr_old[1] + dist, rdr_old[2]))
             end
         end
     end

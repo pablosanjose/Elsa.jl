@@ -118,6 +118,14 @@ Base.zero(::Type{Slink{T,E}}) where {T,E} = Slink{T,E}()
 Base.isempty(slink::Slink) = isempty(slink.targets)
 nlinks(slink::Slink) = length(slink.targets)
 
+function unsafe_pushlink!(slink::Slink, i, j, rdr, skipdupcheck = true)
+    if skipdupcheck || !isintail(j, slink.targets, slink.srcpointers[i])
+        push!(slink.targets, j)
+        push!(slink.rdr, rdr)
+    end
+    return nothing
+end
+
 # @inline nsites(s::Slink) = isempty(slink) ? error("Unable to extract number of sites from Slink") : length(s.srcpointers) - 1
 function neighbors_rdr(s::Slink, i) 
         range = isempty(s) ? (1:0) : ((s.srcpointers[i]):(s.srcpointers[i+1]-1))
