@@ -126,13 +126,13 @@ function unsafe_pushlink!(slink::Slink, i, j, rdr, skipdupcheck = true)
     return nothing
 end
 
-# @inline nsites(s::Slink) = isempty(slink) ? error("Unable to extract number of sites from Slink") : length(s.srcpointers) - 1
-function neighbors_rdr(s::Slink, i) 
-        range = isempty(s) ? (1:0) : ((s.srcpointers[i]):(s.srcpointers[i+1]-1))
-        return ((s.targets[j], s.rdr[j]) for j in range)
-end
-neighbors_rdr(s::Slink) = ((s.targets[j], s.rdr[j]) for i in 1:(length(s.srcpointers)-1) for j in (s.srcpointers[i]):(s.srcpointers[i+1]-1))
-sources(s::Slink) = 1:(length(s.srcpointers)-1)
+nsources(s::Slink) = length(s.srcpointers)-1
+sources(s::Slink) = 1:nsources(s)
+targetrange(s::Slink, src) = isempty(s) ? (1:0) : ((s.srcpointers[src]):(s.srcpointers[src+1]-1))
+
+neighbors(s::Slink, src) = (s.targets[j] for j in targetrange(s, src))
+neighbors_rdr(s::Slink, src) = ((s.targets[j], s.rdr[j]) for j in targetrange(s, src))
+neighbors_rdr(s::Slink) = ((s.targets[j], s.rdr[j]) for src in sources(s) for j in targetrange(s, src))
 
 @inline _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
