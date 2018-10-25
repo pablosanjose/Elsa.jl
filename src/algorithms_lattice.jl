@@ -285,12 +285,12 @@ function add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), ilink, oldbrava
 end
 
 # Notation: celliter = ndist of the filling BoxIterator for a given site i0
-# Notation: i0 = index of that site in original lattice (in sublat s1)
-# Notation: ndist = ndist of the new unit under consideration (different from the equivalent ndistold)
-# Notation: ndold_intercell = that same ndist translated to an ndist in the original lattice, i.e. ndistold
-# Notation: ndold_intracell = ndistold of old unitcell containing site i
-# Notation: ndold_intracell_shifted = same as ndold_intracell but shifted by -ndist of the new neighboring cell
-# Notation: dist = distold of old unit cell containing new site i in the new unit cell
+#           i0 = index of that site in original lattice (in sublat s1)
+#           ndist = ndist of the new unit under consideration (different from the equivalent ndistold)
+#           ndold_intercell = that same ndist translated to an ndist in the original lattice, i.e. ndistold
+#           ndold_intracell = ndistold of old unitcell containing site i
+#           ndold_intracell_shifted = same as ndold_intracell but shifted by -ndist of the new neighboring cell
+#           dist = distold of old unit cell containing new site i in the new unit cell
 function add_neighbors!(slink, lr::LinkRule{<:BoxIteratorSearch}, maps, (dist, ndist, isinter), (s1, s2), (i, r1))
     (celliter, iold) = lr.alg.iter.registers[s1].cellinds[i]
     ndold_intercell = lr.alg.open2old * ndist
