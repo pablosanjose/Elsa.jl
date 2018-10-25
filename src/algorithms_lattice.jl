@@ -102,11 +102,6 @@ cellrange(links::Links) = isempty(links.interlinks) ? 0 : maximum(max(abs.(ilink
 @inline isvalidlink(isinter::Bool, (s1, s2), validsublats) = 
     isvalidlink(isinter, (s1, s2)) && ((s1, s2) in validsublats || (s2, s1) in validsublats)
 
-# function clearlinks!(lat::Lattice{T,E,L,EL}) where {T,E,L,EL}
-#     lat.links = emptylinks(lat)
-#     return lat
-# end
-
 function link!(lat::Lattice, lr::LinkRule{AutomaticRangeSearch})
     if nsites(lat) < 200 # Heuristic cutoff
         newlr = convert(LinkRule{SimpleSearch}, lr)
@@ -165,7 +160,6 @@ function buildIlink(lat::Lattice{T,E}, lr, pre, (dist, ndist)) where {T,E}
 
     emptyslink = zero(Slink{T,E})
     slinks = fill(emptyslink, nsl, nsl)
-    # slinks = Union{Slink{T,E},Nothing}[nothing for _ in 1:nsl, _ in 1:nsl]
    
     validsublats = matchingsublats(lat, lr)
     for s1 in 1:nsl, s2 in 1:nsl
@@ -184,12 +178,6 @@ function buildSlink(lat::Lattice{T,E}, lr, pre, (dist, ndist, isinter), (s1, s2)
         counter = length(slink.targets) + 1
     end
     slink.srcpointers[end] = counter
-
-    # if isempty(slink)
-    #     return nothing
-    # else
-    #     return slink
-    # end
     return slink
 end
 

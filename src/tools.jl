@@ -129,7 +129,3 @@ function isintail(element, container, start)
     end
     return false
 end
-
-# zerooutexcept(v::SVector{N,T}, ::Tuple{}) where {N,T} = zero(SVector{N,T}) 
-# zerooutexcept(v::SVector{S,T}, elements::NTuple{N,Int}) where {S,N,T} = 
-#     SVector{S,T}(ntuple(i -> i in elements ? v[i] : zero(T), Val(S)))
