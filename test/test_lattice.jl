@@ -2,7 +2,7 @@ module LatticeTest
 
 using Test
 using QBox 
-using QBox: nsites, nuniquelinks
+using QBox: nsites, nlinks
 
 @test Bravais() isa Bravais{Float64,0,0,0}
 @test Bravais((1,2),(3,3)) isa Bravais{Int64,2,2,4}
@@ -48,10 +48,10 @@ using QBox: nsites, nuniquelinks
 @test QBox.nsites(Lattice(:square, Supercell(31))) == 961
 @test QBox.nsites(Lattice(:bcc, FillRegion(:spheroid, (10,4,4)))) == 1365
 
-@test QBox.nuniquelinks(Lattice(:honeycomb, LinkRule(1/√3), FillRegion(:square, 300))) == 311273
-@test QBox.nuniquelinks(Lattice(:square, Supercell(31), LinkRule(2))) == 6074
-@test QBox.nuniquelinks(Lattice(:square, LinkRule(2), Supercell(31))) == 6074
-@test QBox.nuniquelinks(Lattice(:bcc, LinkRule(1), FillRegion(:spheroid, (10,4,4)))) == 8216
+@test QBox.nlinks(Lattice(:honeycomb, LinkRule(1/√3), FillRegion(:square, 300))) == 311273
+@test QBox.nlinks(Lattice(:square, Supercell(31), LinkRule(2))) == 6074
+@test QBox.nlinks(Lattice(:square, LinkRule(2), Supercell(31))) == 6074
+@test QBox.nlinks(Lattice(:bcc, LinkRule(1), FillRegion(:spheroid, (10,4,4)))) == 8216
 
 @test LinkRule(1.2, 1, (2,3)) isa LinkRule{QBox.AutomaticRangeSearch,Tuple{Tuple{Int64,Int64},Tuple{Int64,Int64}}}
 @test LinkRule(1, sublats = (1, (2, 3))).sublats == ((1, 1), (2, 3)) 
@@ -60,7 +60,7 @@ using QBox: nsites, nuniquelinks
     lat1 = Lattice(:honeycomb, LinkRule(1/sqrt(3)), FillRegion(:circle, 7))
     lat2 = Lattice(:square, LinkRule(2), FillRegion(:circle, 6))
     lat3 = combine(lat1, lat2)
-    (nuniquelinks(lat3) == nuniquelinks(lat1) + nuniquelinks(lat2)) &&
+    (nlinks(lat3) == nlinks(lat1) + nlinks(lat2)) &&
     (nsites(lat3) == nsites(lat1) + nsites(lat2))
 end
 
@@ -70,5 +70,9 @@ end
     transform!(lat1, r -> 2r)
     isapprox(lat1.sublats[1].sites[1], 2 * lat2.sublats[1].sites[1])
 end
+
+@test QBox.nlinks(wrap(Lattice(:square, LinkRule(√2), Supercell(2)), exceptaxes = (1,))) == 14
+@test QBox.nlinks(wrap(Lattice(:square, LinkRule(√2), Supercell(2)), exceptaxes = (2,))) == 14
+@test QBox.nlinks(wrap(Lattice(:square, LinkRule(√2), Supercell(2)))) == 6
 
 end

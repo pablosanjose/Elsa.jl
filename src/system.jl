@@ -23,7 +23,7 @@ function Base.show(io::IO, sys::System{T,E,L}) where {T,E,L}
     Bravais vectors : $(vectorsastuples(sys.lattice))
     Number of sites : $(nsites(sys.lattice))
     Sublattice names : $((sublatnames(sys.lattice)... ,))
-    Unique Links : $(nuniquelinks(sys.lattice))
+    Unique Links : $(nlinks(sys.lattice))
     Model with sublattice site dimensions $((sys.model.dims...,)) (default $(sys.model.defdim))
     $(ismissing(sys.ham) ? "Hamiltonian Missing" : sys.ham)")
 end
