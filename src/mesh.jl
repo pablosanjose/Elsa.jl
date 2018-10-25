@@ -11,7 +11,7 @@ function MeshBrillouin(lat::Lattice{T,E,L}) where {T,E,L}
     nverts = length(vertices)
     
     model = Model(Hopping(1))
-    adjacency = hamiltonian(lat, model).mat
+    adjacency = hamiltonian(lat, model).matrix
     size(adjacency, 1) == nverts || throw(DimensionMismatch("mesh hamiltonian dimension does not match number of vertices"))
     
     flatgroups = Int[]
