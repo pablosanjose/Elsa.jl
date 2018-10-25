@@ -183,7 +183,7 @@ emptylinks(lat) = emptylinks(lat.sublats, lat.bravais)
 emptylinks(sublats::Vector{Sublat{T,E}}, bravais::Bravais{T,E,L}) where {T,E,L} =
     Links(emptyilink(zero(SVector{L, Int}), sublats), Ilink{T,E,L}[])
 
-nuniquelinks(links::Links) = nlinks(links.intralink) + nlinks(links.interlinks)
+nlinks(links::Links) = nlinks(links.intralink) + nlinks(links.interlinks)
    
 nsublats(links::Links) = nsublats(links.intralink)
 # @inline nsiteslist(links::Links) = [nsites(links.intralink.slinks[s, s]) for s in 1:nsublats(links)]
@@ -466,8 +466,8 @@ nsites(lat::Lattice) = isempty(lat.sublats) ? 0 : sum(nsites(sublat) for sublat 
 nsiteslist(lat::Lattice) = [nsites(sublat) for sublat in lat.sublats]
 nsublats(lat::Lattice)::Int = length(lat.sublats)
 sublatnames(lat::Lattice) = Union{Symbol,Missing}[slat.name for slat in lat.sublats]
-nuniquelinks(lat::Lattice) = nuniquelinks(lat.links)
-isunlinked(lat::Lattice) = nuniquelinks(lat.links) == 0
+nlinks(lat::Lattice) = nlinks(lat.links)
+isunlinked(lat::Lattice) = nlinks(lat.links) == 0
 @inline bravaismatrix(lat::Lattice) = bravaismatrix(lat.bravais)
 @inline bravaismatrix(br::Bravais) = br.matrix
 sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)
@@ -590,7 +590,7 @@ Base.show(io::IO, lat::Lattice{T,E,L}) where {T,E,L}=
     Bravais vectors : $(vectorsastuples(lat))
     Number of sites : $(nsites(lat))
     Sublattice names : $((sublatnames(lat)... ,))
-    Unique Links : $(nuniquelinks(lat))")
+    Unique Links : $(nlinks(lat))")
 
 #######################################################################
 # Transform lattices
