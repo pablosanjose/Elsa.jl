@@ -129,3 +129,14 @@ function isintail(element, container, start)
     end
     return false
 end
+
+# The fallback is unnecessarily slow, but pinv(::SMatrix) is not yet available
+fastpinv(s::SMatrix{N,M}) where {N,M} = SMatrix{M,N}(pinv(Matrix(s)))
+fastpinv(s::SMatrix{N,N}) where {N} = inv(s)
+function fastpinv(s::SMatrix{3,2})
+    is = inv(hcat(s, cross(s[:,1], s[:,2])));
+    SMatrix{2,3}((is[1,1], is[2,1], is[1,2],is[2,2], is[1,3], is[2,3]))
+end
+function fastpinv(s::SMatrix{N,1}) where {N}
+    transpose(s) / sum(abs2,s)
+end

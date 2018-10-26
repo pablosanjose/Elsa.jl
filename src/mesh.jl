@@ -66,5 +66,19 @@ struct MeshBrillouin{T,E}
     lattice::Lattice{T,E,0,0}
 end
 
+function MeshBrillouin(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 5) where {T,E,L}
+    bravais = Bravais(meshbravaismatrix(bravaismatrix(lat), partitions))
+    sublat = Sublat(zero(SVector{E,T}))
+    if uniform
+        supercell = Supercell(partitions...)
+    else
+        supercell = Supercell(partitions...)
+    end
+    # newlat = wrap(Lattice(sublat, bravais, LinkRule(1), supercell))
+    newlat = Lattice(sublat, bravais, LinkRule(sqrt(L)), supercell)
+    # return MeshBrillouin(newlat)
+end
 
-
+meshbravaismatrix(A::SMatrix{E,L}, p::Int) where {E,L} = meshbravaismatrix(A, ntuple(_ -> p, Val(L)))
+meshbravaismatrix(A::SMatrix{E,L}, partitions::NTuple{L,Int}) where {E,L}  = 
+    transpose(fastpinv(A)) # ./ SVector(partitions))
