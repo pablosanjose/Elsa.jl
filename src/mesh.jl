@@ -3,48 +3,30 @@
 #######################################################################
 
 struct Elements{N}
-    indices::Matrix{Vector{SVector{N,Int}}}
+    indices::Vector{SVector{N,Int}}
 end
 
-Elements(lat::Lattice) = Elements(elements(lat))
+Elements(lat::Lattice, sublat = 1) = Elements(elements(lat.links.intralink.slinks[sublat,sublat]))
 
-function Base.show(io::IO, elements::Elements{N}) where {N,T,E,L,EL}
-    ns = nsublats(elements)
-    print(io, "Elements{$N}: $(nelements(elements)) elements ($N-vertex) in $ns sublattice$(ns > 1 ? "s" : "")")
-end
+Base.show(io::IO, elements::Elements{N}) where {N} = 
+    print(io, "Elements{$N}: $(nelements(elements)) elements ($N-vertex)")
 
-nelements(el::Elements) = sum(length(inds) for inds in el.indices)
-nsublats(el::Elements) = size(el.indices, 1)
+nelements(el::Elements) = length(el.indices)
 
-function elements(lattice::Lattice{T,E}) where {T,E}
-    ns = nsublats(lattice)
-    indices = [SVector{E+1,Int}[] for _ in 1:ns, _ in 1:ns]
-    _elements!(indices, lattice)
-    return indices
-end
-
-function _elements!(indices::Matrix{Vector{SVector{N,Int}}}, lattice) where {N} 
-    isunlinked(lattice) && return nothing
-    candidates = SVector{N,Int}[]
+function elements(slink::Slink{T,E}) where {T,E} 
+    indices = SVector{E+1,Int}[]
+    isempty(slink) && return indices
+    candidates = SVector{E+1,Int}[]
     buffer1 = Int[]
     buffer2 = Int[]
-    for s1 in 1:size(indices, 2), s2 in s1:size(indices, 1)
-        ind = indices[s2, s1]
-        _fillelements!(ind, lattice.links.intralink.slinks[s2,s1], candidates, buffer1, buffer2, true)
-    end
-    return nothing
-end
-
-function _fillelements!(ind::Vector{SVector{N,Int}}, slink::Slink{T,E}, candidates, buffer1, buffer2, isintra) where {N,T,E}
     for src in sources(slink)
         resize!(candidates, 0)
-        push!(candidates, modifyat(zero(SVector{N,Int}), 1, src))
+        push!(candidates, modifyat(zero(SVector{E+1,Int}), 1, src))
         imax = 0
-        for pass in 2:N
+        for pass in 2:E+1
             (imin, imax) = (imax + 1, length(candidates))
-            # @show candidates, imin, imax
             for i in imin:imax
-                neighborbuffer = _common_larger_neighbors!(buffer1, buffer2, candidates[i], pass - 1, slink)
+                neighborbuffer = _common_ordered_neighbors!(buffer1, buffer2, candidates[i], pass - 1, slink)
                 for neigh in neighborbuffer
                     push!(candidates, modifyat(candidates[i], pass, neigh))
                 end
@@ -52,13 +34,13 @@ function _fillelements!(ind::Vector{SVector{N,Int}}, slink::Slink{T,E}, candidat
         end
         (imin, imax) = (imax + 1, length(candidates))
         for i in imin:imax
-            push!(ind, candidates[i])
+            push!(indices, candidates[i])
         end
     end
-    return nothing
+    return indices
 end
 
-function _common_larger_neighbors!(buffer1, buffer2, candidate::SVector{N,Int}, upto, slink) where {N}
+function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int}, upto, slink) where {N}
     min_neighbor = maximum(candidate)
     resize!(buffer1, 0)
     resize!(buffer2, 0)
@@ -67,7 +49,7 @@ function _common_larger_neighbors!(buffer1, buffer2, candidate::SVector{N,Int}, 
     end
     for j in 2:upto
         for neigh in neighbors(slink, candidate[j])
-            neigh > min_neighbor && (neigh in buffer1) && push!(buffer2, neigh)
+            (neigh > min_neighbor) && (neigh in buffer1) && push!(buffer2, neigh)
         end
         buffer1, buffer2 = buffer2, buffer1
     end

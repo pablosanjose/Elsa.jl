@@ -154,8 +154,6 @@ function emptyilink(ndist::SVector{L,Int}, sublats::Vector{Sublat{T,E}}) where {
     isinter = !iszero(ndist)
     ns = length(sublats)
     emptyslink = zero(Slink{T,E})
-    # slinks = [ifelse(isvalidlink(isinter, (s1, s2)), Slink{T,E}(nsites(sublats[s1])), emptyslink) 
-    #           for s2 in 1:ns, s1 in 1:ns]
     slinks = fill(emptyslink, ns, ns)
     return Ilink(ndist, slinks)
 end
