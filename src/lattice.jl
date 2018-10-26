@@ -364,8 +364,10 @@ end
     LinkRule(range[, sublats...]; mincells = 0, maxsteps = 100_000_000))
 
 Create a `LinkRule{S,SL} <: LatticeDirective` to compute links between sites in
-sublattices indicated by `sublats::SL` using `algorithm::S <: SearchAlgorithm`. If a 
-linking `range` instead an `algorithm` is given, the algorithm is chosen automatically.
+sublattices indicated by `sublats::SL` using `algorithm::S <: SearchAlgorithm`. 
+`TreeSearch(range::Number)` and `SimpleSearch(isinrange::Function)` are available. 
+If a linking `range` instead an `algorithm` is given, the algorithm is chosen 
+automatically.
 
 Sublattices `sublats...` to be linked are indicated by pairs of integers or sublattice 
 names (of type `:Symbol`). A single integer or name can be used to indicate 
@@ -377,8 +379,14 @@ distance, and `maxsteps` a maximum number of cells to link.
 julia> lr = LinkRule(1, (2, :A), 1, (3,1)); (lr.alg.range, lr.sublats)
 (1.0, ((2, :A), (1, 1), (3, 1)))
 
-julia> LinkRule(TreeSearch(2.0))
-LinkRule{TreeSearch,Missing}(TreeSearch(2.0, 10), missing, 0, 100000000)
+julia> LinkRule(2.0, (1, 2)) |> typeof
+LinkRule{QBox.AutomaticRangeSearch,Tuple{Tuple{Int64,Int64}}}
+
+julia> LinkRule(TreeSearch(2.0)) |> typeof
+LinkRule{TreeSearch,Missing}
+
+julia> LinkRule(SimpleSearch(dr -> norm(dr, 1) < 2.0)) |> typeof
+LinkRule{SimpleSearch{getfield(Main, Symbol("##9#10"))},Missing}
 ```
 """
 struct LinkRule{S<:SearchAlgorithm, SL} <: LatticeDirective

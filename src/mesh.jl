@@ -57,3 +57,14 @@ function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int},
 end
 
 modifyat(s::SVector{N,T}, i, x) where {N,T} = SVector(ntuple(j -> j == i ? x : s[j], Val(N)))
+
+#######################################################################
+# MeshBrillouin
+#######################################################################
+
+struct MeshBrillouin{T,E}
+    lattice::Lattice{T,E,0,0}
+end
+
+
+
