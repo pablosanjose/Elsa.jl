@@ -9,7 +9,7 @@ import SparseArrays: sparse!
 export LatticeDirective, Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
        FillRegion, LinkRule, Dim, Precision
 export TreeSearch, SimpleSearch
-export System, Model, Onsite, Hopping, Elements
+export System, Model, Onsite, Hopping
 export transform, transform!, lattice!, combine, wrap, hamiltonian
 export @SMatrix, @SVector, SMatrix, SVector
 
@@ -24,9 +24,8 @@ include("lattice.jl")
 include("model.jl")
 include("hamiltonian.jl")
 include("system.jl")
-# include("mesh.jl")
+include("mesh.jl")
 include("algorithms_lattice.jl")
-include("elements.jl")
 include("convert.jl")
 
 # include("plot.jl")
