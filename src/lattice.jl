@@ -447,6 +447,7 @@ mutable struct Lattice{T,E,L,EL}
     links::Links{T,E,L}
 end
 Lattice(sublats::Vector{Sublat{T,E}}, bravais::Bravais{T,E,L}) where {T,E,L} = Lattice(sublats, bravais, emptylinks(sublats, bravais))
+# Lattice(bravais::Bravais{T,E,L}) where {T,E,L} = Lattice([Sublat(zero(SVector{E,T}))], bravais)
 
 Lattice(name::Symbol) = Lattice(Preset(name))
 Lattice(name::Symbol, opts...) = lattice!(Lattice(name), opts...)
@@ -618,7 +619,9 @@ Lattice{Float64,3,3} : 3D lattice in 3D space with Float64 sites
 ```
 """
 function transform!(l::L, f::F) where {L<:Lattice, F<:Function}
-    transform!.(l.sublats, f)
+    for s in l.sublats
+        transform!(s, f)
+    end
     isunlinked(l) || transform!(l.links, f)
     l.bravais = transform(l.bravais, f)
     return l

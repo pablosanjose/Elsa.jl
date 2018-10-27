@@ -91,6 +91,9 @@ function filldiag!(matrix::AbstractMatrix, matrices)
     return matrix
 end
 
+diagsmatrix(::Val{L}, partitions::T) where {L,T} = SMatrix{L,L,T}(Diagonal(SVector(ntuple(_->partitions, Val(L)))))
+diagsmatrix(::Val{L}, partitions::NTuple{L,T}) where {L,T} = SMatrix{L,L,T}(Diagonal(SVector(partitions)))
+
 fastrank(s::SMatrix{N,M,<:Integer}) where {N,M,T} = fastrank(convert(SMatrix{N,M,Float64}, s))
 function fastrank(s::SMatrix{N,M,T}) where {N,M,T<:AbstractFloat}
     rank = 0
@@ -129,6 +132,8 @@ function isintail(element, container, start)
     end
     return false
 end
+
+modifyat(s::SVector{N,T}, i, x) where {N,T} = SVector(ntuple(j -> j == i ? x : s[j], Val(N)))
 
 # The fallback is unnecessarily slow, but pinv(::SMatrix) is not yet available
 fastpinv(s::SMatrix{N,M}) where {N,M} = SMatrix{M,N}(pinv(Matrix(s)))

@@ -56,8 +56,6 @@ function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int},
     return buffer1
 end
 
-modifyat(s::SVector{N,T}, i, x) where {N,T} = SVector(ntuple(j -> j == i ? x : s[j], Val(N)))
-
 #######################################################################
 # MeshBrillouin
 #######################################################################
@@ -67,17 +65,56 @@ struct MeshBrillouin{T,E}
 end
 
 function MeshBrillouin(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 5) where {T,E,L}
-    bravais = Bravais(meshbravaismatrix(bravaismatrix(lat), partitions))
-    sublat = Sublat(zero(SVector{E,T}))
+    # bravais = Bravais(meshbravaismatrix(bravaismatrix(lat), partitions))
+    # sublat = Sublat(zero(SVector{E,T}))
+
     if uniform
-        supercell = Supercell(partitions...)
+        meshlat = uniform_mesh(lat, partitions)
     else
-        supercell = Supercell(partitions...)
+        meshlat = minimal_mesh(lat, partitions)
     end
     # newlat = wrap(Lattice(sublat, bravais, LinkRule(1), supercell))
-    newlat = Lattice(sublat, bravais, LinkRule(sqrt(L)), supercell)
-    # return MeshBrillouin(newlat)
+    wrappedmesh = wrap(meshlat)
+
+    return MeshBrillouin(wrappedmesh)
 end
+
+function uniform_mesh(lat::Lattice{T,E,L}, partitions) where {T,E,L}
+    M = diagsmatrix(Val(L), partitions)
+    A = qr(bravaismatrix(lat)).R
+    Gt = qr(transpose(inv(A))).R
+    Gt = Gt / Gt[1,1]
+    iGt = inv(Gt)
+    Tr = hypertriangular(lat)
+    S = round.(Int, inv(Tr) * Gt * M)
+    iS = inv(S)
+    meshlat = Lattice(Sublat(zero(SVector{L,T})), Bravais(iS), Supercell(S))
+    meshlat = transform!(meshlat, r -> Gt * r)
+    range = _minrange(Gt * iS)
+    meshlat = lattice!(meshlat, LinkRule(range))
+    meshlat = transform!(meshlat, r -> inv(Gt) * r)
+    return meshlat
+end
+
+function _minrange(k::SMatrix{L,L}) where {L}
+    minrange2 = sum(abs2, 2k[:,1])
+    for i in 1:L, j in 2:L
+        minrange2 = min(minrange2, sum(abs2, k[:,i] + k[:,j]))
+    end
+    return 0.99 * sqrt(minrange2)
+end
+
+
+hypertriangular(lat::Lattice{T,E,L}) where {T,E,L} = hypertriangular(SMatrix{L,1,T}(I))
+function hypertriangular(s::SMatrix{L,L2,T}) where {L,L2,T} 
+    v1 = s[:,L2]
+    factor = T(1/(L2+1))
+    v2 = modifyat(v1, L2, v1[L2]*factor)
+    v2 = modifyat(v2, L2 + 1, v1[L2]*sqrt(1 - factor^2))
+    return hypertriangular(hcat(s, v2))
+end
+hypertriangular(s::SMatrix{L,L}) where L = s
+
 
 meshbravaismatrix(A::SMatrix{E,L}, p::Int) where {E,L} = meshbravaismatrix(A, ntuple(_ -> p, Val(L)))
 meshbravaismatrix(A::SMatrix{E,L}, partitions::NTuple{L,Int}) where {E,L}  = 
