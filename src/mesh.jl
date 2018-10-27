@@ -65,20 +65,20 @@ struct MeshBrillouin{T,E}
 end
 
 function MeshBrillouin(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 5) where {T,E,L}
-    # bravais = Bravais(meshbravaismatrix(bravaismatrix(lat), partitions))
-    # sublat = Sublat(zero(SVector{E,T}))
-
     if uniform
         meshlat = uniform_mesh(lat, partitions)
     else
         meshlat = minimal_mesh(lat, partitions)
     end
-    # newlat = wrap(Lattice(sublat, bravais, LinkRule(1), supercell))
     wrappedmesh = wrap(meshlat)
-
     return MeshBrillouin(wrappedmesh)
 end
 
+# phi-space sampling z, k-space G'z. M = diagonal(partitions)
+# M G' z =  Tr * n, where n are SVector{L,Int}, and Tr is a hypertriangular lattice
+# For some integer S = (n1,n2...), (z1, z2, z3) = I (corners of BZ).
+# Hence S = round.(Tr^{-1} G' M) = superlattice. Bravais are z_i for n = I, so simply S^{-1}
+# Links should be fixed at the Tr level.
 function uniform_mesh(lat::Lattice{T,E,L}, partitions) where {T,E,L}
     M = diagsmatrix(Val(L), partitions)
     A = qr(bravaismatrix(lat)).R
@@ -105,8 +105,3 @@ function hypertriangular(s::SMatrix{L,L2,T}) where {L,L2,T}
     return hypertriangular(hcat(s, v2))
 end
 hypertriangular(s::SMatrix{L,L}) where L = s
-
-
-meshbravaismatrix(A::SMatrix{E,L}, p::Int) where {E,L} = meshbravaismatrix(A, ntuple(_ -> p, Val(L)))
-meshbravaismatrix(A::SMatrix{E,L}, partitions::NTuple{L,Int}) where {E,L}  = 
-    transpose(fastpinv(A)) # ./ SVector(partitions))
