@@ -91,8 +91,9 @@ function filldiag!(matrix::AbstractMatrix, matrices)
     return matrix
 end
 
-diagsmatrix(::Val{L}, partitions::T) where {L,T} = SMatrix{L,L,T}(Diagonal(SVector(ntuple(_->partitions, Val(L)))))
-diagsmatrix(::Val{L}, partitions::NTuple{L,T}) where {L,T} = SMatrix{L,L,T}(Diagonal(SVector(partitions)))
+diagsmatrix(x::NTuple{L,T}) where {L,T} = SMatrix{L,L,T}(Diagonal(SVector(x)))
+tontuple(::Val{L}, x::T) where {L,T} = ntuple(_->x, Val(L))
+tontuple(::Val{L}, x::NTuple{L,T}) where {L,T} = x
 
 fastrank(s::SMatrix{N,M,<:Integer}) where {N,M,T} = fastrank2(convert(SMatrix{N,M,Float64}, s))
 function fastrank(s::SMatrix{N,M,T}) where {N,M,T<:AbstractFloat}
@@ -129,12 +130,14 @@ end
 modifyat(s::SVector{N,T}, i, x) where {N,T} = SVector(ntuple(j -> j == i ? x : s[j], Val(N)))
 
 # The fallback is unnecessarily slow, but pinv(::SMatrix) is not yet available
-fastpinv(s::SMatrix{N,M}) where {N,M} = SMatrix{M,N}(pinv(Matrix(s)))
-fastpinv(s::SMatrix{N,N}) where {N} = inv(s)
-function fastpinv(s::SMatrix{3,2})
-    is = inv(hcat(s, cross(s[:,1], s[:,2])));
-    SMatrix{2,3}((is[1,1], is[2,1], is[1,2],is[2,2], is[1,3], is[2,3]))
-end
-function fastpinv(s::SMatrix{N,1}) where {N}
-    transpose(s) / sum(abs2,s)
-end
+# fastpinv(s::SMatrix{N,M}) where {N,M} = SMatrix{M,N}(pinv(Matrix(s)))
+# fastpinv(s::SMatrix{N,N}) where {N} = inv(s)
+# function fastpinv(s::SMatrix{3,2})
+#     is = inv(hcat(s, cross(s[:,1], s[:,2])));
+#     SMatrix{2,3}((is[1,1], is[2,1], is[1,2],is[2,2], is[1,3], is[2,3]))
+# end
+# function fastpinv(s::SMatrix{N,1}) where {N}
+#     transpose(s) / sum(abs2,s)
+# end
+
+sign_positivezero(x::T) where T = x >= zero(T) ? one(T) : - one(T)

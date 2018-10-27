@@ -7,8 +7,7 @@ import Base: convert, iterate, IteratorSize, IteratorEltype, eltype, ==
 import SparseArrays: sparse!
 
 export LatticeDirective, Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
-       FillRegion, LinkRule, Dim, Precision
-export TreeSearch, SimpleSearch
+       Dim, FillRegion, LinkRule, TreeSearch, SimpleSearch, Precision, MeshBrillouin
 export System, Model, Onsite, Hopping
 export transform, transform!, lattice!, combine, wrap, hamiltonian
 export @SMatrix, @SVector, SMatrix, SVector

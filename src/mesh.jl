@@ -60,31 +60,40 @@ end
 # MeshBrillouin
 #######################################################################
 
-struct MeshBrillouin{T,E}
-    lattice::Lattice{T,E,0,0}
+struct MeshBrillouin{T,N}
+    lattice::Lattice{T,N,0,0}
+    uniform::Bool
+    partitions::NTuple{N,Int}
 end
 
 function MeshBrillouin(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 5) where {T,E,L}
+    partitions_tuple = tontuple(Val(L), partitions)
     if uniform
-        meshlat = uniform_mesh(lat, partitions)
+        meshlat = uniform_mesh(lat, partitions_tuple)
     else
-        meshlat = minimal_mesh(lat, partitions)
+        meshlat = simple_mesh(lat, partitions_tuple)
     end
     wrappedmesh = wrap(meshlat)
-    return MeshBrillouin(wrappedmesh)
+    return MeshBrillouin(wrappedmesh, uniform, partitions_tuple)
 end
+
+Base.show(io::IO, m::MeshBrillouin{T,L}) where {T,L}=
+    print(io, "MeshBrillouin{$T,$L} : discretization of $L-dimensional Brillouin zone
+    Mesh type  : $(m.uniform ? "uniform" : "simple")
+    Vertices   : $(nsites(m.lattice)) 
+    Partitions : $(m.partitions)")
+
 
 # phi-space sampling z, k-space G'z. M = diagonal(partitions)
 # M G' z =  Tr * n, where n are SVector{L,Int}, and Tr is a hypertriangular lattice
 # For some integer S = (n1,n2...), (z1, z2, z3) = I (corners of BZ).
-# Hence S = round.(Tr^{-1} G' M) = superlattice. Bravais are z_i for n = I, so simply S^{-1}
-# Links should be fixed at the Tr level.
-function uniform_mesh(lat::Lattice{T,E,L}, partitions) where {T,E,L}
-    M = diagsmatrix(Val(L), partitions)
+# Hence S = round.(Tr^{-1} G' M) = supercell. Bravais are z_i for n = I, so simply S^{-1}
+# Links should be fixed at the Tr level, then transform so that D * Tr = S^{-1}, and do Supercell(S)
+function uniform_mesh(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,Int}) where {T,E,L}
+    M = diagsmatrix(partitions_tuple)
     A = qr(bravaismatrix(lat)).R
     Gt = qr(transpose(inv(A))).R
     Gt = Gt / Gt[1,1]
-    iGt = inv(Gt)
     Tr = hypertriangular(lat)
     S = round.(Int, inv(Tr) * Gt * M)
     iS = inv(S)
@@ -93,6 +102,26 @@ function uniform_mesh(lat::Lattice{T,E,L}, partitions) where {T,E,L}
     meshlat = transform!(meshlat, r -> D * r)
     meshlat = lattice!(meshlat, Supercell(S))
     # methlat = transform!(meshlat, r -> Gt * r)  # to go back to k space
+    return meshlat
+end
+
+# Transformation D takes hypertriangular to minisquare (phi-space delta): D * Tr = M^{-1}
+# However, Tr has to be chosen to match bravais angles of G' as much as possible: Trsigned
+# Build+link Trsigned, transform, Supercell(M)
+function simple_mesh(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,Int}) where {T,E,L}
+    M = diagsmatrix(partitions_tuple)
+    A = qr(bravaismatrix(lat)).R
+    Gt = qr(transpose(inv(A))).R
+    Gt = Gt / Gt[1,1]
+    Tr = hypertriangular(lat)
+    Trsigned = SMatrix{L,0,T}()
+    for i in 1:L
+        Trsigned = hcat(Trsigned, Tr[:,i] * sign_positivezero(Gt[1,i]))
+    end
+    D = inv(Trsigned * M)
+    meshlat = Lattice(Sublat(zero(SVector{L,T})), Bravais(Trsigned), LinkRule(1))
+    meshlat = transform!(meshlat, r -> D * r)
+    meshlat = lattice!(meshlat, Supercell(M))
     return meshlat
 end
 
