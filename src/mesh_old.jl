@@ -1,9 +1,9 @@
-struct MeshBrillouin{T,E,N} # N = E + 1, where E is the dimension of the lattice
+struct BrillouinMesh{T,E,N} # N = E + 1, where E is the dimension of the lattice
     vertices::Vector{SVector{E,T}}
     elements::Vector{SVector{N,Int}}
 end
 
-function MeshBrillouin(lat::Lattice{T,E,L}) where {T,E,L}
+function BrillouinMesh(lat::Lattice{T,E,L}) where {T,E,L}
     vertices = SVector{E,T}[]
     for s in lat.sublats
         append!(vertices, s.sites)
@@ -21,7 +21,7 @@ function MeshBrillouin(lat::Lattice{T,E,L}) where {T,E,L}
 
     elements = collect(reinterpret(SVector{E+1,Int}, flatgroups))
 
-    return MeshBrillouin(vertices, elements)
+    return BrillouinMesh(vertices, elements)
 end
 
 # Computes the groups of n+1 vertices such that all members are neighbors of the all the rest
@@ -64,8 +64,8 @@ function newgroups(flatgroups, adjacency, n) # n is the number of vertices in ea
 end
 
 #######################################################################
-# MeshBrillouin display
+# BrillouinMesh display
 #######################################################################
 
-Base.show(io::IO, mesh::MeshBrillouin{T,E,N}) where {T,E,N} =
-    print(io, "MeshBrillouin{$T,$E,$N} : $(E)D mesh with $(length(mesh.vertices)) vertices and $(length(mesh.elements)) elements ($N vertices each)")
+Base.show(io::IO, mesh::BrillouinMesh{T,E,N}) where {T,E,N} =
+    print(io, "BrillouinMesh{$T,$E,$N} : $(E)D mesh with $(length(mesh.vertices)) vertices and $(length(mesh.elements)) elements ($N vertices each)")

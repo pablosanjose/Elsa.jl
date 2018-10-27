@@ -57,16 +57,35 @@ function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int},
 end
 
 #######################################################################
-# MeshBrillouin
+# BrillouinMesh
 #######################################################################
+"""
+    BrillouinMesh(lat::Lattice; uniform::Bool = false, partitions = 5)
 
-struct MeshBrillouin{T,N}
-    lattice::Lattice{T,N,0,0}
+Discretizes the Brillouin zone of Lattice `lat` into hypertriangular finite 
+elements, using a certain number of `partitions` per Bravais axis (accepts 
+an integer or a tuple of integers, one per axis). Keyword `uniform` specifies 
+the type of mesh, either "uniform" (as close to equilateral as possible) or 
+"simple" (cartesian partition)
+
+# Examples
+```jldoctest
+julia> BrillouinMesh(Lattice(:honeycomb), uniform = true, partitions = 200)
+BrillouinMesh{Float64,2} : discretization of 2-dimensional Brillouin zone
+    Mesh type  : uniform
+    Vertices   : 40000 
+    Partitions : (200, 200)
+    3-elements : 80000
+```
+"""
+struct BrillouinMesh{T,L,N}
+    lattice::Lattice{T,L,0,0}
     uniform::Bool
-    partitions::NTuple{N,Int}
+    partitions::NTuple{L,Int}
+    elements::Elements{N}
 end
 
-function MeshBrillouin(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 5) where {T,E,L}
+function BrillouinMesh(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 5) where {T,E,L}
     partitions_tuple = tontuple(Val(L), partitions)
     if uniform
         meshlat = uniform_mesh(lat, partitions_tuple)
@@ -74,15 +93,18 @@ function MeshBrillouin(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 
         meshlat = simple_mesh(lat, partitions_tuple)
     end
     wrappedmesh = wrap(meshlat)
-    return MeshBrillouin(wrappedmesh, uniform, partitions_tuple)
+    elements = Elements(wrappedmesh)
+    return BrillouinMesh(wrappedmesh, uniform, partitions_tuple, elements)
 end
 
-Base.show(io::IO, m::MeshBrillouin{T,L}) where {T,L}=
-    print(io, "MeshBrillouin{$T,$L} : discretization of $L-dimensional Brillouin zone
+Base.show(io::IO, m::BrillouinMesh{T,L,N}) where {T,L,N} =
+    print(io, "BrillouinMesh{$T,$L} : discretization of $L-dimensional Brillouin zone
     Mesh type  : $(m.uniform ? "uniform" : "simple")
     Vertices   : $(nsites(m.lattice)) 
-    Partitions : $(m.partitions)")
+    Partitions : $(m.partitions)
+    $N-elements : $(nelements(m))")
 
+nelements(m::BrillouinMesh) = nelements(m.elements)
 
 # phi-space sampling z, k-space G'z. M = diagonal(partitions)
 # M G' z =  Tr * n, where n are SVector{L,Int}, and Tr is a hypertriangular lattice
