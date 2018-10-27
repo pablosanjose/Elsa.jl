@@ -88,22 +88,13 @@ function uniform_mesh(lat::Lattice{T,E,L}, partitions) where {T,E,L}
     Tr = hypertriangular(lat)
     S = round.(Int, inv(Tr) * Gt * M)
     iS = inv(S)
-    meshlat = Lattice(Sublat(zero(SVector{L,T})), Bravais(iS), Supercell(S))
-    meshlat = transform!(meshlat, r -> Gt * r)
-    range = _minrange(Gt * iS)
-    meshlat = lattice!(meshlat, LinkRule(range))
-    meshlat = transform!(meshlat, r -> inv(Gt) * r)
+    D = iS * inv(Tr)
+    meshlat = Lattice(Sublat(zero(SVector{L,T})), Bravais(Tr), LinkRule(1))
+    meshlat = transform!(meshlat, r -> D * r)
+    meshlat = lattice!(meshlat, Supercell(S))
+    # methlat = transform!(meshlat, r -> Gt * r)  # to go back to k space
     return meshlat
 end
-
-function _minrange(k::SMatrix{L,L}) where {L}
-    minrange2 = sum(abs2, 2k[:,1])
-    for i in 1:L, j in 2:L
-        minrange2 = min(minrange2, sum(abs2, k[:,i] + k[:,j]))
-    end
-    return 0.99 * sqrt(minrange2)
-end
-
 
 hypertriangular(lat::Lattice{T,E,L}) where {T,E,L} = hypertriangular(SMatrix{L,1,T}(I))
 function hypertriangular(s::SMatrix{L,L2,T}) where {L,L2,T} 

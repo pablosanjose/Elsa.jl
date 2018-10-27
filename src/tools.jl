@@ -94,26 +94,19 @@ end
 diagsmatrix(::Val{L}, partitions::T) where {L,T} = SMatrix{L,L,T}(Diagonal(SVector(ntuple(_->partitions, Val(L)))))
 diagsmatrix(::Val{L}, partitions::NTuple{L,T}) where {L,T} = SMatrix{L,L,T}(Diagonal(SVector(partitions)))
 
-fastrank(s::SMatrix{N,M,<:Integer}) where {N,M,T} = fastrank(convert(SMatrix{N,M,Float64}, s))
+fastrank(s::SMatrix{N,M,<:Integer}) where {N,M,T} = fastrank2(convert(SMatrix{N,M,Float64}, s))
 function fastrank(s::SMatrix{N,M,T}) where {N,M,T<:AbstractFloat}
-    rank = 0
-    M == 0 && return rank
-    
-    tol = M * N * eps(maximum(s)) # Heuristic 
-    columns = MVector(ntuple(i->s[:,i], Val(M)))
-    
-    for i in 1:M
-        col = columns[i]
-        for j in 1:i-1
-            pcol = columns[j]
-            norm2 = sum(abs2, pcol)
-            isapprox(norm2, 0.0) && continue
-            proj = (dot(col, pcol) / norm2)
-            columns[i] -= proj * pcol
+    R = qr(s).R
+    tol = M * N * eps(maximum(s))
+    count = M
+    for i in 0:M-1
+        if abs(R[M-i, M]) < tol 
+            count -= 1
+        else
+            break
         end
-        norm(columns[i], 1) > tol && (rank += 1)
     end
-    return rank
+    return count
 end
 
 keepcolumns(s::SMatrix{E,L,T}, ::Tuple{}) where {E,L,T} = SMatrix{E,0,T}()
