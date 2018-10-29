@@ -2,28 +2,39 @@
 # Elements
 #######################################################################
 
-struct Elements{N}
+struct Elements{N,MD}
     indices::Vector{SVector{N,Int}}
+    metadata::MD
 end
 
-Elements(lat::Lattice, sublat = 1) = Elements(elements(lat.links.intralink.slinks[sublat,sublat]))
+function Elements(lat::Lattice{T,E}; vertices::Int = E+1, sublat::Int = 1, metadata = missing) where {T,E} 
+    inds = elements(lat.links.intralink.slinks[sublat,sublat], Val(vertices))   
+    if ismissing(metadata)
+        els = Elements(inds, missing)
+    else
+        md = metadata.(inds, Ref(lat))
+        els = Elements(inds, md)
+    end
+    return els
+end
+        
 
-Base.show(io::IO, elements::Elements{N}) where {N} = 
-    print(io, "Elements{$N}: $(nelements(elements)) elements ($N-vertex)")
+Base.show(io::IO, elements::Elements{N,MD}) where {N,MD} = 
+    print(io, "Elements{$N}: $(nelements(elements)) elements ($N-vertex) with $MD metadata")
 
 nelements(el::Elements) = length(el.indices)
 
-function elements(slink::Slink{T,E}) where {T,E} 
-    indices = SVector{E+1,Int}[]
+function elements(slink::Slink{T,E}, ::Val{N}) where {T,E,N} 
+    indices = SVector{N,Int}[]
     isempty(slink) && return indices
-    candidates = SVector{E+1,Int}[]
+    candidates = SVector{N,Int}[]
     buffer1 = Int[]
     buffer2 = Int[]
     for src in sources(slink)
         resize!(candidates, 0)
-        push!(candidates, modifyat(zero(SVector{E+1,Int}), 1, src))
+        push!(candidates, modifyat(zero(SVector{N,Int}), 1, src))
         imax = 0
-        for pass in 2:E+1
+        for pass in 2:N
             (imin, imax) = (imax + 1, length(candidates))
             for i in imin:imax
                 neighborbuffer = _common_ordered_neighbors!(buffer1, buffer2, candidates[i], pass - 1, slink)
