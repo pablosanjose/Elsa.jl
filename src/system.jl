@@ -5,7 +5,7 @@
 struct System{T,E,L,M<:Model,EL}
 	lattice::Lattice{T,E,L,EL}
     model::M
-    ham::Union{Missing, Hamiltonian{T,L}}
+    ham::Hamiltonian{T,L}
 end
 
 System(l::Lattice, m::Model) = System(l, m, hamiltonian(l, m))
@@ -14,10 +14,6 @@ System(l::Lattice, m::Model) = System(l, m, hamiltonian(l, m))
 # Display
 #######################################################################
 
-function Base.show(io::IO, ham::Hamiltonian{T,L}) where {T,L}
-    print(io, "Hamiltonian of size $(size(ham.matrix, 1)) with $(nnz(ham.matrix)) non-zero elements")
-end
-
 function Base.show(io::IO, sys::System{T,E,L}) where {T,E,L}
     print(io, "System{$T,$E,$L} : $(L)D system in $(E)D space with $T sites. 
     Bravais vectors : $(vectorsastuples(sys.lattice))
@@ -25,7 +21,7 @@ function Base.show(io::IO, sys::System{T,E,L}) where {T,E,L}
     Sublattice names : $((sublatnames(sys.lattice)... ,))
     Unique Links : $(nlinks(sys.lattice))
     Model with sublattice site dimensions $((sys.model.dims...,)) (default $(sys.model.defdim))
-    $(ismissing(sys.ham) ? "Hamiltonian Missing" : sys.ham)")
+    $(sys.ham)")
 end
 
 #######################################################################

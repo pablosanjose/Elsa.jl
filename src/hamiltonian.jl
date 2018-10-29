@@ -26,6 +26,10 @@ struct Hamiltonian{T,L}
     matrix::SparseMatrixCSC{Complex{T},Int}
 end
 
+function Base.show(io::IO, ham::Hamiltonian{T,L}) where {T,L}
+    print(io, "Hamiltonian of size $(size(ham.matrix, 1)) with $(nnz(ham.matrix)) elements (including structural zeros)")
+end
+
 #######################################################################
 # build hamiltonian
 #######################################################################
@@ -33,7 +37,7 @@ end
 #hamiltonian(lat::Lattice, model::Model) = hamiltonian(hamiltoniantype(lat, model), lat, model)
 
 function hamiltonian(lat::Lattice{T,E,L}, model::Model) where {T,E,L}
-    isunlinked(lat) && return missing
+    # isunlinked(lat) && return missing
 
     dimh = hamiltoniandim(lat, model)
     
