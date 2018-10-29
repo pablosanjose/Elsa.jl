@@ -475,7 +475,7 @@ nsublats(lat::Lattice)::Int = length(lat.sublats)
 sublatnames(lat::Lattice) = Union{Symbol,Missing}[slat.name for slat in lat.sublats]
 nlinks(lat::Lattice) = nlinks(lat.links)
 isunlinked(lat::Lattice) = nlinks(lat.links) == 0
-linkspersite(lat::Lattice) = (nlinks(lat.links.intralink) + nlinks(lat.links.interlinks)/2)/nsites(lat)
+coordination(lat::Lattice) = (2 * nlinks(lat.links.intralink) + nlinks(lat.links.interlinks))/nsites(lat)
 @inline bravaismatrix(lat::Lattice) = bravaismatrix(lat.bravais)
 @inline bravaismatrix(br::Bravais) = br.matrix
 sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)
@@ -594,12 +594,12 @@ end
 #######################################################################
 
 Base.show(io::IO, lat::Lattice{T,E,L}) where {T,E,L}=
-    print(io, "Lattice{$T,$E,$L}  : $(L)D lattice in $(E)D space with $T sites
-    Bravais vectors   : $(vectorsastuples(lat))
-    Sublattice names  : $((sublatnames(lat)... ,))
-    Total sites       : $(nsites(lat))
-    Total links       : $(nlinks(lat))
-    Unique links/site : $(linkspersite(lat))")
+    print(io, "Lattice{$T,$E,$L} : $(L)D lattice in $(E)D space with $T sites
+    Bravais vectors  : $(vectorsastuples(lat))
+    Sublattice names : $((sublatnames(lat)... ,))
+    Total sites      : $(nsites(lat))
+    Total links      : $(nlinks(lat))
+    Coordination     : $(coordination(lat))")
 
 #######################################################################
 # Transform lattices
