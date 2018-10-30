@@ -8,6 +8,8 @@ struct Bandstructure{T,N}  # N = L + 1 (nodes are energy-Blochphases)
     elements::Elements{T,N}
 end
 
+Bandstructure(sys::System; uniform = false, partitions = 5, kw...) = 
+    Bandstructure(sys, BrillouinMesh(sys.lattice; uniform = uniform, partitions = partitions), kw...) 
 function Bandstructure(sys::System{T,E,L}, bzmesh::BrillouinMesh{T,L}; threshold = 0.3, kw...) where {T,E,L}
     (energies, states) = spectrum(sys, bzmesh; kw...)
     statelength = size(states, 1)
