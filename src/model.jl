@@ -24,7 +24,7 @@ end
 @inline (o::OnsiteConst)(r, ::Val{N}) where {N} = o(r)
 (o::OnsiteConst)(r::SVector) = o.o
 
-Onsite(o, s...) = _Onsite(o, to_ints_or_missing(s))
+Onsite(o, s::Vararg{Int, N}) where {N} = _Onsite(o, to_ints_or_missing(s))
 _Onsite(f::Function, s) = _OnsiteFunc(f, f(zerovec), s)
     _OnsiteFunc(f::Function, sample::SMatrix{N,N}, s) where {N} = _OnsiteFunc(Val(N), f, s)
     _OnsiteFunc(f::Function, sample, s) = _OnsiteFunc(Val(1), r -> @SMatrix[f(r)], s)
@@ -55,7 +55,7 @@ struct HoppingFunc{SL,N,M,F<:Function} <: Hopping{SL,N,M}
     f::F
     ss::SL   # Sublattices
 end
-HoppingFunc{SL,N,M}(ss::SL, f::F) where {N,M,SL,F} = HoppingFunc{SL,N,M,F}(ss, f)
+HoppingFunc{SL,N,M}(f::F, ss::SL) where {N,M,SL,F} = HoppingFunc{SL,N,M,F}(f, ss)
 @inline (h::HoppingFunc)(rdr, ::Val{M}, ::Val{N}) where {M,N} = h(rdr)
 (h::HoppingFunc)((r, dr)::Tuple{S,S}) where {S<:SVector} = h.f(r, dr)
 
@@ -66,7 +66,7 @@ end
 @inline (h::HoppingConst)(rdr, ::Val{M}, ::Val{N}) where {M,N} = h(rdr)
 (h::HoppingConst)((r, dr)::Tuple{S,S}) where {S<:SVector} = h.h
 
-Hopping(h, ss...) = _Hopping(h, to_tuples_or_missing(ss))
+Hopping(h, ss::Vararg{Union{Int,Tuple{Int,Int}}, N}) where {N} = _Hopping(h, to_tuples_or_missing(ss))
 _Hopping(f::Function, ss) = _HoppingFunc(f, f(zerovec, zerovec), ss)
     _HoppingFunc(f::Function, sample::SMatrix{N,M}, ss) where {N,M} = _HoppingFunc(Val(N), Val(M), f, ss)
     _HoppingFunc(f::Function, sample, ss) = _HoppingFunc(Val(1), Val(1), (r, dr) -> @SMatrix[f(r, dr)], ss)

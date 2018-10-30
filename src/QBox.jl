@@ -1,6 +1,6 @@
 module QBox
 
-using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays
+using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays, Arpack
 using Requires
 
 import Base: convert, iterate, IteratorSize, IteratorEltype, eltype, ==
