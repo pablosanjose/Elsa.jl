@@ -34,7 +34,6 @@ function hamiltonian(sys::System{T,E,L}; k = zero(SVector{E,T}), kn = transpose(
     return sys.ham.matrix
 end
 
-_hamiltonian!(::Missing, kn, intracell) = nothing
 function _hamiltonian!(ham::Hamiltonian{T,L}, kn, intracell) where {T,E,L}
     if intracell
         ham.V[ham.Voffsets[1]:end] .= zero(T)

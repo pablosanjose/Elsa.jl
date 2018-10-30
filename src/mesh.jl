@@ -90,7 +90,7 @@ BrillouinMesh{Float64,2} : discretization of 2-dimensional Brillouin zone
 ```
 """
 struct BrillouinMesh{T,L,N}
-    lattice::Lattice{T,L,0,0}
+    mesh::Lattice{T,L,0,0}
     uniform::Bool
     partitions::NTuple{L,Int}
     elements::Elements{N}
@@ -111,7 +111,7 @@ end
 Base.show(io::IO, m::BrillouinMesh{T,L,N}) where {T,L,N} =
     print(io, "BrillouinMesh{$T,$L} : discretization of $L-dimensional Brillouin zone
     Mesh type  : $(m.uniform ? "uniform" : "simple")
-    Vertices   : $(nsites(m.lattice)) 
+    Vertices   : $(nsites(m.mesh)) 
     Partitions : $(m.partitions)
     $N-elements : $(nelements(m))")
 
