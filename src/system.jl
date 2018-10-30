@@ -28,8 +28,8 @@ end
 # build hamiltonian with Bloch phases
 #######################################################################
 
-function hamiltonian(sys::System{T,E,L}; k = zero(SVector{E,T}), kn = transpose(sys.lattice.bravais.matrix) * SVector(k) / (2pi), intracell::Bool = false) where {T,E,L}
-    _hamiltonian!(sys.ham, SVector(kn), intracell)
+function hamiltonian(sys::System{T,E,L}; k = zero(SVector{E,T}), kn = transpose(bravaismatrix(sys.lattice)) * SVector(k) / (2pi), intracell::Bool = false) where {T,E,L}
+    _hamiltonian!(sys.ham, SVector{L,T}(kn), intracell)
     updatehamiltonian!(sys.ham)
     return sys.ham.matrix
 end

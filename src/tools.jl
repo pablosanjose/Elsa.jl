@@ -142,32 +142,32 @@ modifyat(s::SVector{N,T}, i, x) where {N,T} = SVector(ntuple(j -> j == i ? x : s
 
 sign_positivezero(x::T) where T = x >= zero(T) ? one(T) : - one(T)
 
-# Taken from https://github.com/JuliaLang/julia/pull/21598, credit @stevengj
-# swap columns i and j of a, in-place
-function swapcols!(a::AbstractMatrix, i, j)
-    i == j && return
-    cols = axes(a,2)
-    (i in cols && j in cols) || throw(BoundsError())
-    for k in axes(a,1)
-        @inbounds a[k,i],a[k,j] = a[k,j],a[k,i]
-    end
-end
-# like permute!! applied to each row of a, in-place in a (overwriting p).
-function permutecols!!(a::AbstractMatrix, p::AbstractVector{<:Integer})
-    count = 0
-    start = 0
-    while count < length(p)
-        ptr = start = findnext(x->x!=0, p, start+1)
-        next = p[start]
-        count += 1
-        while next != start
-            swapcols!(a, ptr, next)
-            p[ptr] = 0
-            ptr = next
-            next = p[next]
-            count += 1
-        end
-        p[ptr] = 0
-    end
-    a
-end
+# # Taken from https://github.com/JuliaLang/julia/pull/21598, credit @stevengj
+# # swap columns i and j of a, in-place
+# function swapcols!(a::AbstractMatrix, i, j)
+#     i == j && return
+#     cols = axes(a,2)
+#     (i in cols && j in cols) || throw(BoundsError())
+#     for k in axes(a,1)
+#         @inbounds a[k,i],a[k,j] = a[k,j],a[k,i]
+#     end
+# end
+# # like permute!! applied to each row of a, in-place in a (overwriting p).
+# function permutecols!!(a::AbstractMatrix, p::AbstractVector{<:Integer})
+#     count = 0
+#     start = 0
+#     while count < length(p)
+#         ptr = start = findnext(x->x!=0, p, start+1)
+#         next = p[start]
+#         count += 1
+#         while next != start
+#             swapcols!(a, ptr, next)
+#             p[ptr] = 0
+#             ptr = next
+#             next = p[next]
+#             count += 1
+#         end
+#         p[ptr] = 0
+#     end
+#     a
+# end

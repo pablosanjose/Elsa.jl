@@ -27,7 +27,7 @@ struct Hamiltonian{T,L}
 end
 
 function Base.show(io::IO, ham::Hamiltonian{T,L}) where {T,L}
-    print(io, "Hamiltonian of size $(size(ham.matrix, 1)) with $(nnz(ham.matrix)) elements (including structural zeros)")
+    print(io, "Hamiltonian of size $(size(ham.matrix, 1)) with $(nnz(ham.matrix)) elements (including onsite zeros)")
 end
 
 #######################################################################
@@ -111,7 +111,7 @@ function hbloch!(I, J, V, model, lat, ilink, isinter)
                 #(subrows == subcols && rowoffsetblock == coloffsetblock) || throw(DimensionMismatch("bug in hamiltonian routines! $rowoffsetblock, $coloffsetblock, $subrows, $subcols"))
                 appendonsites!(I, J, V, rowoffsetblock, lat.sublats[s1], onsite(model, s1), Val(subrows))
             end
-            if isvalidlink(isinter, (s2, s1))
+            if isvalidlink(isinter, (s1, s2))
                 appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), ilink.slinks[s2, s1], hopping(model, (s2, s1)), Val(subrows), Val(subcols), !isinter)
             end
             rowoffsetblock += subrows * nsites(lat.sublats[s2])

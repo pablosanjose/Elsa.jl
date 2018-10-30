@@ -1,13 +1,13 @@
 module QBox
 
-using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays
+using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays, Arpack
 using Requires
 
 import Base: convert, iterate, IteratorSize, IteratorEltype, eltype, ==
 import SparseArrays: sparse!
 
 export LatticeDirective, Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
-       Dim, FillRegion, LinkRule, TreeSearch, SimpleSearch, Precision, BrillouinMesh
+       Dim, FillRegion, LinkRule, TreeSearch, SimpleSearch, Precision, BrillouinMesh, Bandstructure
 export System, Model, Onsite, Hopping
 export transform, transform!, lattice!, combine, wrap, hamiltonian
 export @SMatrix, @SVector, SMatrix, SVector
