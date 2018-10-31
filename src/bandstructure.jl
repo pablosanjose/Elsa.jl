@@ -20,19 +20,19 @@ function Bandstructure(sys::System{T,E,L}, bzmesh::BrillouinMesh{T,L}; threshold
     mesh = Lattice(Sublat{T,L+1}())
     meshnodes = mesh.sublats[1].sites
     for nk in 1:nkpoints, ne in 1:nevals
-        push!(meshnodes, vcat(energies[ne, nk], kpoints[nk])
+        push!(meshnodes, vcat(energies[ne, nk], kpoints[nk]))
     end
 
     linkI = Int[]
     linkJ = Int[]
     linkV = Tuple{SVector{L+1,T}, SVector{L+1,T}}[]
-    slink_bzmesh = bzmesh.mesh.links.intralink.slink[1,1]
+    slink_bzmesh = bzmesh.mesh.links.intralink.slinks[1,1]
     linearindices = LinearIndices(energies)
     state = Vector{Complex{T}}(undef, statelength)
     for nk_src in 1:nkpoints
         for ne_src in 1:nevals
-            copyto!(state,  CartesianIndices(1:statelength), 
-                    states, CartesianIndices((1:statelength, ne_src:ne_src, nk_src:nk_src)))
+            copyslice!(state,  CartesianIndices(1:statelength), 
+                       states, CartesianIndices((1:statelength, ne_src:ne_src, nk_src:nk_src)))
             for nk_target in neighbors(slink_bzmesh, nk_src)
                 ne_target = findmostparallel(state, states, nk_target, threshold)
                 if !iszero(ne_target)
@@ -48,14 +48,15 @@ function Bandstructure(sys::System{T,E,L}, bzmesh::BrillouinMesh{T,L}; threshold
     end
     sp = sparse(linkI, linkJ, linkV)
     mesh.links.intralink.slinks[1,1] = Slink(rowvals(sp), sp.colptr, nonzeros(sp))
-    elements = Elements(mesh)
-    return Bandstructure(mesh, reshape!(states, statelength, :), elements)
+    # elements = Elements(mesh)
+    # return Bandstructure(mesh, reshape!(states, statelength, :), elements)
+    mesh
 end
 
-function findmostparallel(state::Vector{Complex{T}}, states, ktarget, threshold) where {CT}
+function findmostparallel(state::Vector{Complex{T}}, states, ktarget, threshold) where {T}
     target = 0
     maxproj = T(threshold)
-    for ne in axis(states, 2)
+    for ne in axes(states, 2)
         dotprod = zero(Complex{T})
         for nphi in 1:length(state)
             dotprod += conj(state[nphi]) * states[nphi, ne, ktarget]
@@ -69,31 +70,32 @@ function findmostparallel(state::Vector{Complex{T}}, states, ktarget, threshold)
     return target
 end
 
-function spectrum(sys::System{T}, bzmesh::BrillouinMesh; kw...)
+function spectrum(sys::System{T}, bzmesh::BrillouinMesh; kw...) where {T}
     kpoints = bzmesh.mesh.sublats[1].sites
     nkpoints = length(kpoints)
-    (energies_kn, states_kn) = spectrum(hamiltonian(sys, kn = knpoints[1]); kw...)
+    (energies_kn, states_kn) = spectrum(hamiltonian(sys, kn = kpoints[1]); kw...)
     (statelength, nevals) = size(states_kn)
     
     energies = Matrix{T}(undef, (nevals, nkpoints))
-    states = Array{T,3}(undef, (statelength, nevals, nkpoints))
-    copyto!(energies,    CartesianIndices((1:nevals, 1:1)), 
-            energies_kn, CartesianIndices(1:nevals))
-    copyto!(states,      CartesianIndices((1:statelength, 1:nevals, 1:1)), 
-            energies_kn, CartesianIndices(1:statelength, 1:nevals))
+    states = Array{Complex{T},3}(undef, (statelength, nevals, nkpoints))
+    copyslice!(energies,    CartesianIndices((1:nevals, 1:1)), 
+               energies_kn, CartesianIndices(1:nevals))
+    copyslice!(states,      CartesianIndices((1:statelength, 1:nevals, 1:1)), 
+               states_kn,   CartesianIndices((1:statelength, 1:nevals)))
 
-    for kn in 2:kpoints
-        (energies_kn, states_kn) = spectrum(hamiltonian(sys, kn = kn); kw...)
-        copyto!(energies,    CartesianIndices((1:nevals, kn:kn)), 
-                energies_kn, CartesianIndices(1:nevals))
-        copyto!(states,      CartesianIndices((1:statelength, 1:nevals, kn:kn)), 
-                energies_kn, CartesianIndices(1:statelength, 1:nevals))
+    for nk in 2:nkpoints
+        (energies_nk, states_nk) = spectrum(hamiltonian(sys, kn = kpoints[nk]); kw...)
+        copyslice!(energies,    CartesianIndices((1:nevals, nk:nk)), 
+                   energies_nk, CartesianIndices(1:nevals))
+        copyslice!(states,      CartesianIndices((1:statelength, 1:nevals, nk:nk)), 
+                   states_nk,   CartesianIndices((1:statelength, 1:nevals)))
     end
     
     return (energies, states)
 end
 
 function spectrum(h::SparseMatrixCSC; kw...)
-    (energies, states) = eigs(h; kw...)
-    return (re.(energies), states)
+    ee = eigen(Matrix(h); kw...)
+    (energies, states) = (ee.values, ee.vectors)
+    return (real.(energies), states)
 end

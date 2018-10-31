@@ -7,8 +7,8 @@ import Base: convert, iterate, IteratorSize, IteratorEltype, eltype, ==
 import SparseArrays: sparse!
 
 export LatticeDirective, Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
-       Dim, FillRegion, LinkRule, TreeSearch, SimpleSearch, Precision, BrillouinMesh, Bandstructure
-export System, Model, Onsite, Hopping
+       Dim, FillRegion, LinkRule, TreeSearch, SimpleSearch, Precision
+export System, Model, Onsite, Hopping, BrillouinMesh, Bandstructure
 export transform, transform!, lattice!, combine, wrap, hamiltonian
 export @SMatrix, @SVector, SMatrix, SVector
 
@@ -20,11 +20,12 @@ include("tools.jl")
 include("boxiterator.jl")
 include("presets.jl")
 include("lattice.jl")
+include("algorithms_lattice.jl")
 include("model.jl")
 include("hamiltonian.jl")
 include("system.jl")
 include("mesh.jl")
-include("algorithms_lattice.jl")
+include("bandstructure.jl")
 include("convert.jl")
 
 # include("plot.jl")

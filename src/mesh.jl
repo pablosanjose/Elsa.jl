@@ -99,14 +99,15 @@ end
 function BrillouinMesh(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 5) where {T,E,L}
     partitions_tuple = tontuple(Val(L), partitions)
     if uniform
-        meshlat = uniform_mesh(lat, partitions_tuple)
+        mesh = uniform_mesh(lat, partitions_tuple)
     else
-        meshlat = simple_mesh(lat, partitions_tuple)
+        mesh = simple_mesh(lat, partitions_tuple)
     end
-    wrappedmesh = wrap(meshlat)
+    wrappedmesh = wrap(mesh)
     elements = Elements(wrappedmesh)
-    return BrillouinMesh(wrappedmesh, uniform, partitions_tuple, elements)
+    return BrillouinMesh(mesh, uniform, partitions_tuple, elements)
 end
+BrillouinMesh(sys::System; kw...) = BrillouinMesh(sys.lattice; kw...)
 
 Base.show(io::IO, m::BrillouinMesh{T,L,N}) where {T,L,N} =
     print(io, "BrillouinMesh{$T,$L} : discretization of $L-dimensional Brillouin zone
