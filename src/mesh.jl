@@ -2,25 +2,18 @@
 # Elements
 #######################################################################
 
-struct Elements{N,MD}
+struct Elements{N}
     indices::Vector{SVector{N,Int}}
-    metadata::MD
 end
 
-function Elements(lat::Lattice{T,E}; vertices::Int = E+1, sublat::Int = 1, metadata = missing) where {T,E} 
-    inds = elements(lat.links.intralink.slinks[sublat,sublat], Val(vertices))   
-    if ismissing(metadata)
-        els = Elements(inds, missing)
-    else
-        md = metadata.(inds, Ref(lat))
-        els = Elements(inds, md)
-    end
-    return els
+function Elements(lat::Lattice{T,E}, ::Val{N} = Val(E+1); sublat::Int = 1) where {T,E,N} 
+    inds = elements(lat.links.intralink.slinks[sublat,sublat], Val(N))   
+    return Elements(inds)
 end
         
 
-Base.show(io::IO, elements::Elements{N,MD}) where {N,MD} = 
-    print(io, "Elements{$N}: $(nelements(elements)) elements ($N-vertex) with $MD metadata")
+Base.show(io::IO, elements::Elements{N}) where {N} = 
+    print(io, "Elements{$N}: $(nelements(elements)) elements ($N-vertex)")
 
 nelements(el::Elements) = length(el.indices)
 
@@ -89,8 +82,8 @@ BrillouinMesh{Float64,2} : discretization of 2-dimensional Brillouin zone
     3-elements : 80000
 ```
 """
-struct BrillouinMesh{T,L,N}
-    mesh::Lattice{T,L,0,0}
+struct BrillouinMesh{T,L,N,LL}
+    mesh::Lattice{T,L,L,LL}
     uniform::Bool
     partitions::NTuple{L,Int}
     elements::Elements{N}
