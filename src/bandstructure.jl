@@ -13,10 +13,16 @@ struct Spectrum{T<:Real,L}
     bufferstate::Vector{Complex{T}}
 end
 
+mutable struct AlgSelect
+    alg::Union{Missing, Int}
+end
+
+
 function Spectrum(sys::System{T}, bzmesh::BrillouinMesh; kw...) where {T}
     knpoints = bzmesh.mesh.sublats[1].sites
     npoints = length(knpoints)
-    (energies_kn, states_kn) = spectrum(hamiltonian(sys, kn = knpoints[1]); kw...)
+    algorithm = AlgSelect(missing)
+    (energies_kn, states_kn) = spectrum(hamiltonian(sys, kn = knpoints[1]), algorithm; kw...)
     (statelength, nenergies) = size(states_kn)
     
     energies = Matrix{T}(undef, (nenergies, npoints))
@@ -39,8 +45,27 @@ function Spectrum(sys::System{T}, bzmesh::BrillouinMesh; kw...) where {T}
     return Spectrum(energies, nenergies, states, statelength, knpoints, npoints, bufferstate)
 end
 
-function spectrum(h::SparseMatrixCSC; kw...)
-    ee = eigen(Matrix(h); kw...)
+function spectrum(hsparse::SparseMatrixCSC{T}, alg; nenergies = 2, kw...)
+    h = Hermitian(hsparse)
+    F = cholesky(H, check = false)
+    L = ldlt!(F, H, shift = eps())
+    map = LinearMap{T}(x -> F \ x, size(hsparse, 1))
+    schur = partialschur(map, nev = nenergies, tol=1e-6, restarts = 100, which = LM())
+    energies = 1 ./ schur.eigenvalues
+    states = schur.Q
+    return (energies, states)
+end
+
+function spectrum_arpack(h::SparseMatrixCSC{T}; energies = missing, kw...) where {T}
+    ismissing(energies) && nev = 
+    ee = eigs(h; sigma = 1.0im, kw...)
+    (energies, states) = (ee.values, ee.vectors)
+    return (real.(energies), states)
+end
+
+function spectrum_dense(h::SparseMatrixCSC{T}; energies = missing, kw...) where {T}
+    ismissing(energies) && nev = 
+    ee = eigs(h; sigma = 1.0im, kw...)
     (energies, states) = (ee.values, ee.vectors)
     return (real.(energies), states)
 end

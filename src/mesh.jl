@@ -11,7 +11,6 @@ function Elements(lat::Lattice{T,E}, ::Val{N} = Val(E+1); sublat::Int = 1) where
     return Elements(inds)
 end
         
-
 Base.show(io::IO, elements::Elements{N}) where {N} = 
     print(io, "Elements{$N}: $(nelements(elements)) elements ($N-vertex)")
 

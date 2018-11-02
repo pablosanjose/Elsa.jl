@@ -1,7 +1,7 @@
 module QBox
 
-using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays, Arpack
-using Requires
+using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
+      LinearMaps, ArnoldiMethod
 
 import Base: convert, iterate, IteratorSize, IteratorEltype, eltype, ==
 import SparseArrays: sparse!

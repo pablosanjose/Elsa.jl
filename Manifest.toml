@@ -12,11 +12,11 @@ repo-url = "https://github.com/JuliaPlots/AbstractPlotting.jl.git"
 uuid = "537997a7-5e4e-5d89-9595-2241ea00577e"
 version = "0.9.0+"
 
-[[Arpack]]
-deps = ["BinaryProvider", "Libdl", "LinearAlgebra", "Random", "SparseArrays", "Test"]
-git-tree-sha1 = "1ce1ce9984683f0b6a587d5bdbc688ecb480096f"
-uuid = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
-version = "0.3.0"
+[[ArnoldiMethod]]
+deps = ["DelimitedFiles", "LinearAlgebra", "Random", "SparseArrays", "StaticArrays", "Test"]
+git-tree-sha1 = "2b6845cea546604fb4dca4e31414a6a59d39ddcd"
+uuid = "ec485272-7323-5ecc-a04f-4719b315124d"
+version = "0.0.4"
 
 [[AxisAlgorithms]]
 deps = ["Compat", "WoodburyMatrices"]
@@ -257,6 +257,12 @@ uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
 deps = ["Libdl"]
 uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
+[[LinearMaps]]
+deps = ["LinearAlgebra", "SparseArrays", "Test"]
+git-tree-sha1 = "580bb0efbfe0082c4fb0ce8dbf6548872c3b604c"
+uuid = "7a12625a-238d-50fd-b39a-03d52299707e"
+version = "2.2.2"
+
 [[Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
@@ -398,12 +404,6 @@ deps = ["Pkg"]
 git-tree-sha1 = "7b1d07f411bc8ddb7977ec7f377b97b158514fe0"
 uuid = "189a3867-3050-52da-a836-e630ba90ab69"
 version = "0.2.0"
-
-[[Requires]]
-deps = ["Test"]
-git-tree-sha1 = "f6fbf4ba64d295e146e49e021207993b6b48c7d1"
-uuid = "ae029012-a4dd-5104-9daa-d747884805df"
-version = "0.5.2"
 
 [[Rotations]]
 deps = ["LinearAlgebra", "Random", "StaticArrays", "Statistics", "Test"]
