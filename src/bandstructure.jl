@@ -39,8 +39,7 @@ function Spectrum(sys::System{T}, bzmesh::BrillouinMesh; kw...) where {T}
     return Spectrum(energies, nenergies, states, statelength, knpoints, npoints, bufferstate)
 end
 
-function spectrum_arpack(h::SparseMatrixCSC{T}; nenergies = missing, kw...) where {T}
-    ismissing(nenergies) ? nev = 2 : nev = nenergies
+function spectrum(h::SparseMatrixCSC{T}; nenergies = 2, kw...) where {T}
     ee = eigs(h; sigma = 1.0im, nev = nenergies, kw...)
     (energies, states) = (ee.values, ee.vectors)
     return (real.(energies), states)
