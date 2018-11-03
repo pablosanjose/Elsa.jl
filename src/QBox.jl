@@ -1,7 +1,7 @@
 module QBox
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      LinearMaps, ArnoldiMethod
+      Arpack
 
 import Base: convert, iterate, IteratorSize, IteratorEltype, eltype, ==
 import SparseArrays: sparse!
