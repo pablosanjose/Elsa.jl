@@ -96,7 +96,7 @@ diagsmatrix(x::NTuple{L,T}) where {L,T} = SMatrix{L,L,T}(Diagonal(SVector(x)))
 tontuple(::Val{L}, x::T) where {L,T} = ntuple(_->x, Val(L))
 tontuple(::Val{L}, x::NTuple{L,T}) where {L,T} = x
 
-fastrank(s::SMatrix{N,M,<:Integer}) where {N,M,T} = fastrank2(convert(SMatrix{N,M,Float64}, s))
+fastrank(s::SMatrix{N,M,<:Integer}) where {N,M,T} = fastrank(convert(SMatrix{N,M,Float64}, s))
 function fastrank(s::SMatrix{N,M,T}) where {N,M,T<:AbstractFloat}
     R = qr(s).R
     tol = M * N * eps(maximum(s))

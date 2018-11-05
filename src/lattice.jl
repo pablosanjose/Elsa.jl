@@ -151,10 +151,9 @@ struct Ilink{T,E,L}
 end
 
 function emptyilink(ndist::SVector{L,Int}, sublats::Vector{Sublat{T,E}}) where {T,E,L}
-    isinter = !iszero(ndist)
-    ns = length(sublats)
-    emptyslink = zero(Slink{T,E})
-    slinks = fill(emptyslink, ns, ns)
+    # ns = length(sublats)
+    # emptyslink = Slink{T,E}(ns)
+    slinks = [Slink{T,E}(nsites(s1)) for s2 in sublats, s1 in sublats]
     return Ilink(ndist, slinks)
 end
 
@@ -166,6 +165,7 @@ nsublats(ilink::Ilink) = size(ilink.slinks, 1)
 Base.isempty(ilink::Ilink) = nlinks(ilink) == 0
 
 neighbors(ilink::Ilink, src, (s1,s2)::Tuple{Int,Int}) = neighbors(ilink.slinks[s2, s1], src)
+neighbors(ilinks::Vector{<:Ilink}, src, (s1,s2)::Tuple{Int,Int}) = Iterators.flatten(neighbors(ilink, src, (s1, s2)) for ilink in ilinks)
 
 transform!(i::IL, f::F) where {IL<:Ilink, F<:Function} = (transform!.(i.slinks, f); i)
 
@@ -189,8 +189,8 @@ nsublats(links::Links) = nsublats(links.intralink)
 ninterlinks(links::Links) = length(links.interlinks)
 allilinks(links::Links) = (getilink(links, i) for i in 0:ninterlinks(links))
 getilink(links::Links, i::Int) = i == 0 ? links.intralink : links.interlinks[i]
-neighbors(links::Links, i, (s1, s2)::Tuple{Int,Int}) = 
-    Iterators.flatten(neighbors(ilink, i, (s1, s2)) for ilink in allilinks(links))
+neighbors(links::Links, src, (s1, s2)::Tuple{Int,Int}) = 
+    Iterators.flatten(neighbors(ilink, src, (s1, s2)) for ilink in allilinks(links))
 # @inline nsiteslist(links::Links) = [nsites(links.intralink.slinks[s, s]) for s in 1:nsublats(links)]
 
 transform!(l::L, f::F) where {L<:Links, F<:Function} = (transform!(l.intralink, f); transform!.(l.interlinks, f); return l)

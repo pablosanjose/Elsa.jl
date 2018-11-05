@@ -2,45 +2,40 @@
 # Elements
 #######################################################################
 
-struct ShiftedElements{L,N}
-    elements::Vector{SVector{N,Int}}
-    ndist::SVector{L,Int}
-end
-
-struct Elements{L,N}
-    shifted::Vector{ShiftedElements{L,N}}
+struct Elements{N}
+    intra::Vector{SVector{N,Int}}
+    all::Vector{SVector{N,Int}}
 end
 
 function Elements(lat::Lattice{T,E}, ::Val{N} = Val(E+1); sublat::Int = 1) where {T,E,N} 
-    shiftedelements = [buildelements(lat, nilink, sublat, Val(N)) for nilink in 0:ninterlinks(lat.links)]
-    return Elements(shiftedelements)
+    intra = buildelements(lat, true,  sublat, Val(N))
+    all = buildelements(lat, false, sublat, Val(N))
+    return Elements(intra, all)
 end
         
 Base.show(io::IO, elements::Elements{N}) where {N} = 
     print(io, "Elements{$N}: $(nelements(elements)) elements ($N-vertex)")
 
-nelements(el::ShiftedElements) = length(el.elements)
-nelements(el::Elements) = isempty(el.shifted) ? 0 : sum(nelements(se) for se in el.shifted)
+nelements(el::Elements) = length(el.all)
 
-function buildelements(lat, nilink, sublat, ::Val{N}) where {T,E,N} 
-    ilink = getilink(lat, nilink)
-    ndist = ilink.ndist
-    slink = ilink.slinks[sublat,sublat]
+function buildelements(lat, onlyintra, sublat, ::Val{N}) where {N}
+    slinkintra = lat.links.intralink.slinks[sublat, sublat]
 
     elements = SVector{N,Int}[]
-    isempty(slink) && return ShiftedElements(elements, ndist)
+    isempty(slinkintra) && return elements
 
     candidates = SVector{N,Int}[]
     buffer1 = Int[]
     buffer2 = Int[]
-    for src in sources(slink)
+    for src in sources(slinkintra)
         resize!(candidates, 0)
         push!(candidates, modifyat(zero(SVector{N,Int}), 1, src))
         imax = 0
         for pass in 2:N
             (imin, imax) = (imax + 1, length(candidates))
             for i in imin:imax
-                neighborbuffer = _common_ordered_neighbors!(buffer1, buffer2, candidates[i], pass - 1, slink)
+                neighborbuffer = 
+                    _common_ordered_neighbors!(buffer1, buffer2, candidates[i], pass - 1, lat.links, onlyintra, sublat)
                 for neigh in neighborbuffer
                     push!(candidates, modifyat(candidates[i], pass, neigh))
                 end
@@ -54,24 +49,27 @@ function buildelements(lat, nilink, sublat, ::Val{N}) where {T,E,N}
     
     alignnormals!(elements, lat.sublats[sublat].sites)
     
-    return ShiftedElements(elements, ndist)
+    return elements
 end
 
-function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int}, upto, slink) where {N}
+function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int}, upto, links, onlyintra, sublat) where {N}
     min_neighbor = maximum(candidate)
     resize!(buffer1, 0)
     resize!(buffer2, 0)
-    for neigh in neighbors(slink, candidate[1])
+    for neigh in _allneighbors(links, candidate[1], sublat, onlyintra)
         push!(buffer1, neigh)
     end
     for j in 2:upto
-        for neigh in neighbors(slink, candidate[j])
+        for neigh in _allneighbors(links, candidate[j], sublat, onlyintra)
             (neigh > min_neighbor) && (neigh in buffer1) && push!(buffer2, neigh)
         end
         buffer1, buffer2 = buffer2, buffer1
     end
     return buffer1
 end
+
+_allneighbors(links, i, sublat, onlyintra) =
+    onlyintra ? neighbors(links.intralink, i, (sublat, sublat)) : neighbors(links, i, (sublat, sublat))
 
 function alignnormals!(elements::Vector{SVector{N,Int}}, sites::Vector{SVector{E,T}}) where {N,E,T}    
     switch = SVector(ntuple(i -> i < N - 1 ? i : 2N - i - 1 , Val(N)))
@@ -90,7 +88,7 @@ elementvolume(vs::NTuple{L,SVector{L,T}}) where {L,T} = det(hcat(vs...))
 
 struct Mesh{T,E,L,N,EL}
     lattice::Lattice{T,E,L,EL}
-    elements::Elements{L,N}
+    elements::Elements{N}
 end
 Mesh(lattice::Lattice{T,E,L}, valn::Val{N} = Val(L+1); sublat::Int = 1) where {T,E,L,N} = Mesh(lattice, Elements(lattice, valn; sublat = sublat))
 
