@@ -2,24 +2,34 @@
 # Elements
 #######################################################################
 
-struct Elements{N}
-    indices::Vector{SVector{N,Int}}
+struct ShiftedElements{L,N}
+    elements::Vector{SVector{N,Int}}
+    ndist::SVector{L,Int}
+end
+
+struct Elements{L,N}
+    shifted::Vector{ShiftedElements{L,N}}
 end
 
 function Elements(lat::Lattice{T,E}, ::Val{N} = Val(E+1); sublat::Int = 1) where {T,E,N} 
-    inds = elements(lat.links.intralink.slinks[sublat,sublat], Val(N))
-    alignnormals!(inds, lat.sublats[sublat].sites)
-    return Elements(inds)
+    shiftedelements = [buildelements(lat, nilink, sublat, Val(N)) for nilink in 0:ninterlinks(lat.links)]
+    return Elements(shiftedelements)
 end
         
 Base.show(io::IO, elements::Elements{N}) where {N} = 
     print(io, "Elements{$N}: $(nelements(elements)) elements ($N-vertex)")
 
-nelements(el::Elements) = length(el.indices)
+nelements(el::ShiftedElements) = length(el.elements)
+nelements(el::Elements) = isempty(el.shifted) ? 0 : sum(nelements(se) for se in el.shifted)
 
-function elements(slink::Slink{T,E}, ::Val{N}) where {T,E,N} 
-    indices = SVector{N,Int}[]
-    isempty(slink) && return indices
+function buildelements(lat, nilink, sublat, ::Val{N}) where {T,E,N} 
+    ilink = getilink(lat, nilink)
+    ndist = ilink.ndist
+    slink = ilink.slinks[sublat,sublat]
+
+    elements = SVector{N,Int}[]
+    isempty(slink) && return ShiftedElements(elements, ndist)
+
     candidates = SVector{N,Int}[]
     buffer1 = Int[]
     buffer2 = Int[]
@@ -38,10 +48,13 @@ function elements(slink::Slink{T,E}, ::Val{N}) where {T,E,N}
         end
         (imin, imax) = (imax + 1, length(candidates))
         for i in imin:imax
-            push!(indices, candidates[i])
+            push!(elements, candidates[i])
         end
     end
-    return indices
+    
+    alignnormals!(elements, lat.sublats[sublat].sites)
+    
+    return ShiftedElements(elements, ndist)
 end
 
 function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int}, upto, slink) where {N}
@@ -60,15 +73,28 @@ function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int},
     return buffer1
 end
 
-alignnormals!(elements, sites) = elements
-function alignnormals!(elements::Vector{SVector{3,Int}}, sites::Vector{SVector{E,T}}) where {E,T}
+function alignnormals!(elements::Vector{SVector{N,Int}}, sites::Vector{SVector{E,T}}) where {N,E,T}    
+    switch = SVector(ntuple(i -> i < N - 1 ? i : 2N - i - 1 , Val(N)))
     for (i, element) in enumerate(elements)
-        s1 = padright(sites[element[2]] - sites[element[1]], zero(T), Val(3)) 
-        s2 = padright(sites[element[3]] - sites[element[1]], zero(T), Val(3)) 
-        cross(s1, s2)[3] < 0 && (elements[i] = reverse(element))
+        volume = elementvolume(ntuple(j -> padright(sites[element[j+1]] - sites[element[1]], Val(N-1)), Val(N-1)))
+        volume < 0 && (elements[i] = element[switch])
     end
     return elements
 end
+
+elementvolume(vs::NTuple{L,SVector{L,T}}) where {L,T} = det(hcat(vs...))
+
+#######################################################################
+# Mesh
+#######################################################################
+
+struct Mesh{T,E,L,N,EL}
+    lattice::Lattice{T,E,L,EL}
+    elements::Elements{L,N}
+end
+Mesh(lattice::Lattice{T,E,L}, valn::Val{N} = Val(L+1); sublat::Int = 1) where {T,E,L,N} = Mesh(lattice, Elements(lattice, valn; sublat = sublat))
+
+nelements(m::Mesh) = nelements(m.elements)
 
 #######################################################################
 # BrillouinMesh
@@ -93,33 +119,32 @@ BrillouinMesh{Float64,2} : discretization of 2-dimensional Brillouin zone
 ```
 """
 struct BrillouinMesh{T,L,N,LL}
-    mesh::Lattice{T,L,L,LL}
+    mesh::Mesh{T,L,L,N,LL}
     uniform::Bool
     partitions::NTuple{L,Int}
-    elements::Elements{N}
 end
 
 function BrillouinMesh(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 5) where {T,E,L}
     partitions_tuple = tontuple(Val(L), partitions)
     if uniform
-        mesh = uniform_mesh(lat, partitions_tuple)
+        meshlat = uniform_mesh(lat, partitions_tuple)
     else
-        mesh = simple_mesh(lat, partitions_tuple)
+        meshlat = simple_mesh(lat, partitions_tuple)
     end
     # wrappedmesh = wrap(mesh)
-    elements = Elements(mesh)
-    return BrillouinMesh(mesh, uniform, partitions_tuple, elements)
+    mesh = Mesh(meshlat)
+    return BrillouinMesh(mesh, uniform, partitions_tuple)
 end
 BrillouinMesh(sys::System; kw...) = BrillouinMesh(sys.lattice; kw...)
 
 Base.show(io::IO, m::BrillouinMesh{T,L,N}) where {T,L,N} =
     print(io, "BrillouinMesh{$T,$L} : discretization of $L-dimensional Brillouin zone
     Mesh type  : $(m.uniform ? "uniform" : "simple")
-    Vertices   : $(nsites(m.mesh)) 
+    Vertices   : $(nsites(m.mesh.lattice)) 
     Partitions : $(m.partitions)
     $N-elements : $(nelements(m))")
 
-nelements(m::BrillouinMesh) = nelements(m.elements)
+nelements(m::BrillouinMesh) = nelements(m.mesh)
 
 # phi-space sampling z, k-space G'z. M = diagonal(partitions)
 # M G' z =  Tr * n, where n are SVector{L,Int}, and Tr is a hypertriangular lattice

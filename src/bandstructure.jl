@@ -1,4 +1,3 @@
-
 #######################################################################
 # Spectrum
 #######################################################################
@@ -14,9 +13,8 @@ struct Spectrum{T<:Real,L}
 end
 
 function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; kw...) where {T,E,L}
-    # knpoints = bzmesh.mesh.sublats[1].sites
     shift = 0.01*rand(SVector{E,T})
-    knpoints = bzmesh.mesh.sublats[1].sites
+    knpoints = bzmesh.mesh.lattice.sublats[1].sites
     npoints = length(knpoints)
     first_h = hamiltonian(sys, kn = knpoints[1]+shift)
     buffermatrix = Matrix{Complex{T}}(undef, size(first_h))
@@ -63,33 +61,24 @@ function spectrum_arpack(h::SparseMatrixCSC; levels = 2, sigma = 1.0im, kw...)
     return (real.(energies), states)
 end
 
-
-# function spectrum(hsparse::SparseMatrixCSC{T}, alg; nenergies = 2, kw...) where {T}
+# function spectrum_arnoldimethods(hsparse::SparseMatrixCSC{T}, alg; nenergies = 2, kw...) where {T}
 #     h = Hermitian(hsparse)
 #     F = cholesky(H, check = false)
 #     L = ldlt!(F, H, shift = eps())
 #     map = LinearMap{T}(x -> F \ x, size(hsparse, 1))
 #     schur = partialschur(map, nev = nenergies, tol=1e-6, restarts = 100, which = LM())
+#     energies, states = partialeigen(schur)
 #     energies = 1 ./ schur.eigenvalues
-#     states = schur.Q
 #     return (energies, states)
-# end
-
-# function spectrum_dense(h::SparseMatrixCSC{T}; energies = missing, kw...) where {T}
-#     ismissing(energies) && nev = 
-#     ee = eigs(h; sigma = 1.0im, kw...)
-#     (energies, states) = (ee.values, ee.vectors)
-#     return (real.(energies), states)
 # end
 
 #######################################################################
 # Bandstructure
 #######################################################################
 
-struct Bandstructure{T,N,L,NL}  # N = L + 1 (nodes are energy-Blochphases)
-    mesh::Lattice{T,N,L,NL}
+struct Bandstructure{T,N,L,NL}  # E = N = L + 1 (nodes are [Blochphases..., energy])
+    mesh::Mesh{T,N,L,N,NL}
     states::Matrix{Complex{T}}
-    elements::Elements{N}
     nenergies::Int
     npoints::Int
 end
@@ -105,33 +94,33 @@ Bandstructure(sys::System; uniform = false, partitions = 5, kw...) =
 
 function Bandstructure(sys::System{T,E,L}, bz::BrillouinMesh{T,L}; threshold = 0.5, kw...) where {T,E,L}
     spectrum = Spectrum(sys, bz; kw...)
-    bzmesh = bz.mesh
-    bandmesh = emptybandmesh(bz)
-    addnodesbandmesh!(bandmesh, spectrum)
-    for (meshilink, bzilink) in zip(allilinks(bandmesh), allilinks(bzmesh))
-        linkbandmesh!(meshilink, bzilink, spectrum, threshold, bandmesh)
+    bzmeshlat = bz.mesh.lattice
+    bandmeshlat = emptybandmeshlat(bz)
+    addnodes!(bandmeshlat, spectrum)
+    for (meshilink, bzilink) in zip(allilinks(bandmeshlat), allilinks(bzmeshlat))
+        link!(meshilink, bzilink, spectrum, threshold, bandmeshlat)
     end
-    statesmatrix = reshape(spectrum.states, spectrum.statelength, :)
-    elements = Elements(bandmesh, Val(L+1))
-    return Bandstructure(bandmesh, statesmatrix, elements, spectrum.nenergies, spectrum.npoints)
+    states = reshape(spectrum.states, spectrum.statelength, :)
+    bandmesh = Mesh(bandmeshlat)
+    return Bandstructure(bandmesh, states, spectrum.nenergies, spectrum.npoints)
 end
 
-function emptybandmesh(bz::BrillouinMesh{T,L}) where {T,L}
-    bandmesh = Lattice(Sublat{T,L+1}(), Bravais(SMatrix{L+1,L,T}(I)))
-    bandmesh.links.interlinks = 
-        [emptyilink(ilink.ndist, bandmesh.sublats) for ilink in bz.mesh.links.interlinks]
-    return bandmesh
+function emptybandmeshlat(bz::BrillouinMesh{T,L}) where {T,L}
+    bandmeshlat = Lattice(Sublat{T,L+1}(), Bravais(SMatrix{L+1,L,T}(I)))
+    bandmeshlat.links.interlinks = 
+        [emptyilink(ilink.ndist, bandmeshlat.sublats) for ilink in bz.mesh.lattice.links.interlinks]
+    return bandmeshlat
 end
 
-function addnodesbandmesh!(bandmesh, spectrum)
-    meshnodes = bandmesh.sublats[1].sites
+function addnodes!(bandmeshlat, spectrum)
+    meshnodes = bandmeshlat.sublats[1].sites
     for nk in 1:spectrum.npoints, ne in 1:spectrum.nenergies
         push!(meshnodes, vcat(spectrum.knpoints[nk], spectrum.energies[ne, nk]))
     end
-    return bandmesh
+    return bandmeshlat
 end
 
-function linkbandmesh!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, threshold, bandmesh) where {T,L1,L}
+function link!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, threshold, bandmesh) where {T,L1,L}
     meshnodes = bandmesh.sublats[1,1].sites
     dist = bravaismatrix(bandmesh) * meshilink.ndist
     linearindices = LinearIndices(sp.energies)

@@ -484,6 +484,7 @@ nlinks(lat::Lattice) = nlinks(lat.links)
 isunlinked(lat::Lattice) = nlinks(lat.links) == 0
 coordination(lat::Lattice) = (2 * nlinks(lat.links.intralink) + nlinks(lat.links.interlinks))/nsites(lat)
 allilinks(lat::Lattice) = allilinks(lat.links)
+getilink(lat::Lattice, i::Int) = getilink(lat.links, i)
 @inline bravaismatrix(lat::Lattice) = bravaismatrix(lat.bravais)
 @inline bravaismatrix(br::Bravais) = br.matrix
 sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)
