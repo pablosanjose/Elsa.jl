@@ -159,3 +159,32 @@ function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1}, src
     return dest
 end
 
+function gather(set::AbstractVector{A}) where {T, A<:AbstractVector{T}}
+    subsets = Vector{A}[]
+    iscontained = Bool[]
+    shrink = false
+    for element in set
+        resize!(iscontained, length(subsets))
+        for (i, subset) in enumerate(subsets)
+            iscontained[i] = any(e in s for s in subset, e in element)
+        end
+        if all(!, iscontained)
+            push!(subsets, A[element])
+            continue
+        end
+        firstmatch = findfirst(iscontained)
+        for i in (firstmatch + 1):length(subsets)
+            if iscontained[i]
+                append!(subsets[firstmatch], subsets[i])
+                resize!(subsets[i], 0)
+                shrink = true
+            end
+        end
+        push!(subsets[firstmatch], element)
+        if shrink
+            deleteat!(subsets, isempty.(subsets))
+            shrink = false
+        end
+    end
+    return subsets
+end
