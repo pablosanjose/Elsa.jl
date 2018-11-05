@@ -7,7 +7,8 @@ struct Elements{N}
 end
 
 function Elements(lat::Lattice{T,E}, ::Val{N} = Val(E+1); sublat::Int = 1) where {T,E,N} 
-    inds = elements(lat.links.intralink.slinks[sublat,sublat], Val(N))   
+    inds = elements(lat.links.intralink.slinks[sublat,sublat], Val(N))
+    alignnormals!(inds, lat.sublats[sublat].sites)
     return Elements(inds)
 end
         
@@ -59,6 +60,16 @@ function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int},
     return buffer1
 end
 
+alignnormals!(elements, sites) = elements
+function alignnormals!(elements::Vector{SVector{3,Int}}, sites::Vector{SVector{E,T}}) where {E,T}
+    for (i, element) in enumerate(elements)
+        s1 = padright(sites[element[2]] - sites[element[1]], zero(T), Val(3)) 
+        s2 = padright(sites[element[3]] - sites[element[1]], zero(T), Val(3)) 
+        cross(s1, s2)[3] < 0 && (elements[i] = reverse(element))
+    end
+    return elements
+end
+
 #######################################################################
 # BrillouinMesh
 #######################################################################
@@ -95,8 +106,8 @@ function BrillouinMesh(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 
     else
         mesh = simple_mesh(lat, partitions_tuple)
     end
-    wrappedmesh = wrap(mesh)
-    elements = Elements(wrappedmesh)
+    # wrappedmesh = wrap(mesh)
+    elements = Elements(mesh)
     return BrillouinMesh(mesh, uniform, partitions_tuple, elements)
 end
 BrillouinMesh(sys::System; kw...) = BrillouinMesh(sys.lattice; kw...)

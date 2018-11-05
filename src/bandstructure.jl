@@ -13,10 +13,14 @@ struct Spectrum{T<:Real,L}
     bufferstate::Vector{Complex{T}}
 end
 
-function Spectrum(sys::System{T}, bzmesh::BrillouinMesh; kw...) where {T}
+function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; kw...) where {T,E,L}
+    # knpoints = bzmesh.mesh.sublats[1].sites
+    shift = 0.01*rand(SVector{E,T})
     knpoints = bzmesh.mesh.sublats[1].sites
     npoints = length(knpoints)
-    (energies_kn, states_kn) = spectrum(hamiltonian(sys, kn = knpoints[1]); kw...)
+    first_h = hamiltonian(sys, kn = knpoints[1]+shift)
+    buffermatrix = Matrix{Complex{T}}(undef, size(first_h))
+    (energies_kn, states_kn) = spectrum(first_h, buffermatrix; kw...)
     (statelength, nenergies) = size(states_kn)
     
     energies = Matrix{T}(undef, (nenergies, npoints))
@@ -27,7 +31,7 @@ function Spectrum(sys::System{T}, bzmesh::BrillouinMesh; kw...) where {T}
                states_kn,   CartesianIndices((1:statelength, 1:nenergies)))
 
     for nk in 2:npoints
-        (energies_nk, states_nk) = spectrum(hamiltonian(sys, kn = knpoints[nk]); kw...)
+        (energies_nk, states_nk) = spectrum(hamiltonian(sys, kn = knpoints[nk] + shift), buffermatrix; kw...)
         copyslice!(energies,    CartesianIndices((1:nenergies, nk:nk)), 
                    energies_nk, CartesianIndices(1:nenergies))
         copyslice!(states,      CartesianIndices((1:statelength, 1:nenergies, nk:nk)), 
@@ -39,9 +43,23 @@ function Spectrum(sys::System{T}, bzmesh::BrillouinMesh; kw...) where {T}
     return Spectrum(energies, nenergies, states, statelength, knpoints, npoints, bufferstate)
 end
 
-function spectrum(h::SparseMatrixCSC{T}; nenergies = 2, kw...) where {T}
-    ee = eigs(h; sigma = 1.0im, nev = nenergies, kw...)
-    (energies, states) = (ee.values, ee.vectors)
+function spectrum(h::SparseMatrixCSC, buffermatrix; kw...)
+    if size(h, 1) < 8
+        return spectrum_dense(h, buffermatrix; kw...)
+    else
+        return spectrum_arpack(h; kw...)
+    end
+end
+
+function spectrum_dense(h::SparseMatrixCSC, buffermatrix; kw...)
+    buffermatrix .= h
+    ee = eigen(buffermatrix)
+    energies, states = ee.values, ee.vectors
+    return (real.(energies), states)
+end
+
+function spectrum_arpack(h::SparseMatrixCSC; levels = 2, sigma = 1.0im, kw...)
+    (energies, states, _) = eigs(h; sigma = sigma, nev = levels, kw...)
     return (real.(energies), states)
 end
 

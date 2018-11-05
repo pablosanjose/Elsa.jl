@@ -5,8 +5,8 @@ uuid = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 version = "0.3.2"
 
 [[AbstractPlotting]]
-deps = ["ColorBrewer", "ColorTypes", "Colors", "FreeType", "FreeTypeAbstraction", "GeometryTypes", "InteractiveUtils", "IntervalSets", "LinearAlgebra", "Markdown", "Observables", "Packing", "PlotUtils", "Printf", "Random", "Serialization", "Showoff", "SignedDistanceFields", "StaticArrays", "Statistics", "Test", "UnicodeFun"]
-git-tree-sha1 = "c3bf268970d354b3c135153a522a084b5227dbf1"
+deps = ["ColorBrewer", "ColorTypes", "Colors", "FileIO", "FreeType", "FreeTypeAbstraction", "GeometryTypes", "IntervalSets", "LinearAlgebra", "Markdown", "Observables", "Packing", "PlotUtils", "Printf", "Random", "Serialization", "Showoff", "SignedDistanceFields", "StaticArrays", "Statistics", "Test", "UnicodeFun"]
+git-tree-sha1 = "5e6d19173be977617c649cc97544904fd97dd33e"
 repo-rev = "master"
 repo-url = "https://github.com/JuliaPlots/AbstractPlotting.jl.git"
 uuid = "537997a7-5e4e-5d89-9595-2241ea00577e"
@@ -215,9 +215,9 @@ version = "0.7.1"
 
 [[ImageTransformations]]
 deps = ["AxisAlgorithms", "ColorTypes", "ColorVectorSpace", "Colors", "CoordinateTransformations", "FixedPointNumbers", "IdentityRanges", "ImageCore", "Interpolations", "LinearAlgebra", "OffsetArrays", "StaticArrays", "Test"]
-git-tree-sha1 = "904bcf19c10176fc0725d9fd94c79bcddb392e93"
+git-tree-sha1 = "fdc6ecdb96a03f4df62ded306eb32fae68ccb588"
 uuid = "02fcd773-0e25-5acc-982a-7f6622650795"
-version = "0.6.0"
+version = "0.7.0"
 
 [[IndirectArrays]]
 deps = ["Compat", "Test"]
@@ -280,7 +280,7 @@ version = "0.4.4"
 
 [[Makie]]
 deps = ["AbstractPlotting", "AxisArrays", "Base64", "ColorBrewer", "ColorTypes", "ColorVectorSpace", "Colors", "Contour", "Dates", "FileIO", "FixedPointNumbers", "FreeType", "FreeTypeAbstraction", "GLFW", "GeometryTypes", "ImageAxes", "ImageCore", "ImageMagick", "ImageTransformations", "IndirectArrays", "IntervalSets", "IterTools", "LinearAlgebra", "Markdown", "ModernGL", "Observables", "Pkg", "PlotUtils", "Primes", "Printf", "QuartzImageIO", "Random", "Serialization", "Showoff", "StaticArrays", "Statistics", "Test", "UnicodeFun"]
-git-tree-sha1 = "4bd4f51f17348587e5063f37ef6b410c190a476e"
+git-tree-sha1 = "a48772e19820232f307a229f5a7a94488a8b1fe0"
 repo-rev = "master"
 repo-url = "https://github.com/JuliaPlots/Makie.jl.git"
 uuid = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"

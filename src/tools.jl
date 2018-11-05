@@ -21,9 +21,10 @@ toSVectors(::Type{T}) where {T} = SVector{0,T}[]
 toSVectors(::Type{T}, vs::Vararg{<:Any,N}) where {T,N} = [toSVector.(T, vs)...]
 toSVectors(vs...) = [promote(toSVector.(vs)...)...]
 
-@inline padright(sv::SVector{E,T}, x::T, ::Val{E}) where {E,T} = sv
-@inline padright(sv::SVector{E,T}, x::T2, ::Val{E2}) where {E,T,E2,T2} =
+padright(sv::SVector{E,T}, x::T, ::Val{E}) where {E,T} = sv
+padright(sv::SVector{E,T}, x::T2, ::Val{E2}) where {E,T,E2,T2} =
     SVector{E2, T2}(ntuple(i -> i > E ? x : T2(sv[i]), Val(E2)))
+padright(sv::SVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
 
 @inline padrightbottom(s::SMatrix{E,L}, st::Type{SMatrix{E2,L2,T2,EL2}}) where {E,L,E2,L2,T2,EL2} =
     SMatrix{E2,L2,T2,EL2}(ntuple(k -> _padrightbottom((k - 1) % E2 + 1, (k - 1) ÷ E2 + 1, zero(T2), s), Val(EL2)))
