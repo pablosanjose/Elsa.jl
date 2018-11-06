@@ -53,11 +53,13 @@ end
 
 spectrum_fake(h::SparseMatrixCSC; kw...) = (rand(size(h,1)), rand(size(h)...))
 
-function spectrum_dense(h::SparseMatrixCSC, buffermatrix; kw...)
+function spectrum_dense(h::SparseMatrixCSC, buffermatrix; levels = missing, kw...)
     buffermatrix .= h
-    ee = eigen(buffermatrix)
-    energies, states = ee.values, ee.vectors
-    return (real.(energies), states)
+    dimh = size(h, 1)
+    range = ismissing(levels) ? (1:dimh) : (((dimh - levels)÷2 + 1):((dimh + levels)÷2))
+    ee = eigen(Hermitian(buffermatrix), range)
+    energies, states = ee.values, ee.vectors   
+    return (energies, states)
 end
 
 function spectrum_arpack(h::SparseMatrixCSC; levels = 2, sigma = 1.0im, kw...)
@@ -97,7 +99,9 @@ Bandstructure(sys::System; uniform = false, partitions = 5, kw...) =
     Bandstructure(sys, BrillouinMesh(sys.lattice; uniform = uniform, partitions = partitions); kw...) 
 
 function Bandstructure(sys::System{T,E,L}, bz::BrillouinMesh{T,L}; threshold = 0.5, kw...) where {T,E,L}
+    @show "Start spectrum"
     spectrum = Spectrum(sys, bz; kw...)
+    @show "Spectrum done"
     bzmeshlat = bz.mesh.lattice
     bandmeshlat = emptybandmeshlat(bz)
     addnodes!(bandmeshlat, spectrum)
