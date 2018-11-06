@@ -13,7 +13,8 @@ struct Spectrum{T<:Real,L}
 end
 
 function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; kw...) where {T,E,L}
-    shift = 0.01 .+ zero(SVector{E,T})
+    # shift = 0.02 .+ zero(SVector{E,T})
+    shift = 0.02 * rand(SVector{E,T})
     knpoints = bzmesh.mesh.lattice.sublats[1].sites
     npoints = length(knpoints)
     first_h = hamiltonian(sys, kn = knpoints[1]+shift)
@@ -47,7 +48,10 @@ function spectrum(h::SparseMatrixCSC, buffermatrix; kw...)
     else
         return spectrum_arpack(h; kw...)
     end
+    # spectrum_fake(h)
 end
+
+spectrum_fake(h::SparseMatrixCSC; kw...) = (rand(size(h,1)), rand(size(h)...))
 
 function spectrum_dense(h::SparseMatrixCSC, buffermatrix; kw...)
     buffermatrix .= h

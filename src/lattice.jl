@@ -191,6 +191,10 @@ allilinks(links::Links) = (getilink(links, i) for i in 0:ninterlinks(links))
 getilink(links::Links, i::Int) = i == 0 ? links.intralink : links.interlinks[i]
 neighbors(links::Links, src, (s1, s2)::Tuple{Int,Int}) = 
     Iterators.flatten(neighbors(ilink, src, (s1, s2)) for ilink in allilinks(links))
+neighbors(links, i, sublats, onlyintra::Bool) = 
+    onlyintra ? neighbors(links.intralink, i, sublats) : neighbors(links, i, sublats)
+neighbors(links, i, sublats, onlyintra::Val{true}) = neighbors(links.intralink, i, sublats)
+neighbors(links, i, sublats, onlyintra::Val{false}) = neighbors(links, i, sublats)
 
 transform!(l::L, f::F) where {L<:Links, F<:Function} = (transform!(l.intralink, f); transform!.(l.interlinks, f); return l)
 
