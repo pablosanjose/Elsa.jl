@@ -3,56 +3,89 @@
 #######################################################################
 
 struct Elements{N}
-    intra::Vector{SVector{N,Int}}
-    all::Vector{SVector{N,Int}}
+    groupsintra::Vector{Vector{SVector{N,Int}}}
+    groups::Vector{Vector{SVector{N,Int}}}
 end
 
 function Elements(lat::Lattice{T,E}, ::Val{N} = Val(E+1); sublat::Int = 1) where {T,E,N} 
-    intra = buildelements(lat, true,  sublat, Val(N))
-    all = buildelements(lat, false, sublat, Val(N))
-    return Elements(intra, all)
+    groupsintra = buildelementgroups(lat, sublat, Val(true), Val(N))
+    groups = buildelementgroups(lat, sublat, Val(false), Val(N))
+    return Elements(groupsintra, groups)
 end
         
 Base.show(io::IO, elements::Elements{N}) where {N} = 
-    print(io, "Elements{$N}: $(nelements(elements)) elements ($N-vertex)")
+    print(io, "Elements{$N}: groups of connected $N-vertex elements
+    Total elements     : $(nelements(elements)) 
+    Total groups       : $(ngroups(elements)) 
+    Intracell elements : $(nelementsintra(elements))
+    Intracell groups   : $(ngroupsintra(elements))")
 
-nelements(el::Elements) = length(el.all)
+nelements(el::Elements) = isempty(el.groups) ? 0 : sum(length, el.groups)
+nelementsintra(el::Elements) = isempty(el.groupsintra) ? 0 : sum(length, el.groupsintra)
+ngroups(el::Elements) = length(el.groups)
+ngroupsintra(el::Elements) = length(el.groupsintra)
 
-function buildelements(lat, onlyintra, sublat, ::Val{N}) where {N}
-    slinkintra = lat.links.intralink.slinks[sublat, sublat]
-
-    elements = SVector{N,Int}[]
-    isempty(slinkintra) && return elements
-
+function buildelementgroups(lat, sublat, onlyintra, ::Val{N}) where {N}
+    sources = 1:nsites(lat.sublats[sublat])
+    unclassified = BitArray(true for _ in sources)
+    pending = Int[]
+    
     candidates = SVector{N,Int}[]
     buffer1 = Int[]
     buffer2 = Int[]
-    for src in sources(slinkintra)
-        resize!(candidates, 0)
-        push!(candidates, modifyat(zero(SVector{N,Int}), 1, src))
-        imax = 0
-        for pass in 2:N
-            (imin, imax) = (imax + 1, length(candidates))
-            for i in imin:imax
-                neighborbuffer = 
-                    _common_ordered_neighbors!(buffer1, buffer2, candidates[i], pass - 1, lat.links, onlyintra, sublat)
-                for neigh in neighborbuffer
-                    push!(candidates, modifyat(candidates[i], pass, neigh))
-                end
+
+    elementgroups = Vector{SVector{N,Int}}[]
+    group = SVector{N,Int}[]
+    seed = 1
+    while !isempty(pending) || any(unclassified)
+        if isempty(pending)
+            if !isempty(group) 
+                push!(elementgroups, group) # store previous group
+                group = SVector{N,Int}[]
             end
+            seed = findfirst(unclassified)
+            unclassified[seed] = false
+            push!(pending, seed)
         end
-        (imin, imax) = (imax + 1, length(candidates))
-        for i in imin:imax
-            push!(elements, candidates[i])
-        end
+        src = pop!(pending)
+        addelements!(group, unclassified, pending, src, lat.links, sublat, onlyintra, candidates, buffer1, buffer2)
     end
     
-    alignnormals!(elements, lat.sublats[sublat].sites)
+    for egroup in elementgroups
+        alignnormals!(egroup, lat.sublats[sublat].sites)
+    end
     
-    return elements
+    return elementgroups
 end
 
-function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int}, upto, links, onlyintra, sublat) where {N}
+function addelements!(group::Vector{SVector{N,Int}}, unclassified, pending, src::Int, links, sublat, onlyintra, candidates, buffer1, buffer2) where {N}
+    resize!(candidates, 0)
+    push!(candidates, modifyat(zero(SVector{N,Int}), 1, src))
+    imax = 0
+    for pass in 2:N
+        (imin, imax) = (imax + 1, length(candidates))
+        for i in imin:imax
+            neighborbuffer = 
+                _common_ordered_neighbors!(buffer1, buffer2, candidates[i], pass - 1, links, sublat, onlyintra)
+            for neigh in neighborbuffer
+                push!(candidates, modifyat(candidates[i], pass, neigh))
+            end
+        end
+    end
+    (imin, imax) = (imax + 1, length(candidates))
+    for i in imin:imax
+        push!(group, candidates[i])
+        for c in candidates[i]
+            if unclassified[c] 
+                unclassified[c] = false
+                push!(pending, c)
+            end
+        end
+    end
+    return group
+end
+
+function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int}, upto, links, sublat, onlyintra) where {N}
     min_neighbor = maximum(candidate)
     resize!(buffer1, 0)
     resize!(buffer2, 0)
@@ -68,8 +101,8 @@ function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int},
     return buffer1
 end
 
-_allneighbors(links, i, sublat, onlyintra) =
-    onlyintra ? neighbors(links.intralink, i, (sublat, sublat)) : neighbors(links, i, (sublat, sublat))
+_allneighbors(links, i, sublat, onlyintra::Val{false}) = neighbors(links, i, (sublat, sublat))
+_allneighbors(links, i, sublat, onlyintra::Val{true}) = neighbors(links.intralink, i, (sublat, sublat))
 
 function alignnormals!(elements::Vector{SVector{N,Int}}, sites::Vector{SVector{E,T}}) where {N,E,T}    
     switch = SVector(ntuple(i -> i < N - 1 ? i : 2N - i - 1 , Val(N)))

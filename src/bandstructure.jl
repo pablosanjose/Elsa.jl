@@ -13,7 +13,7 @@ struct Spectrum{T<:Real,L}
 end
 
 function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; kw...) where {T,E,L}
-    shift = 0.01*rand(SVector{E,T})
+    shift = 0.01 .+ zero(SVector{E,T})
     knpoints = bzmesh.mesh.lattice.sublats[1].sites
     npoints = length(knpoints)
     first_h = hamiltonian(sys, kn = knpoints[1]+shift)
