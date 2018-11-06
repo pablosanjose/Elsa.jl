@@ -43,7 +43,7 @@ function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; kw...) where {T,E,L
 end
 
 function spectrum(h::SparseMatrixCSC, buffermatrix; kw...)
-    if size(h, 1) < 8
+    if size(h, 1) < 129
         return spectrum_dense(h, buffermatrix; kw...)
     else
         return spectrum_arpack(h; kw...)
