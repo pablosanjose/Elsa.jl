@@ -17,7 +17,7 @@ function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; kw...) where {T,E,L
     shift = 0.02 * rand(SVector{E,T})
     knpoints = bzmesh.mesh.lattice.sublats[1].sites
     npoints = length(knpoints)
-    first_h = hamiltonian(sys, kn = knpoints[1]+shift)
+    first_h = hamiltonian(sys, kn = knpoints[1] + shift)
     buffermatrix = Matrix{Complex{T}}(undef, size(first_h))
     (energies_kn, states_kn) = spectrum(first_h, buffermatrix; kw...)
     (statelength, nenergies) = size(states_kn)
