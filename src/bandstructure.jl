@@ -98,13 +98,13 @@ Base.show(io::IO, bs::Bandstructure{T,N,L}) where {T,N,L} =
 Bandstructure(sys::System; uniform = false, partitions = 5, kw...) = 
     Bandstructure(sys, BrillouinMesh(sys.lattice; uniform = uniform, partitions = partitions); kw...) 
 
-function Bandstructure(sys::System{T,E,L}, bz::BrillouinMesh{T,L}; threshold = 0.5, kw...) where {T,E,L}
+function Bandstructure(sys::System{T,E,L}, bz::BrillouinMesh{T,L}; linkthreshold = 0.5, kw...) where {T,E,L}
     spectrum = Spectrum(sys, bz; kw...)
     bzmeshlat = bz.mesh.lattice
     bandmeshlat = emptybandmeshlat(bz)
     addnodes!(bandmeshlat, spectrum)
     for (meshilink, bzilink) in zip(allilinks(bandmeshlat), allilinks(bzmeshlat))
-        link!(meshilink, bzilink, spectrum, threshold, bandmeshlat)
+        link!(meshilink, bzilink, spectrum, linkthreshold, bandmeshlat)
     end
     states = reshape(spectrum.states, spectrum.statelength, :)
     bandmesh = Mesh(bandmeshlat)
@@ -126,7 +126,7 @@ function addnodes!(bandmeshlat, spectrum)
     return bandmeshlat
 end
 
-function link!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, threshold, bandmesh) where {T,L1,L}
+function link!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, linkthreshold, bandmesh) where {T,L1,L}
     meshnodes = bandmesh.sublats[1,1].sites
     dist = bravaismatrix(bandmesh) * meshilink.ndist
     linearindices = LinearIndices(sp.energies)
@@ -143,7 +143,7 @@ function link!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, threshold, bandm
         copyslice!(state,  CartesianIndices(1:sp.statelength), 
                    states, CartesianIndices((1:sp.statelength, ne_src:ne_src, nk_src:nk_src)))
         @inbounds for nk_target in neighbors(bzilink, nk_src, (1,1))
-            ne_target = findmostparallel(state, states, nk_target, threshold)
+            ne_target = findmostparallel(state, states, nk_target, linkthreshold)
             if !iszero(ne_target)
                 n_target = linearindices[ne_target, nk_target]
                 push!(targets, n_target)
@@ -156,9 +156,9 @@ function link!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, threshold, bandm
     return meshilink
 end
    
-function findmostparallel(state::Vector{Complex{T}}, states, ktarget, threshold) where {T}
+function findmostparallel(state::Vector{Complex{T}}, states, ktarget, linkthreshold) where {T}
     target = 0
-    maxproj = T(threshold)
+    maxproj = T(linkthreshold)
     (length(state) == size(states, 1) && ktarget <= size(states, 3)) || 
         throw(DimensionMismatch("Error in diagonalization"))
     @inbounds for ne in axes(states, 2)
