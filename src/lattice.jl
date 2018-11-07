@@ -151,21 +151,21 @@ struct Ilink{T,E,L}
 end
 
 function emptyilink(ndist::SVector{L,Int}, sublats::Vector{Sublat{T,E}}) where {T,E,L}
-    isinter = !iszero(ndist)
-    ns = length(sublats)
-    emptyslink = zero(Slink{T,E})
-    slinks = fill(emptyslink, ns, ns)
+    # ns = length(sublats)
+    # emptyslink = Slink{T,E}(ns)
+    slinks = [Slink{T,E}(nsites(s1)) for s2 in sublats, s1 in sublats]
     return Ilink(ndist, slinks)
 end
 
-nlinks(ilinks::Vector{<:Ilink}) = isempty(ilinks) ? 0 : sum(nlinks(ilink) for ilink in ilinks)
-nlinks(ilink::Ilink) = isempty(ilink.slinks) ? 0 : sum(nlinks(ilink.slinks, i) for i in eachindex(ilink.slinks))
+nlinks(ilinks::Vector{<:Ilink}) = isempty(ilinks) ? 0 : sum(nlinks, ilinks)
+nlinks(ilink::Ilink) = isempty(ilink.slinks) ? 0 : sum(i -> nlinks(ilink.slinks, i), eachindex(ilink.slinks))
 nlinks(ss::Array{<:Slink}, i) = nlinks(ss[i])
 nsublats(ilink::Ilink) = size(ilink.slinks, 1)
 
 Base.isempty(ilink::Ilink) = nlinks(ilink) == 0
 
 neighbors(ilink::Ilink, src, (s1,s2)::Tuple{Int,Int}) = neighbors(ilink.slinks[s2, s1], src)
+neighbors(ilinks::Vector{<:Ilink}, src, (s1,s2)::Tuple{Int,Int}) = Iterators.flatten(neighbors(ilink, src, (s1, s2)) for ilink in ilinks)
 
 transform!(i::IL, f::F) where {IL<:Ilink, F<:Function} = (transform!.(i.slinks, f); i)
 
@@ -189,9 +189,12 @@ nsublats(links::Links) = nsublats(links.intralink)
 ninterlinks(links::Links) = length(links.interlinks)
 allilinks(links::Links) = (getilink(links, i) for i in 0:ninterlinks(links))
 getilink(links::Links, i::Int) = i == 0 ? links.intralink : links.interlinks[i]
-neighbors(links::Links, i, (s1, s2)::Tuple{Int,Int}) = 
-    Iterators.flatten(neighbors(ilink, i, (s1, s2)) for ilink in allilinks(links))
-# @inline nsiteslist(links::Links) = [nsites(links.intralink.slinks[s, s]) for s in 1:nsublats(links)]
+neighbors(links::Links, src, (s1, s2)::Tuple{Int,Int}) = 
+    Iterators.flatten(neighbors(ilink, src, (s1, s2)) for ilink in allilinks(links))
+neighbors(links, i, sublats, onlyintra::Bool) = 
+    onlyintra ? neighbors(links.intralink, i, sublats) : neighbors(links, i, sublats)
+neighbors(links, i, sublats, onlyintra::Val{true}) = neighbors(links.intralink, i, sublats)
+neighbors(links, i, sublats, onlyintra::Val{false}) = neighbors(links, i, sublats)
 
 transform!(l::L, f::F) where {L<:Links, F<:Function} = (transform!(l.intralink, f); transform!.(l.interlinks, f); return l)
 
@@ -476,7 +479,7 @@ seedtype(::Type{L}, opt) where {L<:Lattice} = L
 vectorsastuples(lat::Lattice) = vectorsastuples(lat.bravais.matrix)
 vectorsastuples(br::Bravais) =  vectorsastuples(br.matrix)
 vectorsastuples(mat::SMatrix{E,L}) where {E,L} = ntuple(l -> round.((mat[:,l]... ,), digits = 6), Val(L))
-nsites(lat::Lattice) = isempty(lat.sublats) ? 0 : sum(nsites(sublat) for sublat in lat.sublats)
+nsites(lat::Lattice) = isempty(lat.sublats) ? 0 : sum(nsites, lat.sublats)
 nsiteslist(lat::Lattice) = [nsites(sublat) for sublat in lat.sublats]
 nsublats(lat::Lattice)::Int = length(lat.sublats)
 sublatnames(lat::Lattice) = Union{Symbol,Missing}[slat.name for slat in lat.sublats]
@@ -484,6 +487,7 @@ nlinks(lat::Lattice) = nlinks(lat.links)
 isunlinked(lat::Lattice) = nlinks(lat.links) == 0
 coordination(lat::Lattice) = (2 * nlinks(lat.links.intralink) + nlinks(lat.links.interlinks))/nsites(lat)
 allilinks(lat::Lattice) = allilinks(lat.links)
+getilink(lat::Lattice, i::Int) = getilink(lat.links, i)
 @inline bravaismatrix(lat::Lattice) = bravaismatrix(lat.bravais)
 @inline bravaismatrix(br::Bravais) = br.matrix
 sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)

@@ -3,56 +3,81 @@
 #######################################################################
 
 struct Elements{N}
-    indices::Vector{SVector{N,Int}}
+    groupsintra::Vector{Vector{SVector{N,Int}}}
+    groups::Vector{Vector{SVector{N,Int}}}
 end
 
 function Elements(lat::Lattice{T,E}, ::Val{N} = Val(E+1); sublat::Int = 1) where {T,E,N} 
-    inds = elements(lat.links.intralink.slinks[sublat,sublat], Val(N))
-    alignnormals!(inds, lat.sublats[sublat].sites)
-    return Elements(inds)
+    groupsintra = buildelementgroups(lat, sublat, Val(true), Val(N))
+    groups = buildelementgroups(lat, sublat, Val(false), Val(N))
+    return Elements(groupsintra, groups)
 end
         
 Base.show(io::IO, elements::Elements{N}) where {N} = 
-    print(io, "Elements{$N}: $(nelements(elements)) elements ($N-vertex)")
+    print(io, "Elements{$N}: groups of connected $N-vertex elements
+    Total elements     : $(nelements(elements)) 
+    Total groups       : $(ngroups(elements)) 
+    Intracell elements : $(nelementsintra(elements))
+    Intracell groups   : $(ngroupsintra(elements))")
 
-nelements(el::Elements) = length(el.indices)
+nelements(el::Elements) = isempty(el.groups) ? 0 : sum(length, el.groups)
+nelementsintra(el::Elements) = isempty(el.groupsintra) ? 0 : sum(length, el.groupsintra)
+ngroups(el::Elements) = length(el.groups)
+ngroupsintra(el::Elements) = length(el.groupsintra)
 
-function elements(slink::Slink{T,E}, ::Val{N}) where {T,E,N} 
-    indices = SVector{N,Int}[]
-    isempty(slink) && return indices
-    candidates = SVector{N,Int}[]
+function buildelementgroups(lat, sublat, onlyintra, ::Val{N}) where {N}
+    sitesubbands = siteclusters(lat, sublat, onlyintra)
+
+    candidatebuffer = SVector{N,Int}[]
     buffer1 = Int[]
     buffer2 = Int[]
-    for src in sources(slink)
-        resize!(candidates, 0)
-        push!(candidates, modifyat(zero(SVector{N,Int}), 1, src))
-        imax = 0
-        for pass in 2:N
-            (imin, imax) = (imax + 1, length(candidates))
-            for i in imin:imax
-                neighborbuffer = _common_ordered_neighbors!(buffer1, buffer2, candidates[i], pass - 1, slink)
-                for neigh in neighborbuffer
-                    push!(candidates, modifyat(candidates[i], pass, neigh))
-                end
+
+    elementgroups = [SVector{N,Int}[] for _ in sitesubbands]
+    for (s, sitesubband) in enumerate(sitesubbands), src in sitesubband
+        addelements!(elementgroups[s], src, lat.links, sublat, onlyintra, candidatebuffer, buffer1, buffer2)
+    end
+    
+    for egroup in elementgroups
+        alignnormals!(egroup, lat.sublats[sublat].sites)
+    end
+    
+    return elementgroups
+end
+# candidatebuffer is a list of N-elements with src as a first vertex
+# a given (src, 0, 0...) multiplies to (src, n1, 0...) and (src, n2, 0...), where n1,n2 are src neighbors
+# _common_ordered_neighbors! does this for each (src, ....), adding neighs to src to buffer1, and then looking
+# among neigh to ni at each levels for common neighbors, adding them to buffer2. Interchange and continue
+function addelements!(group::Vector{SVector{N,Int}}, src::Int, links, sublat, onlyintra, candidatebuffer, buffer1, buffer2) where {N}
+    resize!(candidatebuffer, 0)
+    candidatebuffer = SVector{N,Int}[]
+    push!(candidatebuffer, modifyat(zero(SVector{N,Int}), 1, src))
+    imax = 0
+    for pass in 2:N
+        (imin, imax) = (imax + 1, length(candidatebuffer))
+        for i in imin:imax
+            neighborbuffer = 
+                _common_ordered_neighbors!(buffer1, buffer2, candidatebuffer[i], pass - 1, links, sublat, onlyintra)
+            for neigh in neighborbuffer
+                push!(candidatebuffer, modifyat(candidatebuffer[i], pass, neigh))
             end
         end
-        (imin, imax) = (imax + 1, length(candidates))
-        for i in imin:imax
-            push!(indices, candidates[i])
-        end
     end
-    return indices
+    (imin, imax) = (imax + 1, length(candidatebuffer))
+    for i in imin:imax
+        push!(group, candidatebuffer[i])
+    end
+    return group
 end
 
-function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int}, upto, slink) where {N}
+function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int}, upto, links, sublat, onlyintra) where {N}
     min_neighbor = maximum(candidate)
     resize!(buffer1, 0)
     resize!(buffer2, 0)
-    for neigh in neighbors(slink, candidate[1])
+    for neigh in neighbors(links, candidate[1], (sublat, sublat), onlyintra)
         push!(buffer1, neigh)
     end
     for j in 2:upto
-        for neigh in neighbors(slink, candidate[j])
+        for neigh in neighbors(links, candidate[j], (sublat, sublat), onlyintra)
             (neigh > min_neighbor) && (neigh in buffer1) && push!(buffer2, neigh)
         end
         buffer1, buffer2 = buffer2, buffer1
@@ -60,15 +85,38 @@ function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int},
     return buffer1
 end
 
-alignnormals!(elements, sites) = elements
-function alignnormals!(elements::Vector{SVector{3,Int}}, sites::Vector{SVector{E,T}}) where {E,T}
+# function alignnormals!(elements::Vector{SVector{N,Int}}, sites::Vector{SVector{E,T}}) where {N,E,T}    
+#     switch = SVector(ntuple(i -> i < N - 1 ? i : 2N - i - 1 , Val(N)))
+#     for (i, element) in enumerate(elements)
+#         volume = elementvolume(ntuple(j -> padright(sites[element[j+1]] - sites[element[1]], Val(N-1)), Val(N-1)))
+#         volume < 0 && (elements[i] = element[switch])
+#     end
+#     return elements
+# end
+
+function alignnormals!(elements::Vector{SVector{N,Int}}, sites::Vector{SVector{E,T}}) where {N,E,T}    
     for (i, element) in enumerate(elements)
-        s1 = padright(sites[element[2]] - sites[element[1]], zero(T), Val(3)) 
-        s2 = padright(sites[element[3]] - sites[element[1]], zero(T), Val(3)) 
-        cross(s1, s2)[3] < 0 && (elements[i] = reverse(element))
+        volume = elementvolume(sites[element])
+        volume < zero(T) && (elements[i] = switchlast(element))
     end
     return elements
 end
+switchlast(s::SVector{N}) where {N} = SVector(ntuple(i -> i < N - 1 ? s[i] : s[2N - i - 1] , Val(N)))
+
+elementvolume(vs::SVector{N}) where {N} = elementvolume(ntuple(i->padright(vs[i+1] - vs[1], Val(N-1)), Val(N-1)))
+elementvolume(vs::NTuple{L,SVector{L,T}}) where {L,T} = det(hcat(vs...))
+
+#######################################################################
+# Mesh
+#######################################################################
+
+struct Mesh{T,E,L,N,EL}
+    lattice::Lattice{T,E,L,EL}
+    elements::Elements{N}
+end
+Mesh(lattice::Lattice{T,E,L}, valn::Val{N} = Val(L+1); sublat::Int = 1) where {T,E,L,N} = Mesh(lattice, Elements(lattice, valn; sublat = sublat))
+
+nelements(m::Mesh) = nelements(m.elements)
 
 #######################################################################
 # BrillouinMesh
@@ -93,33 +141,32 @@ BrillouinMesh{Float64,2} : discretization of 2-dimensional Brillouin zone
 ```
 """
 struct BrillouinMesh{T,L,N,LL}
-    mesh::Lattice{T,L,L,LL}
+    mesh::Mesh{T,L,L,N,LL}
     uniform::Bool
     partitions::NTuple{L,Int}
-    elements::Elements{N}
 end
 
 function BrillouinMesh(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 5) where {T,E,L}
     partitions_tuple = tontuple(Val(L), partitions)
     if uniform
-        mesh = uniform_mesh(lat, partitions_tuple)
+        meshlat = uniform_mesh(lat, partitions_tuple)
     else
-        mesh = simple_mesh(lat, partitions_tuple)
+        meshlat = simple_mesh(lat, partitions_tuple)
     end
     # wrappedmesh = wrap(mesh)
-    elements = Elements(mesh)
-    return BrillouinMesh(mesh, uniform, partitions_tuple, elements)
+    mesh = Mesh(meshlat)
+    return BrillouinMesh(mesh, uniform, partitions_tuple)
 end
 BrillouinMesh(sys::System; kw...) = BrillouinMesh(sys.lattice; kw...)
 
 Base.show(io::IO, m::BrillouinMesh{T,L,N}) where {T,L,N} =
     print(io, "BrillouinMesh{$T,$L} : discretization of $L-dimensional Brillouin zone
     Mesh type  : $(m.uniform ? "uniform" : "simple")
-    Vertices   : $(nsites(m.mesh)) 
+    Vertices   : $(nsites(m.mesh.lattice)) 
     Partitions : $(m.partitions)
     $N-elements : $(nelements(m))")
 
-nelements(m::BrillouinMesh) = nelements(m.elements)
+nelements(m::BrillouinMesh) = nelements(m.mesh)
 
 # phi-space sampling z, k-space G'z. M = diagonal(partitions)
 # M G' z =  Tr * n, where n are SVector{L,Int}, and Tr is a hypertriangular lattice

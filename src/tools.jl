@@ -96,7 +96,7 @@ diagsmatrix(x::NTuple{L,T}) where {L,T} = SMatrix{L,L,T}(Diagonal(SVector(x)))
 tontuple(::Val{L}, x::T) where {L,T} = ntuple(_->x, Val(L))
 tontuple(::Val{L}, x::NTuple{L,T}) where {L,T} = x
 
-fastrank(s::SMatrix{N,M,<:Integer}) where {N,M,T} = fastrank2(convert(SMatrix{N,M,Float64}, s))
+fastrank(s::SMatrix{N,M,<:Integer}) where {N,M,T} = fastrank(convert(SMatrix{N,M,Float64}, s))
 function fastrank(s::SMatrix{N,M,T}) where {N,M,T<:AbstractFloat}
     R = qr(s).R
     tol = M * N * eps(maximum(s))
@@ -159,3 +159,32 @@ function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1}, src
     return dest
 end
 
+# function gather(set::AbstractVector{A}) where {T, A<:AbstractVector{T}}
+#     subsets = Vector{A}[]
+#     iscontained = Bool[]
+#     shrink = false
+#     for element in set
+#         resize!(iscontained, length(subsets))
+#         for (i, subset) in enumerate(subsets)
+#             iscontained[i] = any(e in s for s in subset, e in element)
+#         end
+#         if all(!, iscontained)
+#             push!(subsets, A[element])
+#             continue
+#         end
+#         firstmatch = findfirst(iscontained)
+#         for i in (firstmatch + 1):length(subsets)
+#             if iscontained[i]
+#                 append!(subsets[firstmatch], subsets[i])
+#                 resize!(subsets[i], 0)
+#                 shrink = true
+#             end
+#         end
+#         push!(subsets[firstmatch], element)
+#         if shrink
+#             deleteat!(subsets, isempty.(subsets))
+#             shrink = false
+#         end
+#     end
+#     return subsets
+# end

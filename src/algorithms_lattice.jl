@@ -312,3 +312,42 @@ function _add_neighbors_ilink!(slink, ilink_old, maps2, isinter, (s1, s2), (i, i
     end
     return nothing
 end
+
+#######################################################################
+# siteclusters : find disconnected site groups in a sublattice
+#######################################################################
+
+function siteclusters(lat::Lattice, sublat::Int, onlyintra)
+    ns = nsites(lat.sublats[sublat])
+    sitebins = fill(0, ns)  # sitebins[site] = bin
+    binclusters = Int[]     # binclusters[bin] = cluster number
+    pending = Int[]
+
+    bincounter = 0
+    clustercounter = 0
+    while !isempty(pending) || any(iszero, sitebins)
+        if isempty(pending)   # new cluster
+            seed = findfirst(iszero, sitebins)
+            bincounter += 1
+            clustercounter = isempty(binclusters) ? 1 : maximum(binclusters) + 1
+            sitebins[seed] = bincounter
+            push!(binclusters, clustercounter)
+            push!(pending, seed)
+        end
+        src = pop!(pending)
+        for neigh in neighbors(lat.links, src, (sublat, sublat), onlyintra)
+            if sitebins[neigh] == 0   # unclassified neighbor
+                push!(pending, neigh)
+                sitebins[neigh] = bincounter
+            else
+                clustercounter = min(clustercounter, binclusters[sitebins[neigh]])
+                binclusters[bincounter] = clustercounter
+            end
+        end
+    end
+    clusters = [Int[] for _ in 1:maximum(binclusters)]
+    for i in 1:ns
+        push!(clusters[binclusters[sitebins[i]]], i)
+    end
+    return clusters
+end
