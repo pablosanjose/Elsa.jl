@@ -85,15 +85,6 @@ function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int},
     return buffer1
 end
 
-# function alignnormals!(elements::Vector{SVector{N,Int}}, sites::Vector{SVector{E,T}}) where {N,E,T}    
-#     switch = SVector(ntuple(i -> i < N - 1 ? i : 2N - i - 1 , Val(N)))
-#     for (i, element) in enumerate(elements)
-#         volume = elementvolume(ntuple(j -> padright(sites[element[j+1]] - sites[element[1]], Val(N-1)), Val(N-1)))
-#         volume < 0 && (elements[i] = element[switch])
-#     end
-#     return elements
-# end
-
 function alignnormals!(elements::Vector{SVector{N,Int}}, sites::Vector{SVector{E,T}}) where {N,E,T}    
     for (i, element) in enumerate(elements)
         volume = elementvolume(sites[element])

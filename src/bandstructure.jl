@@ -109,6 +109,7 @@ function Bandstructure(sys::System{T,E,L}, bz::BrillouinMesh{T,L}; linkthreshold
     states = reshape(spectrum.states, spectrum.statelength, :)
     bandmesh = Mesh(bandmeshlat)
     return Bandstructure(bandmesh, states, spectrum.nenergies, spectrum.npoints)
+    # bandmeshlat
 end
 
 function emptybandmeshlat(bz::BrillouinMesh{T,L}) where {T,L}
@@ -157,20 +158,8 @@ function link!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, linkthreshold, b
 end
    
 function findmostparallel(state::Vector{Complex{T}}, states, ktarget, linkthreshold) where {T}
-    target = 0
     maxproj = T(linkthreshold)
-    (length(state) == size(states, 1) && ktarget <= size(states, 3)) || 
-        throw(DimensionMismatch("Error in diagonalization"))
-    @inbounds for ne in axes(states, 2)
-        dotprod = zero(Complex{T})
-        @inbounds for nphi in 1:length(state)
-            dotprod += conj(state[nphi]) * states[nphi, ne, ktarget]
-        end
-        proj = abs(dotprod)
-        if proj > maxproj
-            maxproj = proj
-            target = ne
-        end
-    end
-    return target
+    dotprods = abs.(state' * view(states, :, :, ktarget))
+    proj, ne = findmax(dotprods)
+    return proj > maxproj ? ne[2] : 0
 end

@@ -318,6 +318,8 @@ end
 #######################################################################
 
 function siteclusters(lat::Lattice, sublat::Int, onlyintra)
+    isunlinked(lat) && return [Int[]]
+    
     ns = nsites(lat.sublats[sublat])
     sitebins = fill(0, ns)  # sitebins[site] = bin
     binclusters = Int[]     # binclusters[bin] = cluster number
@@ -325,12 +327,13 @@ function siteclusters(lat::Lattice, sublat::Int, onlyintra)
 
     bincounter = 0
     clustercounter = 0
+    p = Progress(ns, 1, "Extracting subbands: ")
     while !isempty(pending) || any(iszero, sitebins)
         if isempty(pending)   # new cluster
             seed = findfirst(iszero, sitebins)
             bincounter += 1
             clustercounter = isempty(binclusters) ? 1 : maximum(binclusters) + 1
-            sitebins[seed] = bincounter
+            sitebins[seed] = bincounter; next!(p)
             push!(binclusters, clustercounter)
             push!(pending, seed)
         end
@@ -338,7 +341,7 @@ function siteclusters(lat::Lattice, sublat::Int, onlyintra)
         for neigh in neighbors(lat.links, src, (sublat, sublat), onlyintra)
             if sitebins[neigh] == 0   # unclassified neighbor
                 push!(pending, neigh)
-                sitebins[neigh] = bincounter
+                sitebins[neigh] = bincounter; next!(p)
             else
                 clustercounter = min(clustercounter, binclusters[sitebins[neigh]])
                 binclusters[bincounter] = clustercounter
