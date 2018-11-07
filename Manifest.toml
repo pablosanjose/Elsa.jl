@@ -377,6 +377,12 @@ version = "0.4.0"
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
+[[ProgressMeter]]
+deps = ["Distributed", "Printf", "Random", "Test"]
+git-tree-sha1 = "5b55c2c974084eab2689ec0d1d5245561b22aeb0"
+uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
+version = "0.6.1"
+
 [[QuartzImageIO]]
 deps = ["ColorTypes", "ColorVectorSpace", "FileIO", "FixedPointNumbers", "ImageCore", "Libdl", "Random", "Test"]
 git-tree-sha1 = "c747a56f223919b157e6cd9dc58d59c560586302"

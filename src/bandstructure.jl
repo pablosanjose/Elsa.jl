@@ -29,7 +29,7 @@ function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; kw...) where {T,E,L
     copyslice!(states,      CartesianIndices((1:statelength, 1:nenergies, 1:1)), 
                states_kn,   CartesianIndices((1:statelength, 1:nenergies)))
 
-    for nk in 2:npoints
+    @showprogress "Diagonalising: " for nk in 2:npoints
         (energies_nk, states_nk) = spectrum(hamiltonian(sys, kn = knpoints[nk] + shift), buffermatrix; kw...)
         copyslice!(energies,    CartesianIndices((1:nenergies, nk:nk)), 
                    energies_nk, CartesianIndices(1:nenergies))
@@ -42,8 +42,8 @@ function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; kw...) where {T,E,L
     return Spectrum(energies, nenergies, states, statelength, knpoints, npoints, bufferstate)
 end
 
-function spectrum(h::SparseMatrixCSC, buffermatrix; kw...)
-    if size(h, 1) < 129
+function spectrum(h::SparseMatrixCSC, buffermatrix; levels = missing, kw...)
+    if ismissing(levels) || size(h, 1) < 129 || levels/size(h,1) > 0.2
         return spectrum_dense(h, buffermatrix; kw...)
     else
         return spectrum_arpack(h; kw...)
@@ -51,7 +51,7 @@ function spectrum(h::SparseMatrixCSC, buffermatrix; kw...)
     # spectrum_fake(h)
 end
 
-spectrum_fake(h::SparseMatrixCSC; kw...) = (rand(size(h,1)), rand(size(h)...))
+# spectrum_fake(h::SparseMatrixCSC; kw...) = (rand(size(h,1)), rand(size(h)...))
 
 function spectrum_dense(h::SparseMatrixCSC, buffermatrix; levels = missing, kw...)
     buffermatrix .= h
@@ -99,9 +99,7 @@ Bandstructure(sys::System; uniform = false, partitions = 5, kw...) =
     Bandstructure(sys, BrillouinMesh(sys.lattice; uniform = uniform, partitions = partitions); kw...) 
 
 function Bandstructure(sys::System{T,E,L}, bz::BrillouinMesh{T,L}; threshold = 0.5, kw...) where {T,E,L}
-    @show "Start spectrum"
     spectrum = Spectrum(sys, bz; kw...)
-    @show "Spectrum done"
     bzmeshlat = bz.mesh.lattice
     bandmeshlat = emptybandmeshlat(bz)
     addnodes!(bandmeshlat, spectrum)
@@ -140,11 +138,11 @@ function link!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, threshold, bandm
     length(targets) == length(rdr) == length(srcpointers) - 1 == 0 || throw("Bug in linkbandmesh!")
     
     counter = 1
-    for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
+    @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
         n_src = linearindices[ne_src, nk_src]
         copyslice!(state,  CartesianIndices(1:sp.statelength), 
-                    states, CartesianIndices((1:sp.statelength, ne_src:ne_src, nk_src:nk_src)))
-        for nk_target in neighbors(bzilink, nk_src, (1,1))
+                   states, CartesianIndices((1:sp.statelength, ne_src:ne_src, nk_src:nk_src)))
+        @inbounds for nk_target in neighbors(bzilink, nk_src, (1,1))
             ne_target = findmostparallel(state, states, nk_target, threshold)
             if !iszero(ne_target)
                 n_target = linearindices[ne_target, nk_target]
@@ -161,9 +159,11 @@ end
 function findmostparallel(state::Vector{Complex{T}}, states, ktarget, threshold) where {T}
     target = 0
     maxproj = T(threshold)
-    for ne in axes(states, 2)
+    (length(state) == size(states, 1) && ktarget <= size(states, 3)) || 
+        throw(DimensionMismatch("Error in diagonalization"))
+    @inbounds for ne in axes(states, 2)
         dotprod = zero(Complex{T})
-        for nphi in 1:length(state)
+        @inbounds for nphi in 1:length(state)
             dotprod += conj(state[nphi]) * states[nphi, ne, ktarget]
         end
         proj = abs(dotprod)
