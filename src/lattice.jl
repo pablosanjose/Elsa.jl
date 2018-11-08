@@ -568,16 +568,8 @@ end
 function resizeilink(ilink::IL, lat::Lattice) where {IL<:Ilink} 
     nsold = size(ilink.slinks, 1)
     ns = nsublats(lat)
-    
     nsold == ns && return ilink
-
-    newslinks = padrightbottom(ilink.slinks, ns, ns)
-    for s1 in 1:ns, s2 in (nsold + 1):ns
-        newslinks[s2, s1] = emptyslink(lat, s1, s2)
-    end
-    for s1 in (nsold + 1):ns, s2 in 1:nsold
-        newslinks[s2, s1] = emptyslink(lat, s1, s2)
-    end
+    newslinks = padrightbottom(ilink.slinks, ns, ns) # fills with dummy 0x0 Slink
     IL(ilink.ndist, newslinks)
 end
 
