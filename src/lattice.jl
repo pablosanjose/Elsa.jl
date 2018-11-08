@@ -132,7 +132,7 @@ targetrange(s::Slink, src) = isempty(s) ? (1:0) : ((s.srcpointers[src]):(s.srcpo
 
 neighbors(s::Slink, src) = (s.targets[j] for j in targetrange(s, src))
 neighbors_rdr(s::Slink, src) = ((s.targets[j], s.rdr[j]) for j in targetrange(s, src))
-neighbors_rdr(s::Slink) = ((s.targets[j], s.rdr[j]) for src in sources(s) for j in targetrange(s, src))
+neighbors_rdr(s::Slink) = zip(s.targets, s.rdr)
 
 @inline _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
