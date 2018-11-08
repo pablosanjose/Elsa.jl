@@ -136,9 +136,6 @@ function unsafe_pushlink!(slink::Slink, i, j, rdr, skipdupcheck = true)
     return nothing
 end
 
-# nsources(s::Slink) = length(s.srcpointers)-1
-# sources(s::Slink) = 1:nsources(s)
-
 neighbors(s::Slink, src) = (rowvals(s.rdr)[j] for j in nzrange(s.rdr, src))
 neighbors_rdr(s::Slink, src) = ((rowvals(s.rdr)[j], nonzeros(s.rdr)[j]) for j in nzrange(s.rdr, src))
 neighbors_rdr(s::Slink) = zip(s.rdr.rowval, s.rdr.nzval)

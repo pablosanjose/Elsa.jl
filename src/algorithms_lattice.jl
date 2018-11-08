@@ -158,7 +158,7 @@ function buildIlink(lat::Lattice{T,E}, lr, pre, (dist, ndist)) where {T,E}
     isinter = any(n -> n != 0, ndist)
     nsl = nsublats(lat)
 
-    slinks = emptyslinks(lat)
+    slinks = fill(Slink{T,E}(0, 0), nsl, nsl) # placeholder to be replaced below
    
     validsublats = matchingsublats(lat, lr)
     for s1 in 1:nsl, s2 in 1:nsl
