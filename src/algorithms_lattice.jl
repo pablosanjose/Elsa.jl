@@ -243,7 +243,8 @@ function add_neighbors!(slink, lr::LinkRule{TreeSearch}, (trees, sublats), (dist
     for j in neighs
         if isvalidlink(isinter, (s1, s2), (i, j))
             r2 = sites2[j] + dist
-            slink[j,i] = _rdr(r1, r2)
+            # slink[j,i] = _rdr(r1, r2)
+            unsafe_pushlink!(slink, i, j, _rdr(r1, r2))
         end
     end
     return nothing

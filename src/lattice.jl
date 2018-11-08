@@ -104,6 +104,24 @@ function Slink{T,E}(ntargets::Int, nsources::Int; coordination::Int = 2*E) where
     return Slink(rdr)
 end
 
+# function Slink{T,E}(ntargets::Int, nsources::Int; coordination::Int = 2*E) where {T,E}
+#     rowval = Int[]
+#     nzval = Tuple{SVector{E,T}, SVector{E,T}}[]
+#     colptr = fill(1, nsources + 1)
+#     sizehint!(rowval, coordination * nsources)
+#     sizehint!(nzval, coordination * nsources)
+#     return Slink(SparseMatrixCSC(ntargets, nsources, colptr, rowval, nzval))
+# end
+
+# function Slink{T,E}(nsrcsites = 0; coordination::Int = 2*E) where {T,E}
+#     targets = Int[]
+#     rdr = Tuple{SVector{E,T}, SVector{E,T}}[]
+#     srcpointers = fill(1, nsrcsites + 1)
+#     sizehint!(targets, coordination * nsrcsites)
+#     sizehint!(rdr, coordination * nsrcsites)
+#     return Slink{T,E}(targets, srcpointers, rdr)
+# end
+
 Base.getindex(s::Slink, i, j) = Base.getindex(s.rdr, i, j)
 Base.setindex!(s::Slink, r, i, j) = Base.setindex!(s.rdr, r, i, j)
 Base.zero(::Type{Slink{T,E}}) where {T,E} = Slink{T,E}(0, 0)
@@ -479,6 +497,7 @@ sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)
 linkgenerator_r1r2(ilink::Ilink) = ((rdr[1] -rdr[2]/2, rdr[1] + rdr[2]/2) for s in ilink.slinks for (_,rdr) in neighbors_rdr(s))
 selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) where {T,E,L} =
    Bravais(SMatrix{E,L,T}(lat.bravais.matrix[:,bools]))
+# emptyslink(lat::Lattice{T,E}, s1::Int, s2::Int) where {T,E} = Slink{T,E}(nsites(lat.sublats[s2]), nsites(lat.sublats[s1]))
 emptyslink(lat::Lattice{T,E}, s1::Int, s2::Int) where {T,E} = Slink{T,E}(nsites(lat.sublats[s2]), nsites(lat.sublats[s1]))
 emptyslinks(lat::Lattice) = emptyslinks(lat.sublats)
 emptyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = [Slink{T,E}(nsites(s2), nsites(s1)) for s2 in sublats, s1 in sublats]
