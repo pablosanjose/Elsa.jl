@@ -104,24 +104,6 @@ function Slink{T,E}(ntargets::Int, nsources::Int; coordination::Int = 2*E) where
     return Slink(rdr)
 end
 
-# function Slink{T,E}(ntargets::Int, nsources::Int; coordination::Int = 2*E) where {T,E}
-#     rowval = Int[]
-#     nzval = Tuple{SVector{E,T}, SVector{E,T}}[]
-#     colptr = fill(1, nsources + 1)
-#     sizehint!(rowval, coordination * nsources)
-#     sizehint!(nzval, coordination * nsources)
-#     return Slink(SparseMatrixCSC(ntargets, nsources, colptr, rowval, nzval))
-# end
-
-# function Slink{T,E}(nsrcsites = 0; coordination::Int = 2*E) where {T,E}
-#     targets = Int[]
-#     rdr = Tuple{SVector{E,T}, SVector{E,T}}[]
-#     srcpointers = fill(1, nsrcsites + 1)
-#     sizehint!(targets, coordination * nsrcsites)
-#     sizehint!(rdr, coordination * nsrcsites)
-#     return Slink{T,E}(targets, srcpointers, rdr)
-# end
-
 Base.getindex(s::Slink, i, j) = Base.getindex(s.rdr, i, j)
 Base.setindex!(s::Slink, r, i, j) = Base.setindex!(s.rdr, r, i, j)
 Base.zero(::Type{Slink{T,E}}) where {T,E} = Slink{T,E}(0, 0)
@@ -136,6 +118,8 @@ function unsafe_pushlink!(slink::Slink, i, j, rdr, skipdupcheck = true)
     return nothing
 end
 
+nsources(s::Slink) = size(s.rdr, 2)
+sources(s::Slink) = 1:nsources(s)
 neighbors(s::Slink, src) = (rowvals(s.rdr)[j] for j in nzrange(s.rdr, src))
 neighbors_rdr(s::Slink, src) = ((rowvals(s.rdr)[j], nonzeros(s.rdr)[j]) for j in nzrange(s.rdr, src))
 neighbors_rdr(s::Slink) = zip(s.rdr.rowval, s.rdr.nzval)
