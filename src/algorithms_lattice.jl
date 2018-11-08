@@ -172,8 +172,11 @@ function buildSlink(lat::Lattice{T,E}, lr, pre, (dist, ndist, isinter), (s1, s2)
     slink = emptyslink(lat, s1, s2)
     counter = 1
     for (i, r1) in enumerate(lat.sublats[s1].sites)
+        slink.rdr.colptr[i] = counter
         add_neighbors!(slink, lr, pre, (dist, ndist, isinter), (s1, s2), (i, r1))
+        counter = length(slink.rdr.rowval) + 1
     end
+    slink.rdr.colptr[end] = counter
     return slink
 end
 
@@ -226,8 +229,8 @@ function add_neighbors!(slink, lr::LinkRule{<:SimpleSearch}, sublats, (dist, ndi
     for (j, r2) in enumerate(sublats[s2].sites)
         r2 += dist
         if lr.alg.isinrange(r2 - r1) && isvalidlink(isinter, (s1, s2), (i, j))
-            slink[i,j] = _rdr(r1, r2)
-            #unsafe_pushlink!(slink, i, j, _rdr(r1, r2))
+            #slink[i,j] = _rdr(r1, r2)
+            unsafe_pushlink!(slink, i, j, _rdr(r1, r2))
         end
     end
     return nothing
@@ -262,7 +265,8 @@ function add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), ilink, oldbrava
         olddist = oldbravais * zeroout(ilink.ndist, unwrappedaxes)
         for (j, rdr_old) in neighbors_rdr(oldslink, i)
             if isvalidlink(isinter, (s1, s2), (i, j))
-                slink[j,i] = (rdr_old[1] - olddist / 2, rdr_old[2] - olddist)
+                #slink[j,i] = (rdr_old[1] - olddist / 2, rdr_old[2] - olddist)
+                unsafe_pushlink!(slink, i, j, (rdr_old[1] - olddist / 2, rdr_old[2] - olddist), skipdupcheck)
             end
         end
     end
@@ -303,7 +307,8 @@ function _add_neighbors_ilink!(slink, ilink_old, maps2, isinter, (s1, s2), (i, i
         if isvalid
             j = maps2[Tuple(ndist_old)..., jold]
             if j != 0 && isvalidlink(isinter, (s1, s2), (i, j))
-                slink[j, i] = (rdr_old[1] + dist, rdr_old[2])
+                #slink[j, i] = (rdr_old[1] + dist, rdr_old[2])
+                unsafe_pushlink!(slink, i, j, (rdr_old[1] + dist, rdr_old[2]))
             end
         end
     end

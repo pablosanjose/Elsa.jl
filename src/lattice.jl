@@ -110,13 +110,13 @@ Base.zero(::Type{Slink{T,E}}) where {T,E} = Slink{T,E}(0, 0)
 Base.isempty(slink::Slink) = (nlinks(slink) == 0)
 nlinks(slink::Slink) = nnz(slink.rdr)
 
-# function unsafe_pushlink!(slink::Slink, i, j, rdr, skipdupcheck = true)
-#     if skipdupcheck || !isintail(j, slink.targets, slink.srcpointers[i])
-#         push!(slink.targets, j)
-#         push!(slink.rdr, rdr)
-#     end
-#     return nothing
-# end
+function unsafe_pushlink!(slink::Slink, i, j, rdr, skipdupcheck = true)
+    if skipdupcheck || !isintail(j, slink.rdr.nzval, slink.rdr.colptr[i])
+        push!(slink.rdr.rowval, j)
+        push!(slink.rdr.nzval, rdr)
+    end
+    return nothing
+end
 
 # nsources(s::Slink) = length(s.srcpointers)-1
 # sources(s::Slink) = 1:nsources(s)
