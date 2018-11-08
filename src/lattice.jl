@@ -94,51 +94,42 @@ keepaxes(br::Bravais, unwrappedaxes) = Bravais(keepcolumns(bravaismatrix(br), un
 # the target ranges easily for all n1. Finally, rdr is of the same length as targets
 # and stores the relative vector positions of n1 and its target.
 struct Slink{T,E}
-    targets::Vector{Int}
-    srcpointers::Vector{Int}
-    rdr::Vector{Tuple{SVector{E,T}, SVector{E,T}}} # Better cache locality that r, dr
-    function Slink{T,E}(targets, srcpointers, rdr) where {T,E} 
-        length(targets) == length(rdr) || throw(DimensionMismatch("Size mismatch in Slink"))
-        new(targets, srcpointers, rdr)
-    end
+    rdr::SparseMatrixCSC{Tuple{SVector{E,T}, SVector{E,T}}, Int}
 end
 
-Slink(t, o, rdr::Vector{Tuple{SVector{E,T}, SVector{E,T}}}) where {T,E} = Slink{T,E}(t, o, rdr)
-
-function Slink{T,E}(nsrcsites = 0; coordination::Int = 2*E) where {T,E}
-    targets = Int[]
-    rdr = Tuple{SVector{E,T}, SVector{E,T}}[]
-    srcpointers = fill(1, nsrcsites + 1)
-    sizehint!(targets, coordination * nsrcsites)
-    sizehint!(rdr, coordination * nsrcsites)
-    return Slink{T,E}(targets, srcpointers, rdr)
+function Slink{T,E}(ntargets::Int, nsources::Int; coordination::Int = 2*E) where {T,E}
+    rdr = spzeros(Tuple{SVector{E,T}, SVector{E,T}}, ntargets, nsources)
+    sizehint!(rdr.rowval, coordination * nsources)
+    sizehint!(rdr.nzval, coordination * nsources)
+    return Slink(rdr)
 end
 
-Base.zero(::Type{Slink{T,E}}) where {T,E} = Slink{T,E}()
-Base.isempty(slink::Slink) = isempty(slink.targets)
-nlinks(slink::Slink) = length(slink.targets)
+Base.getindex(s::Slink, i, j) = Base.getindex(s.rdr, i, j)
+Base.setindex!(s::Slink, r, i, j) = Base.setindex!(s.rdr, r, i, j)
+#Base.zero(::Type{Slink{T,E}}) where {T,E} = Slink{T,E}()
+Base.isempty(slink::Slink) = (nlinks(slink) == 0)
+nlinks(slink::Slink) = nnz(slink.rdr)
 
-function unsafe_pushlink!(slink::Slink, i, j, rdr, skipdupcheck = true)
-    if skipdupcheck || !isintail(j, slink.targets, slink.srcpointers[i])
-        push!(slink.targets, j)
-        push!(slink.rdr, rdr)
-    end
-    return nothing
-end
+# function unsafe_pushlink!(slink::Slink, i, j, rdr, skipdupcheck = true)
+#     if skipdupcheck || !isintail(j, slink.targets, slink.srcpointers[i])
+#         push!(slink.targets, j)
+#         push!(slink.rdr, rdr)
+#     end
+#     return nothing
+# end
 
-nsources(s::Slink) = length(s.srcpointers)-1
-sources(s::Slink) = 1:nsources(s)
-targetrange(s::Slink, src) = isempty(s) ? (1:0) : ((s.srcpointers[src]):(s.srcpointers[src+1]-1))
+# nsources(s::Slink) = length(s.srcpointers)-1
+# sources(s::Slink) = 1:nsources(s)
 
-neighbors(s::Slink, src) = (s.targets[j] for j in targetrange(s, src))
-neighbors_rdr(s::Slink, src) = ((s.targets[j], s.rdr[j]) for j in targetrange(s, src))
-neighbors_rdr(s::Slink) = ((s.targets[j], s.rdr[j]) for src in sources(s) for j in targetrange(s, src))
+neighbors(s::Slink, src) = let rows = rowvals(sp.rdr); (rows[j] for j in nzrange(s.rdr, src)); end
+neighbors_rdr(s::Slink, src) = let rows = rowvals(sp.rdr); ((j, rows[j]) for j in nzrange(s.rdr, src)); end
+neighbors_rdr(s::Slink) = zip(s.rdr.rowval, s.rdr.nzval)
 
 @inline _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
 function transform!(s::Slink, f::F) where F<:Function 
     frdr(rdr) = _rdr(f(rdr[1] - 0.5 * rdr[2]), f(rdr[1] + 0.5 * rdr[2]))
-    s.rdr .= frdr.(s.rdr)
+    s.rdr.nzval .= frdr.(s.rdr.nzval)
     return s
 end
 
@@ -150,12 +141,7 @@ struct Ilink{T,E,L}
     slinks::Matrix{Slink{T,E}}
 end
 
-function emptyilink(ndist::SVector{L,Int}, sublats::Vector{Sublat{T,E}}) where {T,E,L}
-    # ns = length(sublats)
-    # emptyslink = Slink{T,E}(ns)
-    slinks = [Slink{T,E}(nsites(s1)) for s2 in sublats, s1 in sublats]
-    return Ilink(ndist, slinks)
-end
+emptyilink(ndist::SVector, sublats::Vector{<:Sublat}) = Ilink(ndist, emptyslinks(sublats))
 
 nlinks(ilinks::Vector{<:Ilink}) = isempty(ilinks) ? 0 : sum(nlinks, ilinks)
 nlinks(ilink::Ilink) = isempty(ilink.slinks) ? 0 : sum(i -> nlinks(ilink.slinks, i), eachindex(ilink.slinks))
@@ -479,6 +465,7 @@ seedtype(::Type{L}, opt) where {L<:Lattice} = L
 vectorsastuples(lat::Lattice) = vectorsastuples(lat.bravais.matrix)
 vectorsastuples(br::Bravais) =  vectorsastuples(br.matrix)
 vectorsastuples(mat::SMatrix{E,L}) where {E,L} = ntuple(l -> round.((mat[:,l]... ,), digits = 6), Val(L))
+nsites(lat::Lattice, s::Int) = s > nsublats(lat) ? 0 : nsites(lat.sublats[s])
 nsites(lat::Lattice) = isempty(lat.sublats) ? 0 : sum(nsites, lat.sublats)
 nsiteslist(lat::Lattice) = [nsites(sublat) for sublat in lat.sublats]
 nsublats(lat::Lattice)::Int = length(lat.sublats)
@@ -494,6 +481,9 @@ sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)
 linkgenerator_r1r2(ilink::Ilink) = ((rdr[1] -rdr[2]/2, rdr[1] + rdr[2]/2) for s in ilink.slinks for (_,rdr) in neighbors_rdr(s))
 selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) where {T,E,L} =
    Bravais(SMatrix{E,L,T}(lat.bravais.matrix[:,bools]))
+emptyslink(lat::Lattice, s1::Int, s2::Int) = Slink{T,E}(nsites(lat.sublats[s2]), nsites(lat.subklats[s1]))
+emptyslinks(lat::Lattice) = emptyslinks(lat.sublats)
+emptyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = [Slink{T,E}(nsites(s2), nsites(s1)) for s2 in sublats, s1 in sublats]
 
 function boundingboxlat(lat::Lattice{T,E}) where {T,E}
     bmin = zero(MVector{E, T})

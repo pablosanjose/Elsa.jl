@@ -232,12 +232,8 @@ function link!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, linkthreshold, b
     linearindices = LinearIndices(sp.energies)
     state = sp.bufferstate
     states = sp.states
-    srcpointers = meshilink.slinks[1,1].srcpointers
-    targets = meshilink.slinks[1,1].targets
-    rdr = meshilink.slinks[1,1].rdr
-    length(targets) == length(rdr) == length(srcpointers) - 1 == 0 || throw("Bug in linkbandmesh!")
+    slink = meshilink.slinks[1,1]
     
-    counter = 1
     @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
         n_src = linearindices[ne_src, nk_src]
         copyslice!(state,  CartesianIndices(1:sp.statelength), 
@@ -246,12 +242,9 @@ function link!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, linkthreshold, b
             ne_target = findmostparallel(state, states, nk_target, linkthreshold)
             if !iszero(ne_target)
                 n_target = linearindices[ne_target, nk_target]
-                push!(targets, n_target)
-                push!(rdr, _rdr(meshnodes[n_src], meshnodes[n_target] + dist))
-                counter += 1
+                slink[n_target, n_src] = _rdr(meshnodes[n_src], meshnodes[n_target] + dist)
             end
         end
-        push!(srcpointers, counter)
     end
     return meshilink
 end

@@ -121,12 +121,12 @@ zeroout(v::SVector{N,T}, ::Tuple{}) where {N,T} = v
 zeroout(v::SVector{S,T}, elements::NTuple{N,Int}) where {S,N,T} = 
     SVector{S,T}(ntuple(i -> i in elements ? zero(T) : v[i], Val(S)))
 
-function isintail(element, container, start)
-    for i in start:length(container)
-        container[i] == element && return true
-    end
-    return false
-end
+# function isintail(element, container, start)
+#     for i in start:length(container)
+#         container[i] == element && return true
+#     end
+#     return false
+# end
 
 modifyat(s::SVector{N,T}, i, x) where {N,T} = SVector(ntuple(j -> j == i ? x : s[j], Val(N)))
 
