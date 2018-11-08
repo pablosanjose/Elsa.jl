@@ -303,7 +303,7 @@ function _add_neighbors_ilink!(slink, ilink_old, maps2, isinter, (s1, s2), (i, i
         if isvalid
             j = maps2[Tuple(ndist_old)..., jold]
             if j != 0 && isvalidlink(isinter, (s1, s2), (i, j))
-               slink[j, i] = (rdr_old[1] + dist, rdr_old[2])
+                slink[j, i] = (rdr_old[1] + dist, rdr_old[2])
             end
         end
     end

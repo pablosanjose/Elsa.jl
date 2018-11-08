@@ -106,7 +106,7 @@ end
 
 Base.getindex(s::Slink, i, j) = Base.getindex(s.rdr, i, j)
 Base.setindex!(s::Slink, r, i, j) = Base.setindex!(s.rdr, r, i, j)
-#Base.zero(::Type{Slink{T,E}}) where {T,E} = Slink{T,E}()
+Base.zero(::Type{Slink{T,E}}) where {T,E} = Slink{T,E}(0, 0)
 Base.isempty(slink::Slink) = (nlinks(slink) == 0)
 nlinks(slink::Slink) = nnz(slink.rdr)
 
@@ -121,8 +121,8 @@ nlinks(slink::Slink) = nnz(slink.rdr)
 # nsources(s::Slink) = length(s.srcpointers)-1
 # sources(s::Slink) = 1:nsources(s)
 
-neighbors(s::Slink, src) = let rows = rowvals(sp.rdr); (rows[j] for j in nzrange(s.rdr, src)); end
-neighbors_rdr(s::Slink, src) = let rows = rowvals(sp.rdr); ((j, rows[j]) for j in nzrange(s.rdr, src)); end
+neighbors(s::Slink, src) = (rowvals(s.rdr)[j] for j in nzrange(s.rdr, src))
+neighbors_rdr(s::Slink, src) = ((rowvals(s.rdr)[j], nonzeros(s.rdr)[j]) for j in nzrange(s.rdr, src))
 neighbors_rdr(s::Slink) = zip(s.rdr.rowval, s.rdr.nzval)
 
 @inline _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
@@ -154,8 +154,6 @@ neighbors(ilink::Ilink, src, (s1,s2)::Tuple{Int,Int}) = neighbors(ilink.slinks[s
 neighbors(ilinks::Vector{<:Ilink}, src, (s1,s2)::Tuple{Int,Int}) = Iterators.flatten(neighbors(ilink, src, (s1, s2)) for ilink in ilinks)
 
 transform!(i::IL, f::F) where {IL<:Ilink, F<:Function} = (transform!.(i.slinks, f); i)
-
-resizeilink(ilink::IL, ns) where {IL<:Ilink} = IL(ilink.ndist, padrightbottom(ilink.slinks, ns, ns))
 
 #######################################################################
 # Links struct
@@ -481,7 +479,7 @@ sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)
 linkgenerator_r1r2(ilink::Ilink) = ((rdr[1] -rdr[2]/2, rdr[1] + rdr[2]/2) for s in ilink.slinks for (_,rdr) in neighbors_rdr(s))
 selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) where {T,E,L} =
    Bravais(SMatrix{E,L,T}(lat.bravais.matrix[:,bools]))
-emptyslink(lat::Lattice, s1::Int, s2::Int) = Slink{T,E}(nsites(lat.sublats[s2]), nsites(lat.subklats[s1]))
+emptyslink(lat::Lattice{T,E}, s1::Int, s2::Int) where {T,E} = Slink{T,E}(nsites(lat.sublats[s2]), nsites(lat.sublats[s1]))
 emptyslinks(lat::Lattice) = emptyslinks(lat.sublats)
 emptyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = [Slink{T,E}(nsites(s2), nsites(s1)) for s2 in sublats, s1 in sublats]
 
@@ -541,14 +539,30 @@ lattice!(lat::Lattice, o1::LatticeDirective, opts...) = lattice!(_lattice!(lat, 
 
 lattice!(lat::Lattice) = adjust_slinks_to_sublats!(lat)
 
-# Ensire the size of Slink matrices in lat.links matches the number of sublats. Do it only at the end.
+# Ensure the size of Slink matrices in lat.links matches the number of sublats. Do it only at the end.
 function adjust_slinks_to_sublats!(lat::Lattice)
     ns = nsublats(lat)
-    nsublats(lat.links.intralink) == ns || (lat.links.intralink = resizeilink(lat.links.intralink, ns))
+    lat.links.intralink = resizeilink(lat.links.intralink, lat)
     for (n, ilink) in enumerate(lat.links.interlinks)
-        nsublats(ilink) == ns || (lat.links.interlink[n] = resizeilink(ilink, ns))
+        lat.links.interlinks[n] = resizeilink(ilink, lat)
     end
     return lat
+end
+
+function resizeilink(ilink::IL, lat::Lattice) where {IL<:Ilink} 
+    nsold = size(ilink.slinks, 1)
+    ns = nsublats(lat)
+    
+    nsold == ns && return ilink
+
+    newslinks = padrightbottom(ilink.slinks, ns, ns)
+    for s1 in 1:ns, s2 in (nsold + 1):ns
+        newslinks[s2, s1] = emptyslink(lat, s1, s2)
+    end
+    for s1 in (nsold + 1):ns, s2 in 1:nsold
+        newslinks[s2, s1] = emptyslink(lat, s1, s2)
+    end
+    IL(ilink.ndist, newslinks)
 end
 
 function _lattice!(lat::Lattice, b::Bravais)

@@ -31,8 +31,8 @@ Bravais{T,E,L,EL}(b::Bravais) where {T,E,L,EL} =
     Bravais(padrightbottom(b.matrix, SMatrix{E,L,T,EL}))
 
 function Slink{T,E}(s::Slink) where {T,E}
-    rdr = Tuple{SVector{E,T}, SVector{E,T}}[(padright(r, zero(T), Val(E)), padright(dr, zero(T), Val(E))) for (r, dr) in s.rdr]
-    Slink(s.targets, s.srcpointers, rdr)
+    nzval = Tuple{SVector{E,T}, SVector{E,T}}[(padright(r, zero(T), Val(E)), padright(dr, zero(T), Val(E))) for (r, dr) in s.rdr.nzval]
+    Slink(SparseMatrixCSC(s.rdr.m, s.rdr.n, s.rdr.colptr, s.rdr.rowval, nzval))
 end
 
 Links{T,E,L}(l::Links) where {T,E,L} = 
