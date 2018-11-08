@@ -140,6 +140,7 @@ struct Ilink{T,E,L}
     slinks::Matrix{Slink{T,E}}
 end
 
+# emptyilink(ndist::SVector, sublats::Vector{<:Sublat}) = Ilink(ndist, emptyslinks(sublats))
 emptyilink(ndist::SVector, sublats::Vector{<:Sublat}) = Ilink(ndist, emptyslinks(sublats))
 
 nlinks(ilinks::Vector{<:Ilink}) = isempty(ilinks) ? 0 : sum(nlinks, ilinks)
@@ -482,6 +483,7 @@ selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) 
 emptyslink(lat::Lattice{T,E}, s1::Int, s2::Int) where {T,E} = Slink{T,E}(nsites(lat.sublats[s2]), nsites(lat.sublats[s1]))
 emptyslinks(lat::Lattice) = emptyslinks(lat.sublats)
 emptyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = [Slink{T,E}(nsites(s2), nsites(s1)) for s2 in sublats, s1 in sublats]
+placeholderslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = [Slink{T,E}(0, 0) for s2 in sublats, s1 in sublats]
 
 function boundingboxlat(lat::Lattice{T,E}) where {T,E}
     bmin = zero(MVector{E, T})

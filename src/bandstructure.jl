@@ -200,21 +200,23 @@ Bandstructure(sys::System; uniform = false, partitions = 5, kw...) =
 function Bandstructure(sys::System{T,E,L}, bz::BrillouinMesh{T,L}; linkthreshold = 0.5, kw...) where {T,E,L}
     spectrum = Spectrum(sys, bz; kw...)
     bzmeshlat = bz.mesh.lattice
-    bandmeshlat = emptybandmeshlat(bz)
-    addnodes!(bandmeshlat, spectrum)
-    for (meshilink, bzilink) in zip(allilinks(bandmeshlat), allilinks(bzmeshlat))
-        linkbands!(meshilink, bzilink, spectrum, linkthreshold, bandmeshlat)
-    end
+    bmeshlat = bandmeshlat(bz, spectrum, linkthreshold)
     states = reshape(spectrum.states, spectrum.statelength, :)
-    bandmesh = Mesh(bandmeshlat)
+    bandmesh = Mesh(bmeshlat)
     return Bandstructure(bandmesh, states, spectrum.nenergies, spectrum.npoints)
-    # bandmeshlat
 end
 
-function emptybandmeshlat(bz::BrillouinMesh{T,L}) where {T,L}
+function bandmeshlat(bz::BrillouinMesh{T,L}, spectrum, linkthreshold) where {T,L}
     bandmeshlat = Lattice(Sublat{T,L+1}(), Bravais(SMatrix{L+1,L,T}(I)))
+    addnodes!(bandmeshlat, spectrum)
+    bzmeshlat = bz.mesh.lattice
+    bzmeshlinks = bzmeshlat.links
+    bandmeshlat.links.intralink = emptyilink(bzmeshlinks.intralink.ndist, bandmeshlat.sublats)
     bandmeshlat.links.interlinks = 
-        [emptyilink(ilink.ndist, bandmeshlat.sublats) for ilink in bz.mesh.lattice.links.interlinks]
+        [emptyilink(ilink.ndist, bandmeshlat.sublats) for ilink in bzmeshlinks.interlinks]
+    for (bmeshilink, bzmeshilink) in zip(allilinks(bandmeshlat), allilinks(bzmeshlat))
+        linkbands!(bmeshilink, bzmeshilink, spectrum, linkthreshold, bandmeshlat)
+    end
     return bandmeshlat
 end
 
@@ -233,7 +235,8 @@ function linkbands!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, linkthresho
     state = sp.bufferstate
     states = sp.states
     
-    slink = emptyslink(bandmesh, 1, 1)
+    slink = meshilink.slinks[1,1]
+    #emptyslink(bandmesh, 1, 1)
     counter = 1
     column = 0
     @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
@@ -252,7 +255,7 @@ function linkbands!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, linkthresho
         end
     end
     slink.rdr.colptr[end] = counter
-    meshilink.slinks[1,1] = slink
+    # meshilink.slinks[1,1] = slink
     return meshilink
 end
 
