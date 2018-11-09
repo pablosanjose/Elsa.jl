@@ -230,7 +230,7 @@ function addilink!(meshlinks::Links, bzilink::Ilink, sp::Spectrum, linkthreshold
     state = sp.bufferstate
     states = sp.states
     
-    slinkseed = SparseMatrixBuilder(bandmesh, 1, 1)
+    slinkbuilder = SparseMatrixBuilder(bandmesh, 1, 1)
     @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
         n_src = linearindices[ne_src, nk_src]
         r1 = meshnodes[n_src]
@@ -241,12 +241,12 @@ function addilink!(meshlinks::Links, bzilink::Ilink, sp::Spectrum, linkthreshold
             if !iszero(ne_target)
                 n_target = linearindices[ne_target, nk_target]
                 r2 = meshnodes[n_target] + dist
-                pushtocolumn!(slinkseed, n_target, _rdr(r1, r2))
+                pushtocolumn!(slinkbuilder, n_target, _rdr(r1, r2))
             end
         end
-        finalisecolumn!(slinkseed)
+        finalisecolumn!(slinkbuilder)
     end
-    push!(meshlinks, Ilink(bzilink.ndist, fill(Slink(sparse(slinkseed)), 1, 1)))
+    push!(meshlinks, Ilink(bzilink.ndist, fill(Slink(sparse(slinkbuilder)), 1, 1)))
     return meshlinks
 end
    

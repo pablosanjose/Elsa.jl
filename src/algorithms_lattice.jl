@@ -165,12 +165,12 @@ function buildIlink(lat::Lattice{T,E}, lr, pre, (dist, ndist)) where {T,E}
 end
 
 function buildSlink(lat::Lattice{T,E}, lr, pre, (dist, ndist, isinter), (s1, s2)) where {T,E}
-    slinkseed = SparseMatrixBuilder(lat, s1, s2)
+    slinkbuilder = SparseMatrixBuilder(lat, s1, s2)
     for (i, r1) in enumerate(lat.sublats[s1].sites)
-        add_neighbors!(slinkseed, lr, pre, (dist, ndist, isinter), (s1, s2), (i, r1))
-        finalisecolumn!(slinkseed)
+        add_neighbors!(slinkbuilder, lr, pre, (dist, ndist, isinter), (s1, s2), (i, r1))
+        finalisecolumn!(slinkbuilder)
     end
-    return Slink(sparse(slinkseed))
+    return Slink(sparse(slinkbuilder))
 end
 
 linkprecompute(linkrules::LinkRule{<:SimpleSearch}, lat::Lattice) = 
@@ -218,47 +218,47 @@ function findnonzeroinrow(ss, n)
     return 0
 end
 
-function add_neighbors!(slinkseed, lr::LinkRule{<:SimpleSearch}, sublats, (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slinkbuilder, lr::LinkRule{<:SimpleSearch}, sublats, (dist, ndist, isinter), (s1, s2), (i, r1))
     for (j, r2) in enumerate(sublats[s2].sites)
         r2 += dist
         if lr.alg.isinrange(r2 - r1) && isvalidlink(isinter, (s1, s2), (i, j))
-            pushtocolumn!(slinkseed, j, _rdr(r1, r2))
+            pushtocolumn!(slinkbuilder, j, _rdr(r1, r2))
         end
     end
     return nothing
 end
 
-function add_neighbors!(slinkseed, lr::LinkRule{TreeSearch}, (trees, sublats), (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slinkbuilder, lr::LinkRule{TreeSearch}, (trees, sublats), (dist, ndist, isinter), (s1, s2), (i, r1))
     range = lr.alg.range + extended_eps()
     neighs = inrange(trees[s2], r1 - dist, range)
     sites2 = sublats[s2].sites
     for j in neighs
         if isvalidlink(isinter, (s1, s2), (i, j))
             r2 = sites2[j] + dist
-            pushtocolumn!(slinkseed, j, _rdr(r1, r2))
+            pushtocolumn!(slinkbuilder, j, _rdr(r1, r2))
         end
     end
     return nothing
 end
 
-function add_neighbors!(slinkseed, lr::LinkRule{<:WrapSearch}, ::Nothing, (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slinkbuilder, lr::LinkRule{<:WrapSearch}, ::Nothing, (dist, ndist, isinter), (s1, s2), (i, r1))
     oldbravais = bravaismatrix(lr.alg.bravais)
     unwrappedaxes = lr.alg.unwrappedaxes
-    add_neighbors_wrap!(slinkseed, ndist, isinter, i, (s1, s2), lr.alg.links.intralink, oldbravais, unwrappedaxes, true)
+    add_neighbors_wrap!(slinkbuilder, ndist, isinter, i, (s1, s2), lr.alg.links.intralink, oldbravais, unwrappedaxes, true)
     for ilink in lr.alg.links.interlinks
-        add_neighbors_wrap!(slinkseed, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, false)
+        add_neighbors_wrap!(slinkbuilder, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, false)
         # This skipdupcheck == false required to exclude interlinks = intralinks in small wrapped lattices
     end
     return nothing
 end
 
-function add_neighbors_wrap!(slinkseed, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, skipdupcheck)
+function add_neighbors_wrap!(slinkbuilder, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, skipdupcheck)
     oldslink = ilink.slinks[s2, s1]
     if !isempty(oldslink) && keepelements(ilink.ndist, unwrappedaxes) == ndist
         olddist = oldbravais * zeroout(ilink.ndist, unwrappedaxes)
         for (j, rdr_old) in neighbors_rdr(oldslink, i)
             if isvalidlink(isinter, (s1, s2), (i, j))
-                pushtocolumn!(slinkseed, j, (rdr_old[1] - olddist / 2, rdr_old[2] - olddist), skipdupcheck)
+                pushtocolumn!(slinkbuilder, j, (rdr_old[1] - olddist / 2, rdr_old[2] - olddist), skipdupcheck)
             end
         end
     end
@@ -272,7 +272,7 @@ end
 #           ndold_intracell = ndistold of old unitcell containing site i
 #           ndold_intracell_shifted = same as ndold_intracell but shifted by -ndist of the new neighboring cell
 #           dist = distold of old unit cell containing new site i in the new unit cell
-function add_neighbors!(slinkseed, lr::LinkRule{<:BoxIteratorSearch}, maps, (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slinkbuilder, lr::LinkRule{<:BoxIteratorSearch}, maps, (dist, ndist, isinter), (s1, s2), (i, r1))
     (celliter, iold) = lr.alg.iter.registers[s1].cellinds[i]
     ndold_intercell = lr.alg.open2old * ndist
     ndold_intracell = lr.alg.iterated2old * SVector(celliter)
@@ -282,15 +282,15 @@ function add_neighbors!(slinkseed, lr::LinkRule{<:BoxIteratorSearch}, maps, (dis
     oldlinks = lr.alg.links
 
     isvalidlink(false, (s1, s2)) &&
-        _add_neighbors_ilink!(slinkseed, oldlinks.intralink, maps[s2], isinter, (s1, s2), (i, iold, ndold_intracell_shifted), dist)
+        _add_neighbors_ilink!(slinkbuilder, oldlinks.intralink, maps[s2], isinter, (s1, s2), (i, iold, ndold_intracell_shifted), dist)
     for ilink in oldlinks.interlinks
         isvalidlink(true, (s1, s2)) &&
-            _add_neighbors_ilink!(slinkseed, ilink, maps[s2], isinter, (s1, s2), (i, iold, ndold_intracell_shifted + ilink.ndist), dist)
+            _add_neighbors_ilink!(slinkbuilder, ilink, maps[s2], isinter, (s1, s2), (i, iold, ndold_intracell_shifted + ilink.ndist), dist)
     end
     return nothing
 end
 
-function _add_neighbors_ilink!(slinkseed, ilink_old, maps2, isinter, (s1, s2), (i, iold, ndist_old), dist)    
+function _add_neighbors_ilink!(slinkbuilder, ilink_old, maps2, isinter, (s1, s2), (i, iold, ndist_old), dist)    
     slink_old = ilink_old.slinks[s2, s1]
     isempty(slink_old) && return nothing
     
@@ -299,7 +299,7 @@ function _add_neighbors_ilink!(slinkseed, ilink_old, maps2, isinter, (s1, s2), (
         if isvalid
             j = maps2[Tuple(ndist_old)..., jold]
             if j != 0 && isvalidlink(isinter, (s1, s2), (i, j))
-                pushtocolumn!(slinkseed, j, (rdr_old[1] + dist, rdr_old[2]))
+                pushtocolumn!(slinkbuilder, j, (rdr_old[1] + dist, rdr_old[2]))
             end
         end
     end
