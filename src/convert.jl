@@ -1,9 +1,3 @@
-# @inline toNTuples(::Type{T}, t, ts...) where {T} = (toNTuples(T, t)..., toNTuples(T, ts...)...)
-# @inline toNTuples(::Type{T}, t::Vector) where {T} = (ntuple(i->T(t[i]), length(t)),)
-# @inline toNTuples(::Type{T}, t::SVector{N,T2}) where {N,T,T2} = (convert(NTuple{N,T}, Tuple(t)),)
-# @inline toNTuples(::Type{T}, t::NTuple{N,Any}) where {N, T} = (convert(NTuple{N,T}, t),)
-# @inline toNTuples(::Type{T}, t::Number) where {T} = (T(t),)
-
 # In v0.7+ the idea is that `convert`` is a shortcut to a "safe" subset of the constructors 
 # for a type, that guarantees the resulting type. The constructor is the central machinery
 # to instantiate types and convert between instances. (For parametric types, unless overridden, 
@@ -31,8 +25,8 @@ Bravais{T,E,L,EL}(b::Bravais) where {T,E,L,EL} =
     Bravais(padrightbottom(b.matrix, SMatrix{E,L,T,EL}))
 
 function Slink{T,E}(s::Slink) where {T,E}
-    rdr = Tuple{SVector{E,T}, SVector{E,T}}[(padright(r, zero(T), Val(E)), padright(dr, zero(T), Val(E))) for (r, dr) in s.rdr]
-    Slink(s.targets, s.srcpointers, rdr)
+    nzval = Tuple{SVector{E,T}, SVector{E,T}}[(padright(r, zero(T), Val(E)), padright(dr, zero(T), Val(E))) for (r, dr) in s.rdr.nzval]
+    Slink(SparseMatrixCSC(s.rdr.m, s.rdr.n, s.rdr.colptr, s.rdr.rowval, nzval))
 end
 
 Links{T,E,L}(l::Links) where {T,E,L} = 

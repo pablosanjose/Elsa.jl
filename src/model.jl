@@ -7,21 +7,21 @@ abstract type Onsite{SL,N} <: ModelTerm end  #N is the number of orbitals
 
 struct NoOnsite <: Onsite{Missing,0}
 end
-@inline (o::NoOnsite)(r::SVector{E,T}, ::Val{N}) where {E,T,N} = zero(SMatrix{N,N,T})
+(o::NoOnsite)(r::SVector{E,T}, ::Val{N}) where {E,T,N} = zero(SMatrix{N,N,T})
 
 struct OnsiteFunc{SL,N,F<:Function} <: Onsite{SL,N}
     f::F
     s::SL  # Sublattices
 end
 OnsiteFunc{SL,N}(f::F, s::SL) where {N,SL,F} = OnsiteFunc{SL,N,F}(f, s)
-@inline (o::OnsiteFunc)(r, ::Val{N}) where {N} = o(r)
+(o::OnsiteFunc)(r, ::Val{N}) where {N} = o(r)
 (o::OnsiteFunc)(r::SVector) = o.f(r)
 
 struct OnsiteConst{SL,N,T,NN} <: Onsite{SL,N}
     o::SMatrix{N,N,T,NN}
     s::SL  # Sublattices
 end
-@inline (o::OnsiteConst)(r, ::Val{N}) where {N} = o(r)
+(o::OnsiteConst)(r, ::Val{N}) where {N} = o(r)
 (o::OnsiteConst)(r::SVector) = o.o
 
 Onsite(o, s::Vararg{Int, N}) where {N} = _Onsite(o, to_ints_or_missing(s))
@@ -49,21 +49,21 @@ abstract type Hopping{SL,N,M} <: ModelTerm end
 
 struct NoHopping <: Hopping{Missing,0,0}
 end
-@inline (h::NoHopping)(rdr::Tuple{S,S}, ::Val{M}, ::Val{N}) where {E,T,M,N,S<:SVector{E,T}} = zero(SMatrix{M,N,T})
+(h::NoHopping)(rdr::Tuple{S,S}, ::Val{M}, ::Val{N}) where {E,T,M,N,S<:SVector{E,T}} = zero(SMatrix{M,N,T})
 
 struct HoppingFunc{SL,N,M,F<:Function} <: Hopping{SL,N,M}
     f::F
     ss::SL   # Sublattices
 end
 HoppingFunc{SL,N,M}(f::F, ss::SL) where {N,M,SL,F} = HoppingFunc{SL,N,M,F}(f, ss)
-@inline (h::HoppingFunc)(rdr, ::Val{M}, ::Val{N}) where {M,N} = h(rdr)
+(h::HoppingFunc)(rdr, ::Val{M}, ::Val{N}) where {M,N} = h(rdr)
 (h::HoppingFunc)((r, dr)::Tuple{S,S}) where {S<:SVector} = h.f(r, dr)
 
 struct HoppingConst{SL,N,M,T,NM} <: Hopping{SL,N,M}
     h::SMatrix{N,M,T,NM}
     ss::SL   # Sublattices
 end
-@inline (h::HoppingConst)(rdr, ::Val{M}, ::Val{N}) where {M,N} = h(rdr)
+(h::HoppingConst)(rdr, ::Val{M}, ::Val{N}) where {M,N} = h(rdr)
 (h::HoppingConst)((r, dr)::Tuple{S,S}) where {S<:SVector} = h.h
 
 Hopping(h, ss::Vararg{Union{Int,Tuple{Int,Int}}, N}) where {N} = _Hopping(h, to_tuples_or_missing(ss))
@@ -163,7 +163,7 @@ function checkdefaultdim(defdim, defh::Hopping, dims)
     return defdim
 end
 
-@inline nsublats(m::Model) = length(m.dims)
+nsublats(m::Model) = length(m.dims)
 
 function hopping(m::Model, (s2, s1))
     nh = size(m.hptr, 1)

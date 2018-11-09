@@ -29,9 +29,10 @@ padright(sv::SVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val
 @inline padrightbottom(s::SMatrix{E,L}, st::Type{SMatrix{E2,L2,T2,EL2}}) where {E,L,E2,L2,T2,EL2} =
     SMatrix{E2,L2,T2,EL2}(ntuple(k -> _padrightbottom((k - 1) % E2 + 1, (k - 1) ÷ E2 + 1, zero(T2), s), Val(EL2)))
 @inline _padrightbottom(i, j, zero, s::SMatrix{E,L}) where {E,L} = i > E || j > L ? zero : s[i,j]
-function padrightbottom(m::Matrix{T}, im, jm) where T
+padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
+function padrightbottom(m::Matrix{T}, zeroT::T, im, jm) where T
     i0, j0 = size(m)
-    [i <= i0 && j<= j0 ? m[i,j] : zero(T) for i in 1:im, j in 1:jm]
+    [i <= i0 && j<= j0 ? m[i,j] : zeroT for i in 1:im, j in 1:jm]
 end
 
 @inline tuplejoin(x) = x
@@ -121,25 +122,7 @@ zeroout(v::SVector{N,T}, ::Tuple{}) where {N,T} = v
 zeroout(v::SVector{S,T}, elements::NTuple{N,Int}) where {S,N,T} = 
     SVector{S,T}(ntuple(i -> i in elements ? zero(T) : v[i], Val(S)))
 
-function isintail(element, container, start)
-    for i in start:length(container)
-        container[i] == element && return true
-    end
-    return false
-end
-
 modifyat(s::SVector{N,T}, i, x) where {N,T} = SVector(ntuple(j -> j == i ? x : s[j], Val(N)))
-
-# The fallback is unnecessarily slow, but pinv(::SMatrix) is not yet available
-# fastpinv(s::SMatrix{N,M}) where {N,M} = SMatrix{M,N}(pinv(Matrix(s)))
-# fastpinv(s::SMatrix{N,N}) where {N} = inv(s)
-# function fastpinv(s::SMatrix{3,2})
-#     is = inv(hcat(s, cross(s[:,1], s[:,2])));
-#     SMatrix{2,3}((is[1,1], is[2,1], is[1,2],is[2,2], is[1,3], is[2,3]))
-# end
-# function fastpinv(s::SMatrix{N,1}) where {N}
-#     transpose(s) / sum(abs2,s)
-# end
 
 sign_positivezero(x::T) where T = x >= zero(T) ? one(T) : - one(T)
 
@@ -158,33 +141,3 @@ function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1}, src
     end
     return dest
 end
-
-# function gather(set::AbstractVector{A}) where {T, A<:AbstractVector{T}}
-#     subsets = Vector{A}[]
-#     iscontained = Bool[]
-#     shrink = false
-#     for element in set
-#         resize!(iscontained, length(subsets))
-#         for (i, subset) in enumerate(subsets)
-#             iscontained[i] = any(e in s for s in subset, e in element)
-#         end
-#         if all(!, iscontained)
-#             push!(subsets, A[element])
-#             continue
-#         end
-#         firstmatch = findfirst(iscontained)
-#         for i in (firstmatch + 1):length(subsets)
-#             if iscontained[i]
-#                 append!(subsets[firstmatch], subsets[i])
-#                 resize!(subsets[i], 0)
-#                 shrink = true
-#             end
-#         end
-#         push!(subsets[firstmatch], element)
-#         if shrink
-#             deleteat!(subsets, isempty.(subsets))
-#             shrink = false
-#         end
-#     end
-#     return subsets
-# end

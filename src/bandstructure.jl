@@ -1,4 +1,3 @@
-
 #######################################################################
 # BrillouinMesh
 #######################################################################
@@ -34,7 +33,6 @@ function BrillouinMesh(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 
     else
         meshlat = simple_mesh(lat, partitions_tuple)
     end
-    # wrappedmesh = wrap(mesh)
     mesh = Mesh(meshlat)
     return BrillouinMesh(mesh, uniform, partitions_tuple)
 end
@@ -200,21 +198,20 @@ Bandstructure(sys::System; uniform = false, partitions = 5, kw...) =
 function Bandstructure(sys::System{T,E,L}, bz::BrillouinMesh{T,L}; linkthreshold = 0.5, kw...) where {T,E,L}
     spectrum = Spectrum(sys, bz; kw...)
     bzmeshlat = bz.mesh.lattice
-    bandmeshlat = emptybandmeshlat(bz)
-    addnodes!(bandmeshlat, spectrum)
-    for (meshilink, bzilink) in zip(allilinks(bandmeshlat), allilinks(bzmeshlat))
-        link!(meshilink, bzilink, spectrum, linkthreshold, bandmeshlat)
-    end
+    bmeshlat = bandmeshlat(bz, spectrum, linkthreshold)
     states = reshape(spectrum.states, spectrum.statelength, :)
-    bandmesh = Mesh(bandmeshlat)
+    bandmesh = Mesh(bmeshlat)
     return Bandstructure(bandmesh, states, spectrum.nenergies, spectrum.npoints)
-    # bandmeshlat
 end
 
-function emptybandmeshlat(bz::BrillouinMesh{T,L}) where {T,L}
+function bandmeshlat(bz::BrillouinMesh{T,L}, spectrum, linkthreshold) where {T,L}
     bandmeshlat = Lattice(Sublat{T,L+1}(), Bravais(SMatrix{L+1,L,T}(I)))
-    bandmeshlat.links.interlinks = 
-        [emptyilink(ilink.ndist, bandmeshlat.sublats) for ilink in bz.mesh.lattice.links.interlinks]
+    addnodes!(bandmeshlat, spectrum)
+    bzmeshlat = bz.mesh.lattice
+    bzmeshlinks = bzmeshlat.links
+    for bzmeshilink in allilinks(bzmeshlat)
+        addilink!(bandmeshlat.links, bzmeshilink, spectrum, linkthreshold, bandmeshlat)
+    end
     return bandmeshlat
 end
 
@@ -226,34 +223,31 @@ function addnodes!(bandmeshlat, spectrum)
     return bandmeshlat
 end
 
-function link!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, linkthreshold, bandmesh) where {T,L1,L}
+function addilink!(meshlinks::Links, bzilink::Ilink, sp::Spectrum, linkthreshold, bandmesh)
     meshnodes = bandmesh.sublats[1,1].sites
-    dist = bravaismatrix(bandmesh) * meshilink.ndist
+    dist = bravaismatrix(bandmesh) * bzilink.ndist
     linearindices = LinearIndices(sp.energies)
     state = sp.bufferstate
     states = sp.states
-    srcpointers = meshilink.slinks[1,1].srcpointers
-    targets = meshilink.slinks[1,1].targets
-    rdr = meshilink.slinks[1,1].rdr
-    length(targets) == length(rdr) == length(srcpointers) - 1 == 0 || throw("Bug in linkbandmesh!")
     
-    counter = 1
+    slinkseed = SparseMatrixSeed(bandmesh, 1, 1)
     @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
         n_src = linearindices[ne_src, nk_src]
+        r1 = meshnodes[n_src]
         copyslice!(state,  CartesianIndices(1:sp.statelength), 
                    states, CartesianIndices((1:sp.statelength, ne_src:ne_src, nk_src:nk_src)))
         @inbounds for nk_target in neighbors(bzilink, nk_src, (1,1))
             ne_target = findmostparallel(state, states, nk_target, linkthreshold)
             if !iszero(ne_target)
                 n_target = linearindices[ne_target, nk_target]
-                push!(targets, n_target)
-                push!(rdr, _rdr(meshnodes[n_src], meshnodes[n_target] + dist))
-                counter += 1
+                r2 = meshnodes[n_target] + dist
+                pushtocolumn!(slinkseed, n_target, _rdr(r1, r2))
             end
         end
-        push!(srcpointers, counter)
+        finalisecolumn!(slinkseed)
     end
-    return meshilink
+    push!(meshlinks, Ilink(bzilink.ndist, fill(Slink(sparse(slinkseed)), 1, 1)))
+    return meshlinks
 end
    
 function findmostparallel(state::Vector{Complex{T}}, states, ktarget, linkthreshold) where {T}
