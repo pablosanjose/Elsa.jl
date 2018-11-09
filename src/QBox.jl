@@ -18,6 +18,7 @@ abstract type ModelTerm end
 
 include("tools.jl")
 include("boxiterator.jl")
+include("sparseseed.jl")
 include("presets.jl")
 include("lattice.jl")
 include("algorithms_lattice.jl")

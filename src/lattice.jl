@@ -98,7 +98,7 @@ struct Slink{T<:AbstractFloat,E}
 end
 
 function Slink{T,E}(ntargets::Int, nsources::Int; coordination::Int = E+1) where {T,E}
-    # @show (ntargets, nsources)
+    @show (ntargets, nsources)
     rdr = spzeros(Tuple{SVector{E,T}, SVector{E,T}}, ntargets, nsources)
     sizehint!(rdr.rowval, coordination * nsources)
     sizehint!(rdr.nzval, coordination * nsources)
@@ -117,14 +117,6 @@ Base.setindex!(s::Slink, r, i, j) = Base.setindex!(s.rdr, r, i, j)
 Base.zero(::Type{Slink{T,E}}) where {T,E} = dummyslink(Slink{T,E})
 Base.isempty(slink::Slink) = (nlinks(slink) == 0)
 nlinks(slink::Slink) = nnz(slink.rdr)
-
-function unsafe_pushlink!(slink::Slink, source, target, rdr, skipdupcheck = true)
-    if skipdupcheck || !isintail(target, slink.rdr.nzval, slink.rdr.colptr[source])
-        push!(slink.rdr.rowval, target)
-        push!(slink.rdr.nzval, rdr)
-    end
-    return nothing
-end
 
 nsources(s::Slink) = size(s.rdr, 2)
 sources(s::Slink) = 1:nsources(s)
@@ -496,9 +488,12 @@ sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)
 linkgenerator_r1r2(ilink::Ilink) = ((rdr[1] -rdr[2]/2, rdr[1] + rdr[2]/2) for s in ilink.slinks for (_,rdr) in neighbors_rdr(s))
 selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) where {T,E,L} =
    Bravais(SMatrix{E,L,T}(lat.bravais.matrix[:,bools]))
-emptyslink(lat::Lattice{T,E}, s1::Int, s2::Int) where {T,E} = Slink{T,E}(nsites(lat.sublats[s2]), nsites(lat.sublats[s1]))
+# emptyslink(lat::Lattice{T,E}, s1::Int, s2::Int) where {T,E} = Slink{T,E}(nsites(lat.sublats[s2]), nsites(lat.sublats[s1]))
 dummyslinks(lat::Lattice) = dummyslinks(lat.sublats)
 dummyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = fill(dummyslink(Slink{T,E}), length(sublats), length(sublats))
+
+SparseMatrixSeed(lat::Lattice{T,E}, s1, s2) where {T,E} = 
+    SparseMatrixSeed(Tuple{SVector{E,T}, SVector{E,T}}, nsites(lat, s2), nsites(lat, s1))
 
 function boundingboxlat(lat::Lattice{T,E}) where {T,E}
     bmin = zero(MVector{E, T})

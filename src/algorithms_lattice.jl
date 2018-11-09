@@ -58,7 +58,6 @@ function _box_fill(::Val{N}, lat::Lattice{T,E,L}, isinregion::F, fillaxesbool, s
     nregisters = ifelse(isunlinked(lat), 0, numsublats)
     nsitesub = Int[nsites(sl) for sl in lat.sublats]
 
-    # pos_sites::Vector{Vector{SVector{E,T}}} = [[seed + site for site in slat.sites] for slat in lat.sublats]
     pos_sites = Vector{SVector{E,T}}[SVector{E,T}[seed + site for site in slat.sites] for slat in lat.sublats]
     newsublats = Sublat{T,E}[Sublat(sl.name, Vector{SVector{E,T}}()) for sl in lat.sublats]
     zeroseed = ntuple(_->0, Val(N))
@@ -166,15 +165,12 @@ function buildIlink(lat::Lattice{T,E}, lr, pre, (dist, ndist)) where {T,E}
 end
 
 function buildSlink(lat::Lattice{T,E}, lr, pre, (dist, ndist, isinter), (s1, s2)) where {T,E}
-    slink = emptyslink(lat, s1, s2)
-    counter = 1
+    slinkseed = SparseMatrixSeed(lat, s1, s2)
     for (i, r1) in enumerate(lat.sublats[s1].sites)
-        slink.rdr.colptr[i] = counter
-        add_neighbors!(slink, lr, pre, (dist, ndist, isinter), (s1, s2), (i, r1))
-        counter = length(slink.rdr.rowval) + 1
+        add_neighbors!(slinkseed, lr, pre, (dist, ndist, isinter), (s1, s2), (i, r1))
+        finalisecolumn!(slinkseed)
     end
-    slink.rdr.colptr[end] = counter
-    return slink
+    return Slink(sparse(slinkseed))
 end
 
 linkprecompute(linkrules::LinkRule{<:SimpleSearch}, lat::Lattice) = 
@@ -222,49 +218,46 @@ function findnonzeroinrow(ss, n)
     return 0
 end
 
-function add_neighbors!(slink, lr::LinkRule{<:SimpleSearch}, sublats, (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slinkseed, lr::LinkRule{<:SimpleSearch}, sublats, (dist, ndist, isinter), (s1, s2), (i, r1))
     for (j, r2) in enumerate(sublats[s2].sites)
         r2 += dist
         if lr.alg.isinrange(r2 - r1) && isvalidlink(isinter, (s1, s2), (i, j))
-            #slink[i,j] = _rdr(r1, r2)
-            unsafe_pushlink!(slink, i, j, _rdr(r1, r2))
+            pushtocolumn!(slinkseed, j, _rdr(r1, r2))
         end
     end
     return nothing
 end
 
-function add_neighbors!(slink, lr::LinkRule{TreeSearch}, (trees, sublats), (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slinkseed, lr::LinkRule{TreeSearch}, (trees, sublats), (dist, ndist, isinter), (s1, s2), (i, r1))
     range = lr.alg.range + extended_eps()
     neighs = inrange(trees[s2], r1 - dist, range)
     sites2 = sublats[s2].sites
     for j in neighs
         if isvalidlink(isinter, (s1, s2), (i, j))
             r2 = sites2[j] + dist
-            # slink[j,i] = _rdr(r1, r2)
-            unsafe_pushlink!(slink, i, j, _rdr(r1, r2))
+            pushtocolumn!(slinkseed, j, _rdr(r1, r2))
         end
     end
     return nothing
 end
 
-function add_neighbors!(slink, lr::LinkRule{<:WrapSearch}, ::Nothing, (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slinkseed, lr::LinkRule{<:WrapSearch}, ::Nothing, (dist, ndist, isinter), (s1, s2), (i, r1))
     oldbravais = bravaismatrix(lr.alg.bravais)
     unwrappedaxes = lr.alg.unwrappedaxes
-    add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), lr.alg.links.intralink, oldbravais, unwrappedaxes, true)
+    add_neighbors_wrap!(slinkseed, ndist, isinter, i, (s1, s2), lr.alg.links.intralink, oldbravais, unwrappedaxes, true)
     for ilink in lr.alg.links.interlinks
-        add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, false)
+        add_neighbors_wrap!(slinkseed, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, false)
     end
     return nothing
 end
 
-function add_neighbors_wrap!(slink, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, skipdupcheck)
+function add_neighbors_wrap!(slinkseed, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, skipdupcheck)
     oldslink = ilink.slinks[s2, s1]
     if !isempty(oldslink) && keepelements(ilink.ndist, unwrappedaxes) == ndist
         olddist = oldbravais * zeroout(ilink.ndist, unwrappedaxes)
         for (j, rdr_old) in neighbors_rdr(oldslink, i)
             if isvalidlink(isinter, (s1, s2), (i, j))
-                #slink[j,i] = (rdr_old[1] - olddist / 2, rdr_old[2] - olddist)
-                unsafe_pushlink!(slink, i, j, (rdr_old[1] - olddist / 2, rdr_old[2] - olddist), skipdupcheck)
+                pushtocolumn!(slinkseed, j, (rdr_old[1] - olddist / 2, rdr_old[2] - olddist), skipdupcheck)
             end
         end
     end
@@ -278,7 +271,7 @@ end
 #           ndold_intracell = ndistold of old unitcell containing site i
 #           ndold_intracell_shifted = same as ndold_intracell but shifted by -ndist of the new neighboring cell
 #           dist = distold of old unit cell containing new site i in the new unit cell
-function add_neighbors!(slink, lr::LinkRule{<:BoxIteratorSearch}, maps, (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slinkseed, lr::LinkRule{<:BoxIteratorSearch}, maps, (dist, ndist, isinter), (s1, s2), (i, r1))
     (celliter, iold) = lr.alg.iter.registers[s1].cellinds[i]
     ndold_intercell = lr.alg.open2old * ndist
     ndold_intracell = lr.alg.iterated2old * SVector(celliter)
@@ -288,15 +281,15 @@ function add_neighbors!(slink, lr::LinkRule{<:BoxIteratorSearch}, maps, (dist, n
     oldlinks = lr.alg.links
 
     isvalidlink(false, (s1, s2)) &&
-        _add_neighbors_ilink!(slink, oldlinks.intralink, maps[s2], isinter, (s1, s2), (i, iold, ndold_intracell_shifted), dist)
+        _add_neighbors_ilink!(slinkseed, oldlinks.intralink, maps[s2], isinter, (s1, s2), (i, iold, ndold_intracell_shifted), dist)
     for ilink in oldlinks.interlinks
         isvalidlink(true, (s1, s2)) &&
-            _add_neighbors_ilink!(slink, ilink, maps[s2], isinter, (s1, s2), (i, iold, ndold_intracell_shifted + ilink.ndist), dist)
+            _add_neighbors_ilink!(slinkseed, ilink, maps[s2], isinter, (s1, s2), (i, iold, ndold_intracell_shifted + ilink.ndist), dist)
     end
     return nothing
 end
 
-function _add_neighbors_ilink!(slink, ilink_old, maps2, isinter, (s1, s2), (i, iold, ndist_old), dist)    
+function _add_neighbors_ilink!(slinkseed, ilink_old, maps2, isinter, (s1, s2), (i, iold, ndist_old), dist)    
     slink_old = ilink_old.slinks[s2, s1]
     isempty(slink_old) && return nothing
     
@@ -305,8 +298,7 @@ function _add_neighbors_ilink!(slink, ilink_old, maps2, isinter, (s1, s2), (i, i
         if isvalid
             j = maps2[Tuple(ndist_old)..., jold]
             if j != 0 && isvalidlink(isinter, (s1, s2), (i, j))
-                #slink[j, i] = (rdr_old[1] + dist, rdr_old[2])
-                unsafe_pushlink!(slink, i, j, (rdr_old[1] + dist, rdr_old[2]))
+                pushtocolumn!(slinkseed, j, (rdr_old[1] + dist, rdr_old[2]))
             end
         end
     end

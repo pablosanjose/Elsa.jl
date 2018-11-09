@@ -1,4 +1,3 @@
-
 #######################################################################
 # BrillouinMesh
 #######################################################################
@@ -34,7 +33,6 @@ function BrillouinMesh(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 
     else
         meshlat = simple_mesh(lat, partitions_tuple)
     end
-    # wrappedmesh = wrap(mesh)
     mesh = Mesh(meshlat)
     return BrillouinMesh(mesh, uniform, partitions_tuple)
 end
@@ -232,27 +230,23 @@ function addilink!(meshlinks::Links, bzilink::Ilink, sp::Spectrum, linkthreshold
     state = sp.bufferstate
     states = sp.states
     
-    # slink = meshilink.slinks[1,1]
-    slink = emptyslink(bandmesh, 1, 1)
-    counter = 1
-    column = 0
+    slinkseed = SparseMatrixSeed(bandmesh, 1, 1)
     @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
-        column += 1
-        slink.rdr.colptr[column] = counter
         n_src = linearindices[ne_src, nk_src]
+        r1 = meshnodes[n_src]
         copyslice!(state,  CartesianIndices(1:sp.statelength), 
                    states, CartesianIndices((1:sp.statelength, ne_src:ne_src, nk_src:nk_src)))
         @inbounds for nk_target in neighbors(bzilink, nk_src, (1,1))
             ne_target = findmostparallel(state, states, nk_target, linkthreshold)
             if !iszero(ne_target)
                 n_target = linearindices[ne_target, nk_target]
-                unsafe_pushlink!(slink, n_src, n_target, _rdr(meshnodes[n_src], meshnodes[n_target] + dist))
-                counter += 1
+                r2 = meshnodes[n_target] + dist
+                pushtocolumn!(slinkseed, n_target, _rdr(r1, r2))
             end
         end
+        finalisecolumn!(slinkseed)
     end
-    slink.rdr.colptr[end] = counter
-    push!(meshlinks, Ilink(bzilink.ndist, fill(slink, 1, 1)))
+    push!(meshlinks, Ilink(bzilink.ndist, fill(Slink(sparse(slinkseed)), 1, 1)))
     return meshlinks
 end
    
