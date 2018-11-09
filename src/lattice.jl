@@ -98,9 +98,10 @@ struct Slink{T<:AbstractFloat,E}
 end
 
 function Slink{T,E}(ntargets::Int, nsources::Int; coordination::Int = 2*E) where {T,E}
+    # @show (ntargets, nsources)
     rdr = spzeros(Tuple{SVector{E,T}, SVector{E,T}}, ntargets, nsources)
-    sizehint!(rdr.rowval, coordination * nsources)
-    sizehint!(rdr.nzval, coordination * nsources)
+    # sizehint!(rdr.rowval, coordination * nsources)
+    # sizehint!(rdr.nzval, coordination * nsources)
     return Slink(rdr)
 end
 
