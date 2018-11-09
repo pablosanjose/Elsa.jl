@@ -211,11 +211,8 @@ function bandmeshlat(bz::BrillouinMesh{T,L}, spectrum, linkthreshold) where {T,L
     addnodes!(bandmeshlat, spectrum)
     bzmeshlat = bz.mesh.lattice
     bzmeshlinks = bzmeshlat.links
-    bandmeshlat.links.intralink = emptyilink(bzmeshlinks.intralink.ndist, bandmeshlat.sublats)
-    bandmeshlat.links.interlinks = 
-        [emptyilink(ilink.ndist, bandmeshlat.sublats) for ilink in bzmeshlinks.interlinks]
-    for (bmeshilink, bzmeshilink) in zip(allilinks(bandmeshlat), allilinks(bzmeshlat))
-        linkbands!(bmeshilink, bzmeshilink, spectrum, linkthreshold, bandmeshlat)
+    for bzmeshilink in allilinks(bzmeshlat)
+        addilink!(bandmeshlat.links, bzmeshilink, spectrum, linkthreshold, bandmeshlat)
     end
     return bandmeshlat
 end
@@ -228,15 +225,15 @@ function addnodes!(bandmeshlat, spectrum)
     return bandmeshlat
 end
 
-function linkbands!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, linkthreshold, bandmesh) where {T,L1,L}
+function addilink!(meshlinks::Links, bzilink::Ilink, sp::Spectrum, linkthreshold, bandmesh)
     meshnodes = bandmesh.sublats[1,1].sites
-    dist = bravaismatrix(bandmesh) * meshilink.ndist
+    dist = bravaismatrix(bandmesh) * bzilink.ndist
     linearindices = LinearIndices(sp.energies)
     state = sp.bufferstate
     states = sp.states
     
-    slink = meshilink.slinks[1,1]
-    #emptyslink(bandmesh, 1, 1)
+    # slink = meshilink.slinks[1,1]
+    slink = emptyslink(bandmesh, 1, 1)
     counter = 1
     column = 0
     @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
@@ -255,39 +252,9 @@ function linkbands!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, linkthresho
         end
     end
     slink.rdr.colptr[end] = counter
-    # meshilink.slinks[1,1] = slink
-    return meshilink
+    push!(meshlinks, Ilink(bzilink.ndist, fill(slink, 1, 1)))
+    return meshlinks
 end
-
-# function link!(meshilink::Ilink{T,L1,L}, bzilink, sp::Spectrum, linkthreshold, bandmesh) where {T,L1,L}
-#     meshnodes = bandmesh.sublats[1,1].sites
-#     dist = bravaismatrix(bandmesh) * meshilink.ndist
-#     linearindices = LinearIndices(sp.energies)
-#     state = sp.bufferstate
-#     states = sp.states
-#     srcpointers = meshilink.slinks[1,1].srcpointers
-#     targets = meshilink.slinks[1,1].targets
-#     rdr = meshilink.slinks[1,1].rdr
-#     length(targets) == length(rdr) == length(srcpointers) - 1 == 0 || throw("Bug in linkbandmesh!")
-    
-#     counter = 1
-#     @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
-#         n_src = linearindices[ne_src, nk_src]
-#         copyslice!(state,  CartesianIndices(1:sp.statelength), 
-#                    states, CartesianIndices((1:sp.statelength, ne_src:ne_src, nk_src:nk_src)))
-#         @inbounds for nk_target in neighbors(bzilink, nk_src, (1,1))
-#             ne_target = findmostparallel(state, states, nk_target, linkthreshold)
-#             if !iszero(ne_target)
-#                 n_target = linearindices[ne_target, nk_target]
-#                 push!(targets, n_target)
-#                 push!(rdr, _rdr(meshnodes[n_src], meshnodes[n_target] + dist))
-#                 counter += 1
-#             end
-#         end
-#         push!(srcpointers, counter)
-#     end
-#     return meshilink
-# end
    
 function findmostparallel(state::Vector{Complex{T}}, states, ktarget, linkthreshold) where {T}
     maxproj = T(linkthreshold)

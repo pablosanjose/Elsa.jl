@@ -93,7 +93,7 @@ keepaxes(br::Bravais, unwrappedaxes) = Bravais(keepcolumns(bravaismatrix(br), un
 # where the targets for site n1 start. The last extra element allows to compute
 # the target ranges easily for all n1. Finally, rdr is of the same length as targets
 # and stores the relative vector positions of n1 and its target.
-struct Slink{T,E}
+struct Slink{T<:AbstractFloat,E}
     rdr::SparseMatrixCSC{Tuple{SVector{E,T}, SVector{E,T}}, Int}
 end
 
@@ -104,9 +104,16 @@ function Slink{T,E}(ntargets::Int, nsources::Int; coordination::Int = 2*E) where
     return Slink(rdr)
 end
 
+# static placeholders for unlinked lattices
+const dummyslinkF64 = ntuple(E -> Slink{Float64,E}(0,0), Val(4))
+const dummyslinkF32 = ntuple(E -> Slink{Float32,E}(0,0), Val(4))
+dummyslink(S::Type{Slink{Float64,E}}) where {E} = _dummyslink(S, dummyslinkF64)
+dummyslink(S::Type{Slink{Float32,E}}) where {E} = _dummyslink(S, dummyslinkF32)
+@noinline _dummyslink(S::Type{Slink{T,E}}, dummytuple) where {T,E} = E > length(dummytuple) ? S(0,0) : dummytuple[E]
+
 Base.getindex(s::Slink, i, j) = Base.getindex(s.rdr, i, j)
 Base.setindex!(s::Slink, r, i, j) = Base.setindex!(s.rdr, r, i, j)
-Base.zero(::Type{Slink{T,E}}) where {T,E} = Slink{T,E}(0, 0)
+Base.zero(::Type{Slink{T,E}}) where {T,E} = dummyslink(Slink{T,E})
 Base.isempty(slink::Slink) = (nlinks(slink) == 0)
 nlinks(slink::Slink) = nnz(slink.rdr)
 
@@ -140,8 +147,7 @@ struct Ilink{T,E,L}
     slinks::Matrix{Slink{T,E}}
 end
 
-# emptyilink(ndist::SVector, sublats::Vector{<:Sublat}) = Ilink(ndist, emptyslinks(sublats))
-emptyilink(ndist::SVector, sublats::Vector{<:Sublat}) = Ilink(ndist, emptyslinks(sublats))
+dummyilink(ndist::SVector, sublats::Vector{<:Sublat}) = Ilink(ndist, dummyslinks(sublats))
 
 nlinks(ilinks::Vector{<:Ilink}) = isempty(ilinks) ? 0 : sum(nlinks, ilinks)
 nlinks(ilink::Ilink) = isempty(ilink.slinks) ? 0 : sum(i -> nlinks(ilink.slinks, i), eachindex(ilink.slinks))
@@ -163,9 +169,19 @@ mutable struct Links{T,E,L}  # mutable to be able to update it with link!
     interlinks::Vector{Ilink{T,E,L}} 
 end
 
-emptylinks(lat) = emptylinks(lat.sublats, lat.bravais)
-emptylinks(sublats::Vector{Sublat{T,E}}, bravais::Bravais{T,E,L}) where {T,E,L} =
-    Links(emptyilink(zero(SVector{L, Int}), sublats), Ilink{T,E,L}[])
+dummylinks(lat) = dummylinks(lat.sublats, lat.bravais)
+dummylinks(sublats::Vector{Sublat{T,E}}, bravais::Bravais{T,E,L}) where {T,E,L} =
+    Links(dummyilink(zero(SVector{L, Int}), sublats), Ilink{T,E,L}[])
+
+function Base.push!(links::Links, ilink::Ilink)
+    if iszero(ilink.ndist)
+        links.intralink = ilink
+    else
+        ind = findfirst(il -> il.ndist == ilink.ndist, links.interlinks)
+        isnothing(ind) ? push!(links.interlinks, ilink) : links.interlinks[ind] = ilink
+    end
+    return links
+end
 
 nlinks(links::Links) = nlinks(links.intralink) + nlinks(links.interlinks)
    
@@ -440,7 +456,7 @@ mutable struct Lattice{T,E,L,EL}
     bravais::Bravais{T,E,L,EL}
     links::Links{T,E,L}
 end
-Lattice(sublats::Vector{Sublat{T,E}}, bravais::Bravais{T,E,L}) where {T,E,L} = Lattice(sublats, bravais, emptylinks(sublats, bravais))
+Lattice(sublats::Vector{Sublat{T,E}}, bravais::Bravais{T,E,L}) where {T,E,L} = Lattice(sublats, bravais, dummylinks(sublats, bravais))
 # Lattice(bravais::Bravais{T,E,L}) where {T,E,L} = Lattice([Sublat(zero(SVector{E,T}))], bravais)
 
 Lattice(name::Symbol) = Lattice(Preset(name))
@@ -479,11 +495,9 @@ sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)
 linkgenerator_r1r2(ilink::Ilink) = ((rdr[1] -rdr[2]/2, rdr[1] + rdr[2]/2) for s in ilink.slinks for (_,rdr) in neighbors_rdr(s))
 selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) where {T,E,L} =
    Bravais(SMatrix{E,L,T}(lat.bravais.matrix[:,bools]))
-# emptyslink(lat::Lattice{T,E}, s1::Int, s2::Int) where {T,E} = Slink{T,E}(nsites(lat.sublats[s2]), nsites(lat.sublats[s1]))
 emptyslink(lat::Lattice{T,E}, s1::Int, s2::Int) where {T,E} = Slink{T,E}(nsites(lat.sublats[s2]), nsites(lat.sublats[s1]))
-emptyslinks(lat::Lattice) = emptyslinks(lat.sublats)
-emptyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = [Slink{T,E}(nsites(s2), nsites(s1)) for s2 in sublats, s1 in sublats]
-placeholderslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = [Slink{T,E}(0, 0) for s2 in sublats, s1 in sublats]
+dummyslinks(lat::Lattice) = dummyslinks(lat.sublats)
+dummyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = fill(dummyslink(Slink{T,E}), length(sublats), length(sublats))
 
 function boundingboxlat(lat::Lattice{T,E}) where {T,E}
     bmin = zero(MVector{E, T})
@@ -732,7 +746,7 @@ end
 
 function combine_ilinks(is, combined_sublats)
     allsame(i.ndist for i in is) || throw(DimensionMismatch("Cannot combine Ilinks with different ndist"))
-    ilink = emptyilink(first(is).ndist, combined_sublats)
+    ilink = dummyilink(first(is).ndist, combined_sublats)
     slinkmatrices = map(i -> i.slinks, is)
     filldiag!(ilink.slinks, slinkmatrices)
     return ilink
@@ -744,7 +758,7 @@ function getilink(lat::Lattice, ndist)
     else
         index = findfirst(i -> i.ndist == ndist, lat.links.interlinks)
         if index === nothing
-            return emptyilink(ndist, lat.sublats)
+            return dummyilink(ndist, lat.sublats)
         else 
             return lat.links.interlinks[index]
         end

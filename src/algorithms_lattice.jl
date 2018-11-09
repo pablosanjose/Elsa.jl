@@ -17,7 +17,6 @@ function expand_unitcell(lat::Lattice{T,E,L,EL}, supercell::Supercell) where {T,
             cell -> all(e -> - extended_eps() <= e < 1 - extended_eps(), invscell * cell)
         end
     newsublats, iter = _box_fill(Val(L), lat, isinregion, fillaxesbool, seed, missing, true)
-    
     newlattice = Lattice(newsublats, Bravais(newbravais))
     open2old = smat
     iterated2old = one(SMatrix{L,L,Int})
@@ -117,12 +116,10 @@ function link!(lat::Lattice{T,E,L}, lr::LinkRule{S}) where {T,E,L,S<:SearchAlgor
     br = bravaismatrix(lat)
     ndist_zero = zero(SVector{L,Int})
     dist_zero = br * ndist_zero
-    
     lat.links.intralink = buildIlink(lat, lr, pre, (dist_zero, ndist_zero))
     L==0 && return lat
 
     iter = BoxIterator(Tuple(ndist_zero), maxiterations = lr.maxsteps)
-    
     for cell in iter
         ndist = SVector(cell)
         
@@ -158,7 +155,7 @@ function buildIlink(lat::Lattice{T,E}, lr, pre, (dist, ndist)) where {T,E}
     isinter = any(n -> n != 0, ndist)
     nsl = nsublats(lat)
 
-    slinks = fill(Slink{T,E}(0, 0), nsl, nsl) # placeholder to be replaced below
+    slinks = dummyslinks(lat.sublats) # placeholder to be replaced below
    
     validsublats = matchingsublats(lat, lr)
     for s1 in 1:nsl, s2 in 1:nsl
