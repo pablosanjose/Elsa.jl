@@ -490,8 +490,8 @@ selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) 
 dummyslinks(lat::Lattice) = dummyslinks(lat.sublats)
 dummyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = fill(dummyslink(Slink{T,E}), length(sublats), length(sublats))
 
-SparseMatrixSeed(lat::Lattice{T,E,L}, s1, s2) where {T,E,L} = 
-    SparseMatrixSeed(Tuple{SVector{E,T}, SVector{E,T}}, nsites(lat, s2), nsites(lat, s1), max((L + 1), coordination(lat)))
+SparseMatrixBuilder(lat::Lattice{T,E,L}, s1, s2) where {T,E,L} = 
+    SparseMatrixBuilder(Tuple{SVector{E,T}, SVector{E,T}}, nsites(lat, s2), nsites(lat, s1), max((L + 1), coordination(lat)))
 
 function boundingboxlat(lat::Lattice{T,E}) where {T,E}
     bmin = zero(MVector{E, T})

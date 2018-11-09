@@ -165,7 +165,7 @@ function buildIlink(lat::Lattice{T,E}, lr, pre, (dist, ndist)) where {T,E}
 end
 
 function buildSlink(lat::Lattice{T,E}, lr, pre, (dist, ndist, isinter), (s1, s2)) where {T,E}
-    slinkseed = SparseMatrixSeed(lat, s1, s2)
+    slinkseed = SparseMatrixBuilder(lat, s1, s2)
     for (i, r1) in enumerate(lat.sublats[s1].sites)
         add_neighbors!(slinkseed, lr, pre, (dist, ndist, isinter), (s1, s2), (i, r1))
         finalisecolumn!(slinkseed)
