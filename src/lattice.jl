@@ -488,12 +488,11 @@ sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)
 linkgenerator_r1r2(ilink::Ilink) = ((rdr[1] -rdr[2]/2, rdr[1] + rdr[2]/2) for s in ilink.slinks for (_,rdr) in neighbors_rdr(s))
 selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) where {T,E,L} =
    Bravais(SMatrix{E,L,T}(lat.bravais.matrix[:,bools]))
-# emptyslink(lat::Lattice{T,E}, s1::Int, s2::Int) where {T,E} = Slink{T,E}(nsites(lat.sublats[s2]), nsites(lat.sublats[s1]))
 dummyslinks(lat::Lattice) = dummyslinks(lat.sublats)
 dummyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = fill(dummyslink(Slink{T,E}), length(sublats), length(sublats))
 
-SparseMatrixSeed(lat::Lattice{T,E}, s1, s2) where {T,E} = 
-    SparseMatrixSeed(Tuple{SVector{E,T}, SVector{E,T}}, nsites(lat, s2), nsites(lat, s1))
+SparseMatrixSeed(lat::Lattice{T,E,L}, s1, s2) where {T,E,L} = 
+    SparseMatrixSeed(Tuple{SVector{E,T}, SVector{E,T}}, nsites(lat, s2), nsites(lat, s1); coordinationhint = L + 1) #coordination(lat))
 
 function boundingboxlat(lat::Lattice{T,E}) where {T,E}
     bmin = zero(MVector{E, T})

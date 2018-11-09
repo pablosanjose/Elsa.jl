@@ -247,6 +247,7 @@ function add_neighbors!(slinkseed, lr::LinkRule{<:WrapSearch}, ::Nothing, (dist,
     add_neighbors_wrap!(slinkseed, ndist, isinter, i, (s1, s2), lr.alg.links.intralink, oldbravais, unwrappedaxes, true)
     for ilink in lr.alg.links.interlinks
         add_neighbors_wrap!(slinkseed, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, false)
+        # This skipdupcheck == false required to exclude interlinks = intralinks in small wrapped lattices
     end
     return nothing
 end
