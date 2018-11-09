@@ -70,7 +70,7 @@ end
 Bravais(vs...) = Bravais(toSMatrix(vs...))
 Bravais(::Type{T}, vs...) where {T} = Bravais(toSMatrix(T, vs...))
 
-@inline transform(b::Bravais{T,E,0,0}, f::F) where {T,E,F<:Function} = b
+transform(b::Bravais{T,E,0,0}, f::F) where {T,E,F<:Function} = b
 function transform(b::Bravais{T,E,L,EL}, f::F) where {T,E,L,EL,F<:Function}
     svecs = let z = zero(SVector{E,T})
         ntuple(i -> f(b.matrix[:, i]) - f(z), Val(L))
@@ -123,7 +123,7 @@ neighbors(s::Slink, src) = (rowvals(s.rdr)[j] for j in nzrange(s.rdr, src))
 neighbors_rdr(s::Slink, src) = ((rowvals(s.rdr)[j], nonzeros(s.rdr)[j]) for j in nzrange(s.rdr, src))
 neighbors_rdr(s::Slink) = zip(s.rdr.rowval, s.rdr.nzval)
 
-@inline _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
+_rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
 function transform!(s::Slink, f::F) where F<:Function 
     frdr(rdr) = _rdr(f(rdr[1] - 0.5 * rdr[2]), f(rdr[1] + 0.5 * rdr[2]))
@@ -481,8 +481,8 @@ isunlinked(lat::Lattice) = nlinks(lat.links) == 0
 coordination(lat::Lattice) = (2 * nlinks(lat.links.intralink) + nlinks(lat.links.interlinks))/nsites(lat)
 allilinks(lat::Lattice) = allilinks(lat.links)
 getilink(lat::Lattice, i::Int) = getilink(lat.links, i)
-@inline bravaismatrix(lat::Lattice) = bravaismatrix(lat.bravais)
-@inline bravaismatrix(br::Bravais) = br.matrix
+bravaismatrix(lat::Lattice) = bravaismatrix(lat.bravais)
+bravaismatrix(br::Bravais) = br.matrix
 sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)
 linkgenerator_r1r2(ilink::Ilink) = ((rdr[1] -rdr[2]/2, rdr[1] + rdr[2]/2) for s in ilink.slinks for (_,rdr) in neighbors_rdr(s))
 selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) where {T,E,L} =
@@ -491,7 +491,7 @@ dummyslinks(lat::Lattice) = dummyslinks(lat.sublats)
 dummyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = fill(dummyslink(Slink{T,E}), length(sublats), length(sublats))
 
 SparseMatrixSeed(lat::Lattice{T,E,L}, s1, s2) where {T,E,L} = 
-    SparseMatrixSeed(Tuple{SVector{E,T}, SVector{E,T}}, nsites(lat, s2), nsites(lat, s1); coordinationhint = L + 1) #coordination(lat))
+    SparseMatrixSeed(Tuple{SVector{E,T}, SVector{E,T}}, nsites(lat, s2), nsites(lat, s1), max((L + 1), coordination(lat)))
 
 function boundingboxlat(lat::Lattice{T,E}) where {T,E}
     bmin = zero(MVector{E, T})

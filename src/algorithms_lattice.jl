@@ -95,9 +95,9 @@ cellrange(links::Links) = isempty(links.interlinks) ? 0 : maximum(max(abs.(ilink
 # intralink choice i < j we can append new sites without reordering the 
 # intralink slink lists (it's lower-triangular sparse)
 
-@inline isvalidlink(isinter::Bool, (s1, s2)) = isinter || s1 <= s2
-@inline isvalidlink(isinter::Bool, (s1, s2), (i, j)::Tuple{Int,Int}) = isinter || s1 < s2 || i < j
-@inline isvalidlink(isinter::Bool, (s1, s2), validsublats) = 
+isvalidlink(isinter::Bool, (s1, s2)) = isinter || s1 <= s2
+isvalidlink(isinter::Bool, (s1, s2), (i, j)::Tuple{Int,Int}) = isinter || s1 < s2 || i < j
+isvalidlink(isinter::Bool, (s1, s2), validsublats) = 
     isvalidlink(isinter, (s1, s2)) && ((s1, s2) in validsublats || (s2, s1) in validsublats)
 
 function link!(lat::Lattice, lr::LinkRule{AutomaticRangeSearch})

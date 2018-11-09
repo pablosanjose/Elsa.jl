@@ -8,11 +8,12 @@ mutable struct SparseMatrixSeed{T}
     rowvalcounter::Int
 end
 
-function SparseMatrixSeed(::Type{T}, m, n; coordinationhint = 1) where T
+function SparseMatrixSeed(::Type{T}, m, n, coordinationhint = 1) where T
     colptr = Vector{Int}(undef, n + 1)
     colptr[1] = 1
-    rowval = Int[]; sizehint!(rowval, round(Int, coordinationhint) * n)
-    nzval = T[];  sizehint!(nzval,  round(Int, coordinationhint) * n)
+    rowval = Int[]; sizehint!(rowval, round(Int, 0.5 * coordinationhint * n))
+    nzval = T[];    sizehint!(nzval,  round(Int, 0.5 * coordinationhint * n))
+    # The 0.5 is due to storing undirected links only
     return SparseMatrixSeed(m, n, colptr, rowval, nzval, 1, 1)
 end
 
