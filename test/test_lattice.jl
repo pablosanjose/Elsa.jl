@@ -53,7 +53,7 @@ using QBox: nsites, nlinks
 @test QBox.nlinks(Lattice(:square, LinkRule(2), Supercell(31))) == 6074
 @test QBox.nlinks(Lattice(:bcc, LinkRule(1), FillRegion(:spheroid, (10,4,4)))) == 8216
 
-@test LinkRule(1.2, 1, (2,3)) isa LinkRule{QBox.AutomaticRangeSearch,Tuple{Tuple{Int64,Int64},Tuple{Int64,Int64}}}
+@test LinkRule(1.2, 1, (2,3)) isa LinkRule{QBox.AutomaticRangeLinking,Tuple{Tuple{Int64,Int64},Tuple{Int64,Int64}}}
 @test LinkRule(1, sublats = (1, (2, 3))).sublats == ((1, 1), (2, 3)) 
 
 @test begin

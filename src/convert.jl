@@ -38,5 +38,5 @@ Ilink{T,E,L}(i::Ilink) where {T,E,L} =
 Lattice{T,E,L,EL}(l::Lattice) where {T,E,L,EL} = 
     Lattice{T,E,L,EL}(l.sublats, l.bravais, l.links)
 
-LinkRule{S}(lr::LinkRule{AutomaticRangeSearch}) where S<:SimpleSearch = LinkRule(SimpleSearch(lr.alg.range), lr.sublats, lr.mincells, lr.maxsteps)
-LinkRule{T}(lr::LinkRule{AutomaticRangeSearch}) where T<:TreeSearch = LinkRule(TreeSearch(lr.alg.range), lr.sublats, lr.mincells, lr.maxsteps)
+LinkRule{S}(lr::LinkRule{AutomaticRangeLinking}) where S<:SimpleLinking = LinkRule(SimpleLinking(lr.alg.range), lr.sublats, lr.mincells, lr.maxsteps)
+LinkRule{T}(lr::LinkRule{AutomaticRangeLinking}) where T<:TreeLinking = LinkRule(TreeLinking(lr.alg.range), lr.sublats, lr.mincells, lr.maxsteps)

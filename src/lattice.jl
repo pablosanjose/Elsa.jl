@@ -93,7 +93,7 @@ keepaxes(br::Bravais, unwrappedaxes) = Bravais(keepcolumns(bravaismatrix(br), un
 # where the targets for site n1 start. The last extra element allows to compute
 # the target ranges easily for all n1. Finally, rdr is of the same length as targets
 # and stores the relative vector positions of n1 and its target.
-struct Slink{T<:AbstractFloat,E}
+struct Slink{T,E}
     rdr::SparseMatrixCSC{Tuple{SVector{E,T}, SVector{E,T}}, Int}
 end
 
@@ -329,30 +329,30 @@ Supercell(rescalings::Vararg{Number,N}) where {N} = Supercell(SMatrix{N,N,Int}(D
 #######################################################################
 ## LinkRule LatticeDirective : directives to create links in a lattice
 #######################################################################
-abstract type SearchAlgorithm end
+abstract type LinkingAlgorithm end
 
-struct SimpleSearch{F<:Function} <: SearchAlgorithm
+struct SimpleLinking{F<:Function} <: LinkingAlgorithm
     isinrange::F
 end
-SimpleSearch(range::Number) = SimpleSearch(dr -> norm(dr) <= range + extended_eps())
+SimpleLinking(range::Number) = SimpleLinking(dr -> norm(dr) <= range + extended_eps())
 
-struct TreeSearch <: SearchAlgorithm
+struct TreeLinking <: LinkingAlgorithm
     range::Float64
     leafsize::Int
 end
-TreeSearch(range; leafsize = 10) = TreeSearch(abs(range), leafsize)
+TreeLinking(range; leafsize = 10) = TreeLinking(abs(range), leafsize)
 
-struct WrapSearch{T,E,L,EL,N} <: SearchAlgorithm
+struct WrapLinking{T,E,L,EL,N} <: LinkingAlgorithm
     links::Links{T,E,L}
     bravais::Bravais{T,E,L,EL}
     unwrappedaxes::NTuple{N,Int}
 end
 
-struct AutomaticRangeSearch <: SearchAlgorithm
+struct AutomaticRangeLinking <: LinkingAlgorithm
     range::Float64
 end
 
-struct BoxIteratorSearch{T,E,L,N,EL,O<:SMatrix,C<:SMatrix} <: SearchAlgorithm
+struct BoxIteratorLinking{T,E,L,N,EL,O<:SMatrix,C<:SMatrix} <: LinkingAlgorithm
     links::Links{T,E,L}
     iter::BoxIterator{N}
     open2old::O
@@ -366,8 +366,8 @@ end
     LinkRule(range[, sublats...]; mincells = 0, maxsteps = 100_000_000))
 
 Create a `LinkRule{S,SL} <: LatticeDirective` to compute links between sites in
-sublattices indicated by `sublats::SL` using `algorithm::S <: SearchAlgorithm`. 
-`TreeSearch(range::Number)` and `SimpleSearch(isinrange::Function)` are available. 
+sublattices indicated by `sublats::SL` using `algorithm::S <: LinkingAlgorithm`. 
+`TreeLinking(range::Number)` and `SimpleLinking(isinrange::Function)` are available. 
 If a linking `range` instead an `algorithm` is given, the algorithm is chosen 
 automatically.
 
@@ -382,16 +382,16 @@ julia> lr = LinkRule(1, (2, :A), 1, (3,1)); (lr.alg.range, lr.sublats)
 (1.0, ((2, :A), (1, 1), (3, 1)))
 
 julia> LinkRule(2.0, (1, 2)) |> typeof
-LinkRule{QBox.AutomaticRangeSearch,Tuple{Tuple{Int64,Int64}}}
+LinkRule{QBox.AutomaticRangeLinking,Tuple{Tuple{Int64,Int64}}}
 
-julia> LinkRule(TreeSearch(2.0)) |> typeof
-LinkRule{TreeSearch,Missing}
+julia> LinkRule(TreeLinking(2.0)) |> typeof
+LinkRule{TreeLinking,Missing}
 
-julia> LinkRule(SimpleSearch(dr -> norm(dr, 1) < 2.0)) |> typeof
-LinkRule{SimpleSearch{getfield(Main, Symbol("##9#10"))},Missing}
+julia> LinkRule(SimpleLinking(dr -> norm(dr, 1) < 2.0)) |> typeof
+LinkRule{SimpleLinking{getfield(Main, Symbol("##9#10"))},Missing}
 ```
 """
-struct LinkRule{S<:SearchAlgorithm, SL} <: LatticeDirective
+struct LinkRule{S<:LinkingAlgorithm, SL} <: LatticeDirective
     alg::S
     sublats::SL
     mincells::Int  # minimum range to search in using BoxIterator
@@ -400,9 +400,9 @@ end
 LinkRule(range; kw...) = LinkRule(; range = range, kw...)
 LinkRule(range, sublats...; kw...) = LinkRule(; range = range, sublats = sublats, kw...)
 LinkRule(; range = 10.0, sublats = missing, kw...) = 
-    LinkRule(AutomaticRangeSearch(abs(range)), tuplesort(to_tuples_or_missing(sublats)); kw...)
-LinkRule(alg::S; kw...) where S<:SearchAlgorithm = LinkRule(alg, missing; kw...)
-LinkRule(alg::S, sublats; mincells = 0, maxsteps = 100_000_000) where S<:SearchAlgorithm =
+    LinkRule(AutomaticRangeLinking(abs(range)), tuplesort(to_tuples_or_missing(sublats)); kw...)
+LinkRule(alg::S; kw...) where S<:LinkingAlgorithm = LinkRule(alg, missing; kw...)
+LinkRule(alg::S, sublats; mincells = 0, maxsteps = 100_000_000) where S<:LinkingAlgorithm =
     LinkRule(alg, sublats, abs(mincells), maxsteps)
 
 #######################################################################
@@ -767,6 +767,6 @@ function wrap(lat::Lattice{T,E,L}; exceptaxes::NTuple{N,Int} = ()) where {T,E,L,
     newsublats = deepcopy(lat.sublats)
     newbravais = keepaxes(lat.bravais, exceptaxes)
     newlat = lattice!(Lattice(newsublats, newbravais), 
-                      LinkRule(WrapSearch(lat.links, lat.bravais, exceptaxes)))
+                      LinkRule(WrapLinking(lat.links, lat.bravais, exceptaxes)))
     return newlat
 end

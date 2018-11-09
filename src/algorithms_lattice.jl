@@ -21,7 +21,7 @@ function expand_unitcell(lat::Lattice{T,E,L,EL}, supercell::Supercell) where {T,
     open2old = smat
     iterated2old = one(SMatrix{L,L,Int})
     return isunlinked(lat) ? newlattice : 
-        link!(newlattice, LinkRule(BoxIteratorSearch(lat.links, iter, open2old, 
+        link!(newlattice, LinkRule(BoxIteratorLinking(lat.links, iter, open2old, 
             iterated2old, lat.bravais, nsiteslist(lat)); mincells = cellrange(lat.links)))
 end
 
@@ -47,7 +47,7 @@ function fill_region(lat::Lattice{T,E,L}, fr::FillRegion{E,F,N}) where {T,E,L,F,
     open2old = nmatrix(openaxesbool, Val(N))
     iterated2old = nmatrix(closeaxesbool, Val(filldims))
     return isunlinked(lat) ? newlattice : 
-        link!(newlattice, LinkRule(BoxIteratorSearch(lat.links, iter, open2old, iterated2old, 
+        link!(newlattice, LinkRule(BoxIteratorLinking(lat.links, iter, open2old, iterated2old, 
                                     lat.bravais, nsiteslist(lat)); mincells = cellrange(lat.links)))
 end
 
@@ -100,16 +100,16 @@ isvalidlink(isinter::Bool, (s1, s2), (i, j)::Tuple{Int,Int}) = isinter || s1 < s
 isvalidlink(isinter::Bool, (s1, s2), validsublats) = 
     isvalidlink(isinter, (s1, s2)) && ((s1, s2) in validsublats || (s2, s1) in validsublats)
 
-function link!(lat::Lattice, lr::LinkRule{AutomaticRangeSearch})
+function link!(lat::Lattice, lr::LinkRule{AutomaticRangeLinking})
     if nsites(lat) < 200 # Heuristic cutoff
-        newlr = convert(LinkRule{SimpleSearch}, lr)
+        newlr = convert(LinkRule{SimpleLinking}, lr)
     else
-        newlr = convert(LinkRule{TreeSearch}, lr)
+        newlr = convert(LinkRule{TreeLinking}, lr)
     end
     return link!(lat, newlr)
 end
 
-function link!(lat::Lattice{T,E,L}, lr::LinkRule{S}) where {T,E,L,S<:SearchAlgorithm}
+function link!(lat::Lattice{T,E,L}, lr::LinkRule{S}) where {T,E,L,S<:LinkingAlgorithm}
     # clearlinks!(lat)
     pre = linkprecompute(lr, lat)
     br = bravaismatrix(lat)
@@ -139,8 +139,8 @@ end
 @inline iswithinmin(cell, min) = all(abs(c) <= min for c in cell)
 
 # Logic to exlude cells that are not linked to zero cell by any ilink
-isnotlinked(ndist, br, lr) = false # default fallback, used unless lr.alg isa BoxIteratorSearch
-function isnotlinked(ndist, br, lr::LinkRule{B}) where {T,E,L,NL,B<:BoxIteratorSearch{T,E,L,NL}}
+isnotlinked(ndist, br, lr) = false # default fallback, used unless lr.alg isa BoxIteratorLinking
+function isnotlinked(ndist, br, lr::LinkRule{B}) where {T,E,L,NL,B<:BoxIteratorLinking{T,E,L,NL}}
     nm = lr.alg.open2old
     ndist0 = nm * ndist
     linked = all((
@@ -173,17 +173,17 @@ function buildSlink(lat::Lattice{T,E}, lr, pre, (dist, ndist, isinter), (s1, s2)
     return Slink(sparse(slinkbuilder))
 end
 
-linkprecompute(linkrules::LinkRule{<:SimpleSearch}, lat::Lattice) = 
+linkprecompute(linkrules::LinkRule{<:SimpleLinking}, lat::Lattice) = 
     lat.sublats
     
-linkprecompute(linkrules::LinkRule{TreeSearch}, lat::Lattice) = 
+linkprecompute(linkrules::LinkRule{TreeLinking}, lat::Lattice) = 
     ([KDTree(sl.sites, leafsize = linkrules.alg.leafsize) for sl in lat.sublats],
      lat.sublats)
 
-linkprecompute(linkrules::LinkRule{<:WrapSearch}, lat::Lattice) = 
+linkprecompute(linkrules::LinkRule{<:WrapLinking}, lat::Lattice) = 
     nothing
 
-function linkprecompute(lr::LinkRule{<:BoxIteratorSearch}, lat::Lattice)
+function linkprecompute(lr::LinkRule{<:BoxIteratorLinking}, lat::Lattice)
     # Build an OffsetArray for each sublat s : maps[s] = oa[cells..., iold] = inew, where cells are oldsystem cells, not fill cells
     nslist = lr.alg.nslist
     iterated2old = lr.alg.iterated2old
@@ -218,7 +218,7 @@ function findnonzeroinrow(ss, n)
     return 0
 end
 
-function add_neighbors!(slinkbuilder, lr::LinkRule{<:SimpleSearch}, sublats, (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slinkbuilder, lr::LinkRule{<:SimpleLinking}, sublats, (dist, ndist, isinter), (s1, s2), (i, r1))
     for (j, r2) in enumerate(sublats[s2].sites)
         r2 += dist
         if lr.alg.isinrange(r2 - r1) && isvalidlink(isinter, (s1, s2), (i, j))
@@ -228,7 +228,7 @@ function add_neighbors!(slinkbuilder, lr::LinkRule{<:SimpleSearch}, sublats, (di
     return nothing
 end
 
-function add_neighbors!(slinkbuilder, lr::LinkRule{TreeSearch}, (trees, sublats), (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slinkbuilder, lr::LinkRule{TreeLinking}, (trees, sublats), (dist, ndist, isinter), (s1, s2), (i, r1))
     range = lr.alg.range + extended_eps()
     neighs = inrange(trees[s2], r1 - dist, range)
     sites2 = sublats[s2].sites
@@ -241,7 +241,7 @@ function add_neighbors!(slinkbuilder, lr::LinkRule{TreeSearch}, (trees, sublats)
     return nothing
 end
 
-function add_neighbors!(slinkbuilder, lr::LinkRule{<:WrapSearch}, ::Nothing, (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slinkbuilder, lr::LinkRule{<:WrapLinking}, ::Nothing, (dist, ndist, isinter), (s1, s2), (i, r1))
     oldbravais = bravaismatrix(lr.alg.bravais)
     unwrappedaxes = lr.alg.unwrappedaxes
     add_neighbors_wrap!(slinkbuilder, ndist, isinter, i, (s1, s2), lr.alg.links.intralink, oldbravais, unwrappedaxes, true)
@@ -272,7 +272,7 @@ end
 #           ndold_intracell = ndistold of old unitcell containing site i
 #           ndold_intracell_shifted = same as ndold_intracell but shifted by -ndist of the new neighboring cell
 #           dist = distold of old unit cell containing new site i in the new unit cell
-function add_neighbors!(slinkbuilder, lr::LinkRule{<:BoxIteratorSearch}, maps, (dist, ndist, isinter), (s1, s2), (i, r1))
+function add_neighbors!(slinkbuilder, lr::LinkRule{<:BoxIteratorLinking}, maps, (dist, ndist, isinter), (s1, s2), (i, r1))
     (celliter, iold) = lr.alg.iter.registers[s1].cellinds[i]
     ndold_intercell = lr.alg.open2old * ndist
     ndold_intracell = lr.alg.iterated2old * SVector(celliter)
