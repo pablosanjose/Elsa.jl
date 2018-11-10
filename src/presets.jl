@@ -41,7 +41,7 @@ latticepresets = Dict(
             if gcd(r, 3) == 1
                 scbot, sctop = @SMatrix[m -(m+r); (m+r) 2m+r], @SMatrix[m+r -m; m 2m+r]
             else
-                scbot, sctop = @SMatrix[m+r/3 -r/3; r/3 m+2r/3], @SMatrix[m+2r/3 r/3; -r/3 m+r/3]
+                scbot, sctop = @SMatrix[m+r÷3 -r÷3; r÷3 m+2r÷3], @SMatrix[m+2r÷3 r÷3; -r÷3 m+r÷3]
             end
             ltop = Lattice(sAtop, sBtop, bravais, Dim(3), LinkRule(linkrangeintralayer), Supercell(sctop))
             lbot = Lattice(sAbot, sBbot, bravais, Dim(3), LinkRule(linkrangeintralayer), Supercell(scbot))

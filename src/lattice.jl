@@ -28,7 +28,7 @@ Sublat(vs...) = Sublat(missing, toSVectors(vs...))
 Sublat(name::Symbol, vs::(<:Union{Tuple, AbstractVector{<:Number}})...) = Sublat(name, toSVectors(vs...))
 Sublat(::Type{T}, vs...) where {T} = Sublat(missing, toSVectors(T, vs...))
 Sublat(::Type{T}, name::Symbol, vs...) where {T} = Sublat(name, toSVectors(T, vs...))
-Sublat{T,E}() where {T,E} = Sublat(missing, SVector{E,T}[])
+Sublat{T,E}(name = missing) where {T,E} = Sublat(name, SVector{E,T}[])
 
 nsites(s::Sublat) = length(s.sites)
 # dim(s::Sublat{T,E}) where {T,E} = E
@@ -118,7 +118,9 @@ Base.isempty(slink::Slink) = (nlinks(slink) == 0)
 nlinks(slink::Slink) = nnz(slink.rdr)
 
 nsources(s::Slink) = size(s.rdr, 2)
+ntargets(s::Slink) = size(s.rdr, 1)
 sources(s::Slink) = 1:nsources(s)
+targets(s::Slink) = 1:ntargets(s)
 neighbors(s::Slink, src) = (rowvals(s.rdr)[j] for j in nzrange(s.rdr, src))
 neighbors_rdr(s::Slink, src) = ((rowvals(s.rdr)[j], nonzeros(s.rdr)[j]) for j in nzrange(s.rdr, src))
 neighbors_rdr(s::Slink) = zip(s.rdr.rowval, s.rdr.nzval)
@@ -769,4 +771,104 @@ function wrap(lat::Lattice{T,E,L}; exceptaxes::NTuple{N,Int} = ()) where {T,E,L,
     newlat = lattice!(Lattice(newsublats, newbravais), 
                       LinkRule(WrapLinking(lat.links, lat.bravais, exceptaxes)))
     return newlat
+end
+
+#######################################################################
+# Merge sublattices
+#######################################################################
+"""
+    mergesublats(lat::Lattice, newsublats::NTuple{N,Int})
+
+Create a new `Lattice` by merging the sublattices of `lat` as indicated by
+`newsublats = (n1, n2, n3...)`, so that old sublattice `i` becomes new
+sublattice `ni`. `newsublats` length `N` must match the number of `lat`
+sublattices.
+
+# Examples
+```jldoctest
+julia> mergesublats(Lattice(Preset(:honeycomb_bilayer, twistindex = 2)), (2,1,1,1))
+Lattice{Float64,3,2} : 2D lattice in 3D space with Float64 sites
+    Bravais vectors  : ((1.0, 1.732051, 0.0), (-1.0, 1.732051, 0.0))
+    Sublattice names : (:Bb, :Ab)
+    Total sites      : 16
+    Total links      : 32
+    Coordination     : 3.0
+```
+"""
+mergesublats(lat::Lattice) = mergesublats(lat::Lattice, ntuple(_ -> 1, nsublats(lat)))
+
+function mergesublats(lat::Lattice, newsublats::NTuple{N,Int}) where {T,E,L,N}
+    N == nsublats(lat) || throw(DimensionMismatch("The length $N of new sublattice indices should match the number $(nsublats(lat)) of sublattices in the lattice"))
+    newns = maximum(newsublats)
+    oldsublatlist = [findall(isequal(s), newsublats) for s in 1:newns]
+    newsublats = _mergedsublats(lat, oldsublatlist)
+    newbravais = lat.bravais
+    newlinks = _mergedlinks(lat, oldsublatlist, newsublats)
+    return Lattice(newsublats, newbravais, newlinks)
+end
+
+function _mergedsublats(lat::Lattice{T,E}, oldsublatlist) where {T,E}
+    newsublats = Sublat{T,E}[]
+    for oldss in oldsublatlist
+        if isempty(oldss) 
+            push!(newsublats, Sublat{T,E}(missing))
+        else
+            newsublat = Sublat{T,E}(lat.sublats[oldss[1]].name)
+            push!(newsublats, newsublat)
+            for olds in oldss
+                append!(newsublat.sites, lat.sublats[olds].sites)
+            end
+        end
+    end
+    return newsublats
+end
+
+function _mergedlinks(lat::Lattice, oldsublatlist, newsublats)
+    intralink = _mergedilink(lat.links.intralink, oldsublatlist, newsublats)
+    interlinks = [_mergedilink(ilink, oldsublatlist, newsublats) for ilink in lat.links.interlinks]
+    return Links(intralink, interlinks)
+end
+
+function _mergedilink(oldilink, oldsublatlist, newsublats)
+    newilink = dummyilink(oldilink.ndist, newsublats)
+    for (s1, oldss1) in enumerate(oldsublatlist), (s2, oldss2) in enumerate(oldsublatlist) 
+        if !isempty(oldss1) && !isempty(oldss2)
+            # rowlengths = ntuple(_ -> length(oldss1), length(oldss2))
+            # rows = Tuple((oldilink.slinks[j, i].rdr for i in oldss1, j in oldss2))
+            newslink = _mergedslinks(oldilink.slinks, oldss1, oldss2)
+            newilink.slinks[s2, s1] = newslink
+        end
+    end
+    return newilink
+end
+
+function _mergedslinks(slinks::Matrix{S}, indcols, indrows) where {T, E, S<:Slink{T,E}}
+    blockwidths  = [maximum((nsources(slinks[i, j]) for i in indrows)) for j in indcols]
+    blockheights = [maximum((ntargets(slinks[i, j]) for j in indcols)) for i in indrows]
+    totalcols = sum(blockwidths)
+    totalrows = sum(blockheights)
+    builder = SparseMatrixBuilder(Tuple{SVector{E,T},SVector{E,T}}, totalrows, totalcols)
+    for (j, jblock) in enumerate(indcols)
+        for col in 1:blockwidths[j]
+            rowoffset = 0
+            for (i, iblock) in enumerate(indrows)
+                sl = slinks[iblock, jblock]
+                if size(sl.rdr) == (0,0)
+                    rowoffset += blockheights[i]
+                    continue
+                else
+                    rows = rowvals(sl.rdr)
+                    vals = nonzeros(sl.rdr)
+                    for rowptr in nzrange(sl.rdr, col)
+                        row = rows[rowptr]
+                        val = vals[rowptr]
+                        pushtocolumn!(builder, row + rowoffset, val)
+                    end
+                    rowoffset += blockheights[i]
+                end
+            end
+            finalisecolumn!(builder)
+        end
+    end
+    return Slink(sparse(builder))
 end
