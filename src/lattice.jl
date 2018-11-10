@@ -777,12 +777,12 @@ end
 # Merge sublattices
 #######################################################################
 """
-    mergesublats(lat::Lattice, newsublats::NTuple{N,Int})
+    mergesublats(lat::Lattice[, newsublats::NTuple{N,Int}])
 
 Create a new `Lattice` by merging the sublattices of `lat` as indicated by
 `newsublats = (n1, n2, n3...)`, so that old sublattice `i` becomes new
 sublattice `ni`. `newsublats` length `N` must match the number of `lat`
-sublattices.
+sublattices, and defaults to `ni = 1` (merge all sublattices) if absent.
 
 # Examples
 ```jldoctest
