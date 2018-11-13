@@ -13,12 +13,12 @@ Random.seed!(1);
 ps = MKLPardisoSolver()
 pardisoinit(ps)
 # set_matrixtype!(ps, 13)
-set_matrixtype!(ps, Pardiso.COMPLEX_HERM_POSDEF)
+set_matrixtype!(ps, -4)
 set_msglvl!(ps, Pardiso.MESSAGE_LEVEL_ON)
 
 b = rand(Complex{Float64}, SIZE);
 A0 = sprand(Complex{Float64}, SIZE, SIZE, 2.0/SIZE);
-A = A0 + A0' + spdiagm(0 => 0.1 .* b);
+A = A0 + A0' + spdiagm(0 => 0.1 .* real(b));
 A_pardiso = get_matrix(ps, A, :N);
 
 # Analyze the matrix and compute a symbolic factorization.
