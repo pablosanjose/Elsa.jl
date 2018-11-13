@@ -172,7 +172,7 @@ function Base.push!(links::Links, ilink::Ilink)
         links.intralink = ilink
     else
         ind = findfirst(il -> il.ndist == ilink.ndist, links.interlinks)
-        ismissing(ind) ? push!(links.interlinks, ilink) : links.interlinks[ind] = ilink
+        isnothing(ind) ? push!(links.interlinks, ilink) : links.interlinks[ind] = ilink
     end
     return links
 end
