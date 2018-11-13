@@ -6,7 +6,7 @@ version = "0.3.2"
 
 [[AbstractPlotting]]
 deps = ["ColorBrewer", "ColorTypes", "Colors", "FileIO", "FreeType", "FreeTypeAbstraction", "GeometryTypes", "IntervalSets", "LinearAlgebra", "Markdown", "Observables", "Packing", "PlotUtils", "Printf", "Random", "Serialization", "Showoff", "SignedDistanceFields", "StaticArrays", "Statistics", "Test", "UnicodeFun"]
-git-tree-sha1 = "e23e484720ad1fe3e9a833282dbd2f3a4f784c68"
+git-tree-sha1 = "60dc2324d3a1ea3196f73fe4f0dc64cd5f22c0b9"
 repo-rev = "master"
 repo-url = "https://github.com/JuliaPlots/AbstractPlotting.jl.git"
 uuid = "537997a7-5e4e-5d89-9595-2241ea00577e"
@@ -167,15 +167,15 @@ version = "0.4.1"
 
 [[GLFW]]
 deps = ["BinDeps", "CMakeWrapper", "Homebrew", "Libdl", "Test"]
-git-tree-sha1 = "5811de29ec3b96ab50e7043f0f0d688e085d1c07"
+git-tree-sha1 = "035e2b5e9c335afae1e92ecfe532cf0620da869f"
 uuid = "f7f18e0c-5ee9-5ccd-a5bf-e8befd85ed98"
-version = "2.2.0"
+version = "2.3.0"
 
 [[GeometryTypes]]
 deps = ["ColorTypes", "FixedPointNumbers", "IterTools", "LinearAlgebra", "StaticArrays", "Test"]
-git-tree-sha1 = "159f549bf226c704cc9f272bc1c113dea7658f26"
+git-tree-sha1 = "706fc16aa2a648a2f292732f8e6ee25167484328"
 uuid = "4d00f742-c7ba-57c2-abde-4428a4b178cb"
-version = "0.7.0"
+version = "0.7.1"
 
 [[Graphics]]
 deps = ["Colors", "Compat", "NaNMath"]
@@ -323,9 +323,9 @@ version = "0.4.2"
 
 [[Observables]]
 deps = ["Test"]
-git-tree-sha1 = "752ef9b9ff1a7a6d764aee6be60cf0a5be7a21b1"
+git-tree-sha1 = "dc02cec22747d1d10d9f70d8a1c03432b5bfbcd0"
 uuid = "510215fc-4207-5dde-b226-833fc4488ee2"
-version = "0.2.2"
+version = "0.2.3"
 
 [[OffsetArrays]]
 deps = ["DelimitedFiles", "Test"]
@@ -501,7 +501,7 @@ uuid = "30578b45-9adc-5946-b283-645ec420af67"
 version = "0.4.0"
 
 [[UUIDs]]
-deps = ["Random", "SHA"]
+deps = ["Random"]
 uuid = "cf7118a7-6976-5b1a-9a39-7adc72f591a4"
 
 [[Unicode]]
