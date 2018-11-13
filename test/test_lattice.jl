@@ -79,3 +79,5 @@ end
     lat = mergesublats(Lattice(Preset(:honeycomb_bilayer, twistindex = 2)), (2,1,1,1))
     QBox.nlinks(lat) == 32 && QBox.nsublats(lat) == 2
 end
+
+end # module
