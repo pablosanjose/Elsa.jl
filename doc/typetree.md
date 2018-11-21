@@ -22,7 +22,7 @@ struct Lattice{T,E,L,EL}
 ```
 
 
-The `System` type bundles a `Lattice`, a `Model` and a `Hamiltonian` computed from the former two.
+The `System` type bundles a `Lattice`, a `Model` and a `HermitianOperator` computed from the former two.
 
 ```julia
 struct System{T,E,L,EL,A}
@@ -36,7 +36,7 @@ struct System{T,E,L,EL,A}
         defonsite::O        # default onsite, specified with Onsite(o) instead of Onsite(n, o)
         defhopping::H       # default hopping, specified with Hopping(h) instead of Hopping((n,m), h)
         defdim::Int         # site dimension of default onsite/hopping
-    h::Hamiltonian{T,L}
+    h::HermitianOperator{T,L}
         I::Vector{Int}              # row indices, including intercell elements
         J::Vector{Int}              # column indices, including intercell elements
         V::Vector{T}                # matrix elements, including intercell elements with zero momentum
@@ -44,6 +44,6 @@ struct System{T,E,L,EL,A}
         Vn::Vector{Vector{T}}       # intercell matrix elements, to be copied to V with specific Bloch phases
         ndist::Vector{SVector{L, Int}}  # integer distance of different cells
         worskspace::SparseWorkspace{T}  # scratch matrices to be reused when updating h
-        h::SparseMatrixCSC{Complex{T},Int}  # Preallocated Hamiltonian sparse matrix h
+        h::SparseMatrixCSC{Complex{T},Int}  # Preallocated HermitianOperator sparse matrix h
 end
 ```

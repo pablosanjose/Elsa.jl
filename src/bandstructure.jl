@@ -4,10 +4,10 @@
 """
     BrillouinMesh(lat::Lattice; uniform::Bool = false, partitions = 5)
 
-Discretizes the Brillouin zone of Lattice `lat` into hypertriangular finite 
-elements, using a certain number of `partitions` per Bravais axis (accepts 
-an integer or a tuple of integers, one per axis). Keyword `uniform` specifies 
-the type of mesh, either "uniform" (as close to equilateral as possible) or 
+Discretizes the Brillouin zone of Lattice `lat` into hypertriangular finite
+elements, using a certain number of `partitions` per Bravais axis (accepts
+an integer or a tuple of integers, one per axis). Keyword `uniform` specifies
+the type of mesh, either "uniform" (as close to equilateral as possible) or
 "simple" (cartesian partition)
 
 # Examples
@@ -15,7 +15,7 @@ the type of mesh, either "uniform" (as close to equilateral as possible) or
 julia> BrillouinMesh(Lattice(:honeycomb), uniform = true, partitions = 200)
 BrillouinMesh{Float64,2} : discretization of 2-dimensional Brillouin zone
     Mesh type  : uniform
-    Vertices   : 40000 
+    Vertices   : 40000
     Partitions : (200, 200)
     3-elements : 80000
 ```
@@ -41,7 +41,7 @@ BrillouinMesh(sys::System; kw...) = BrillouinMesh(sys.lattice; kw...)
 Base.show(io::IO, m::BrillouinMesh{T,L,N}) where {T,L,N} =
     print(io, "BrillouinMesh{$T,$L} : discretization of $L-dimensional Brillouin zone
     Mesh type  : $(m.uniform ? "uniform" : "simple")
-    Vertices   : $(nsites(m.mesh.lattice)) 
+    Vertices   : $(nsites(m.mesh.lattice))
     Partitions : $(m.partitions)
     $N-elements : $(nelements(m))")
 
@@ -89,7 +89,7 @@ function simple_mesh(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,Int}) where
 end
 
 hypertriangular(lat::Lattice{T,E,L}) where {T,E,L} = hypertriangular(SMatrix{L,1,T}(I))
-function hypertriangular(s::SMatrix{L,L2,T}) where {L,L2,T} 
+function hypertriangular(s::SMatrix{L,L2,T}) where {L,L2,T}
     v1 = s[:,L2]
     factor = T(1/(L2+1))
     v2 = modifyat(v1, L2, v1[L2]*factor)
@@ -121,24 +121,24 @@ function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; kw...) where {T,E,L
     buffermatrix = Matrix{Complex{T}}(undef, size(first_h))
     (energies_kn, states_kn) = spectrum(first_h, buffermatrix; kw...)
     (statelength, nenergies) = size(states_kn)
-    
+
     energies = Matrix{T}(undef, (nenergies, npoints))
     states = Array{Complex{T},3}(undef, (statelength, nenergies, npoints))
     copyslice!(energies,    CartesianIndices((1:nenergies, 1:1)), 
                energies_kn, CartesianIndices(1:nenergies))
-    copyslice!(states,      CartesianIndices((1:statelength, 1:nenergies, 1:1)), 
+    copyslice!(states,      CartesianIndices((1:statelength, 1:nenergies, 1:1)),
                states_kn,   CartesianIndices((1:statelength, 1:nenergies)))
 
     @showprogress "Diagonalising: " for nk in 2:npoints
         (energies_nk, states_nk) = spectrum(hamiltonian(sys, kn = knpoints[nk] + shift), buffermatrix; kw...)
-        copyslice!(energies,    CartesianIndices((1:nenergies, nk:nk)), 
+        copyslice!(energies,    CartesianIndices((1:nenergies, nk:nk)),
                    energies_nk, CartesianIndices(1:nenergies))
-        copyslice!(states,      CartesianIndices((1:statelength, 1:nenergies, nk:nk)), 
+        copyslice!(states,      CartesianIndices((1:statelength, 1:nenergies, nk:nk)),
                    states_nk,   CartesianIndices((1:statelength, 1:nenergies)))
     end
-    
+
     bufferstate = zeros(Complex{T}, statelength)
-    
+
     return Spectrum(energies, nenergies, states, statelength, knpoints, npoints, bufferstate)
 end
 
@@ -155,7 +155,8 @@ function spectrum_dense(h::SparseMatrixCSC, buffermatrix; levels = missing, kw..
     dimh = size(h, 1)
     range = ismissing(levels) ? (1:dimh) : (((dimh - levels)÷2 + 1):((dimh + levels)÷2))
     ee = eigen(Hermitian(buffermatrix), range)
-    energies, states = ee.values, ee.vectors   
+    energies, states = ee.values, ee.vectors
+    resolve_degeneracies(energies, sates)
     return (energies, states)
 end
 
@@ -186,14 +187,14 @@ struct Bandstructure{T,N,L,NL}  # E = N = L + 1 (nodes are [Blochphases..., ener
     npoints::Int
 end
 
-Base.show(io::IO, bs::Bandstructure{T,N,L}) where {T,N,L} = 
+Base.show(io::IO, bs::Bandstructure{T,N,L}) where {T,N,L} =
     print(io, "Bandstructure{$T,$N,$L} of type $T for $L-dimensional lattice
     Number of k-points    : $(bs.npoints)
     Number of eigenvalues : $(bs.nenergies)
     Size of state vectors : $(size(bs.states, 1))")
 
-Bandstructure(sys::System; uniform = false, partitions = 5, kw...) = 
-    Bandstructure(sys, BrillouinMesh(sys.lattice; uniform = uniform, partitions = partitions); kw...) 
+Bandstructure(sys::System; uniform = false, partitions = 5, kw...) =
+    Bandstructure(sys, BrillouinMesh(sys.lattice; uniform = uniform, partitions = partitions); kw...)
 
 function Bandstructure(sys::System{T,E,L}, bz::BrillouinMesh{T,L}; linkthreshold = 0.5, kw...) where {T,E,L}
     spectrum = Spectrum(sys, bz; kw...)
@@ -229,12 +230,12 @@ function addilink!(meshlinks::Links, bzilink::Ilink, sp::Spectrum, linkthreshold
     linearindices = LinearIndices(sp.energies)
     state = sp.bufferstate
     states = sp.states
-    
+
     slinkbuilder = SparseMatrixBuilder(bandmesh, 1, 1)
     @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
         n_src = linearindices[ne_src, nk_src]
         r1 = meshnodes[n_src]
-        copyslice!(state,  CartesianIndices(1:sp.statelength), 
+        copyslice!(state,  CartesianIndices(1:sp.statelength),
                    states, CartesianIndices((1:sp.statelength, ne_src:ne_src, nk_src:nk_src)))
         @inbounds for nk_target in neighbors(bzilink, nk_src, (1,1))
             ne_target = findmostparallel(state, states, nk_target, linkthreshold)
@@ -249,7 +250,7 @@ function addilink!(meshlinks::Links, bzilink::Ilink, sp::Spectrum, linkthreshold
     push!(meshlinks, Ilink(bzilink.ndist, fill(Slink(sparse(slinkbuilder)), 1, 1)))
     return meshlinks
 end
-   
+
 function findmostparallel(state::Vector{Complex{T}}, states, ktarget, linkthreshold) where {T}
     maxproj = T(linkthreshold)
     dotprods = abs.(state' * view(states, :, :, ktarget))
