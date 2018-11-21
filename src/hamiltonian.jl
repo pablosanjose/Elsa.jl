@@ -109,8 +109,8 @@ function appendonsites!(I, J, V, offsetblock, sublat, ons, subrows)
             append!(I, offset + inds[1])
             append!(J, offset + inds[2])
         end
-        append!(V, o)
-        offset += N
+        append!(V, real(o))
+        offset += subrows
     end
     return nothing
 end
@@ -119,8 +119,8 @@ appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), slink, hop::NoHopping
 function appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), slink, hop, subrows, subcols, symmetrize)
     posstart = length(I)
     for src in sources(slink), (target, rdr) in neighbors_rdr(slink, src)
-        rowoffset = (target - 1) * M
-        coloffset = (src - 1) * N
+        rowoffset = (target - 1) * subrows
+        coloffset = (src - 1) * subcols
         h = hop(rdr, Val(subrows), Val(subcols))
         for inds in CartesianIndices(h)
             append!(I, rowoffsetblock + rowoffset + inds[1])
