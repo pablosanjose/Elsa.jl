@@ -9,15 +9,15 @@ function BrillouinMesh(lat::Lattice{T,E,L}) where {T,E,L}
         append!(vertices, s.sites)
     end
     nverts = length(vertices)
-    
+
     model = Model(Hopping(1))
-    adjacency = hamiltonian(lat, model).matrix
+    adjacency = hamiltonianoperator(lat, model).matrix
     size(adjacency, 1) == nverts || throw(DimensionMismatch("mesh hamiltonian dimension does not match number of vertices"))
-    
+
     flatgroups = Int[]
     for n in 1:E  # We grow groups recursively till (n+1)-groups
         flatgroups = newgroups(flatgroups, adjacency, n)
-    end    
+    end
 
     elements = collect(reinterpret(SVector{E+1,Int}, flatgroups))
 
@@ -53,13 +53,13 @@ function newgroups(flatgroups, adjacency, n) # n is the number of vertices in ea
         end
         lastseed = prevgroup[end]
         for j in nzrange(stepmat, col)
-            if steprows[j] > lastseed && stepvals[j] == n 
+            if steprows[j] > lastseed && stepvals[j] == n
                 append!(newflatgroups, prevgroup)
                 push!(newflatgroups, steprows[j])
             end
         end
     end
-    
+
     return newflatgroups
 end
 
