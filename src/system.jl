@@ -143,16 +143,21 @@ function appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), slink, hop, 
     return nothing
 end
 
-blochphases(k, sys) = transpose(bravaismatrix(sys.lattice)) * SVector(k) / (2pi)
+function blochphases(k, sys::System{T,E}) where {T,E}
+	length(k) == E || throw(DimensionMismatch("The dimension of the Bloch vector `k` should math the embedding dimension $E"))
+	return transpose(bravaismatrix(sys.lattice)) * SVector(k) / (2pi)
+end
 
 function hamiltonian(sys::System{T,E,L}; k = zero(SVector{E,T}), kn = blochphases(k, sys), intracell::Bool = false) where {T,E,L}
-    insertblochphases!(sys.hbloch, kn, intracell)
+	length(kn) == L || throw(DimensionMismatch("The dimension of the normalized Bloch phases `kn` should match the lattice dimension $L"))
+	nsertblochphases!(sys.hbloch, kn, intracell)
     updateoperatormatrix!(sys.hbloch)
     return sys.hbloch.matrix
 end
 
 function velocity(sys::System{T,E,L}; k = zero(SVector{E,T}), kn = blochphases(k, sys), axis::Int = 1) where {T,E,L}
-	0 <= axis <= L || "Keyword `axis` should be between 0 and $L, the lattice dimension"
+	0 <= axis <= max(L, 1) || throw(DimensionMismatch("Keyword `axis` should be between 0 and $L, the lattice dimension"))
+	length(kn) == L || throw(DimensionMismatch("The dimension of the normalized Bloch phases `kn` should match the lattice dimension $L"))
 	insertblochphases!(sys.vbloch, kn, axis)
 	updateoperatormatrix!(sys.vbloch)
 	return sys.vbloch.matrix

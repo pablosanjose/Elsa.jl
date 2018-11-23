@@ -31,8 +31,10 @@ function Base.show(io::IO, op::BlochOperator)
     print(io, "Bloch operator of dimensions $(size(op.matrix)) with $(nnz(op.matrix)) elements")
 end
 
-insertblochphases!(bop::BlochOperator{T,L}, kn::SVector, intracell) where {T,L} =
-	_insertblochphases!(bop.V, bop.Vn, bop.Voffsets, bop.ndist, convert(SVector{L,T}, kn), intracell)
+function insertblochphases!(bop::BlochOperator{T,L}, kn::SVector, intracell) where {T,L}
+	L >= 0 && _insertblochphases!(bop.V, bop.Vn, bop.Voffsets, bop.ndist, convert(SVector{L,T}, kn), intracell)
+	return nothing
+end
 
 #######################################################################
 # BlochVector
@@ -53,8 +55,10 @@ function Base.show(io::IO, op::BlochVector{T,L}) where {T,L}
     print(io, "Bloch $L-vector of dimensions $(size(op.matrix)) with $(nnz(op.matrix)) elements")
 end
 
-insertblochphases!(bvec::BlochVector{T,L}, kn, axis) where {T,L} =
-	_insertblochphases!(bvec.V, bvec.Vns[axis], bvec.Voffsets, bvec.ndist, convert(SVector{L,T}, kn), false)
+function insertblochphases!(bvec::BlochVector{T,L}, kn, axis) where {T,L}
+	L > 0 && _insertblochphases!(bvec.V, bvec.Vns[axis], bvec.Voffsets, bvec.ndist, convert(SVector{L,T}, kn), false)
+	return nothing
+end
 
 function gradient(op::BlochOperator{T,L}; kn::SVector{L,Int} = zero(SVector{L,Int}), axis::Int = 1) where {T,L}
     ndist = op.ndist
@@ -66,7 +70,7 @@ function gradient(op::BlochOperator{T,L}; kn::SVector{L,Int} = zero(SVector{L,In
 	V = zeros(Complex{T}, length(I))
 	Voffsets = op.Voffsets .- offset .+ 1
 	Vns = ntuple(ax -> [(2pi * im * n[ax]) .* v for (n, v) in zip(ndist, op.Vn)], Val(L))
-	_insertblochphases!(V, Vns[axis], Voffsets, ndist, kn, false)
+	L > 0 && _insertblochphases!(V, Vns[axis], Voffsets, ndist, kn, false)
 	matrix = sparse!(I, J, V, dim, workspace)
 	return BlochVector(I, J, V, Voffsets, Vns, ndist, workspace, matrix)
 end
