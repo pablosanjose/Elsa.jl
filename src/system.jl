@@ -89,10 +89,10 @@ function hbloch!(I, J, V, model, lat, ilink, isinter)
         rowoffsetblock = 0
         for (s2, subrows) in enumerate(sdims)
             if !isinter && s1 == s2
-                appendonsites!(I, J, V, rowoffsetblock, lat.sublats[s1], onsite(model, s1), subrows)
+                appendonsites!(I, J, V, rowoffsetblock, lat.sublats[s1], onsite(model, s1), Val(subrows))
             end
             if isvalidlink(isinter, (s1, s2))
-                appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), ilink.slinks[s2, s1], hopping(model, (s2, s1)), subrows, subcols, !isinter)
+                appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), ilink.slinks[s2, s1], hopping(model, (s2, s1)), Val(subrows), Val(subcols), !isinter)
             end
             rowoffsetblock += subrows * nsites(lat.sublats[s2])
         end
@@ -102,7 +102,7 @@ function hbloch!(I, J, V, model, lat, ilink, isinter)
 end
 
 appendonsites!(I, J, V, offsetblock, sublat, ons::NoOnsite, subrows) = nothing
-function appendonsites!(I, J, V, offsetblock, sublat, ons, subrows)
+function appendonsites!(I, J, V, offsetblock, sublat, ons, ::Val{subrows}) where {subrows}
     offset = offsetblock
     for r in sublat.sites
         o = ons(r, Val(subrows))
@@ -117,7 +117,7 @@ function appendonsites!(I, J, V, offsetblock, sublat, ons, subrows)
 end
 
 appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), slink, hop::NoHopping, subrows, subcols, symmetrize) = nothing
-function appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), slink, hop, subrows, subcols, symmetrize)
+function appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), slink, hop, ::Val{subrows}, ::Val{subcols}, symmetrize) where {subrows, subcols}
     posstart = length(I)
     for src in sources(slink), (target, rdr) in neighbors_rdr(slink, src)
         rowoffset = (target - 1) * subrows
