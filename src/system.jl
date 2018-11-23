@@ -101,7 +101,7 @@ function hbloch!(I, J, V, model, lat, ilink, isinter)
     return nothing
 end
 
-appendonsites!(I, J, V, offsetblock, sublat, ons::NoOnsite, subrows) = nothing
+appendonsites!(I, J, V, offsetblock, sublat, ons::NoOnsite, ::Val) = nothing
 function appendonsites!(I, J, V, offsetblock, sublat, ons, ::Val{subrows}) where {subrows}
     offset = offsetblock
     for r in sublat.sites
@@ -116,7 +116,7 @@ function appendonsites!(I, J, V, offsetblock, sublat, ons, ::Val{subrows}) where
     return nothing
 end
 
-appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), slink, hop::NoHopping, subrows, subcols, symmetrize) = nothing
+appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), slink, hop::NoHopping, ::Val, ::Val, symmetrize) = nothing
 function appendhoppings!(I, J, V, (rowoffsetblock, coloffsetblock), slink, hop, ::Val{subrows}, ::Val{subcols}, symmetrize) where {subrows, subcols}
     posstart = length(I)
     for src in sources(slink), (target, rdr) in neighbors_rdr(slink, src)
