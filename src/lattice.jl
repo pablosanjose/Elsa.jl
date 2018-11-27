@@ -4,7 +4,7 @@
 """
     Sublat([name::Symbol = missing, ]sites...)
 
-Create a `Sublat{T,E} <: LatticeDirective` that adds a sublattice, of 
+Create a `Sublat{T,E} <: LatticeDirective` that adds a sublattice, of
 name `name`, with sites at positions `sites` in `E` dimensional space.
 
 A type `T` for coordinates can also be specified using `Sublat{T}(...)`.
@@ -43,12 +43,12 @@ flatten(ss::Sublat...) = Sublat(ss[1].name, vcat((s.sites for s in ss)...))
     Bravais(vecs...)
     Bravais(mat)
 
-Create a `Bravais{T,E,L,EL} <: LatticeDirective` that adds `L` Bravais vectors 
-`vecs` in `E` dimensional space, alternatively given as the columns of matrix 
+Create a `Bravais{T,E,L,EL} <: LatticeDirective` that adds `L` Bravais vectors
+`vecs` in `E` dimensional space, alternatively given as the columns of matrix
 `mat`.
 
-A type `T` for vector elements can also be specified using `Bravais(T, vecs...)`. 
-For higher efficiency write `vecs` as `Tuple`s or `SVector`s and `mat` 
+A type `T` for vector elements can also be specified using `Bravais(T, vecs...)`.
+For higher efficiency write `vecs` as `Tuple`s or `SVector`s and `mat`
 as `SMatrix`.
 
 # Examples
@@ -63,7 +63,7 @@ Bravais{Float64,2,2,4}([1.0 2.0; 3.0 4.0])
 struct Bravais{T,E,L,EL} <: LatticeDirective
     matrix::SMatrix{E,L,T,EL}
     (::Type{Bravais})(matrix::SMatrix{E,L,T,EL}) where {T,E,L,EL} =
-        arelinearindep(matrix) ? new{T,E,L,EL}(matrix) : 
+        arelinearindep(matrix) ? new{T,E,L,EL}(matrix) :
             throw(DomainError("Bravais vectors $(vectorsastuples(matrix)) are not linearly independent"))
 end
 
@@ -87,7 +87,7 @@ keepaxes(br::Bravais, unwrappedaxes) = Bravais(keepcolumns(bravaismatrix(br), un
 # Sublattice links (Slink) : links between two given sublattices
 #######################################################################
 
-# Slink follows the same structure as sparse matrices. Field targets are 
+# Slink follows the same structure as sparse matrices. Field targets are
 # indices of target sites for all origin sites, one after the other. Field
 # srcpointers, of length (nsites in s1) + 1, stores the position (offset[n1]) in targets
 # where the targets for site n1 start. The last extra element allows to compute
@@ -127,7 +127,7 @@ neighbors_rdr(s::Slink) = zip(s.rdr.rowval, s.rdr.nzval)
 
 _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
-function transform!(s::Slink, f::F) where F<:Function 
+function transform!(s::Slink, f::F) where F<:Function
     frdr(rdr) = _rdr(f(rdr[1] - 0.5 * rdr[2]), f(rdr[1] + 0.5 * rdr[2]))
     s.rdr.nzval .= frdr.(s.rdr.nzval)
     return s
@@ -160,7 +160,7 @@ transform!(i::IL, f::F) where {IL<:Ilink, F<:Function} = (transform!.(i.slinks, 
 #######################################################################
 mutable struct Links{T,E,L}  # mutable to be able to update it with link!
     intralink::Ilink{T,E,L}
-    interlinks::Vector{Ilink{T,E,L}} 
+    interlinks::Vector{Ilink{T,E,L}}
 end
 
 dummylinks(lat) = dummylinks(lat.sublats, lat.bravais)
@@ -178,14 +178,14 @@ function Base.push!(links::Links, ilink::Ilink)
 end
 
 nlinks(links::Links) = nlinks(links.intralink) + nlinks(links.interlinks)
-   
+
 nsublats(links::Links) = nsublats(links.intralink)
 ninterlinks(links::Links) = length(links.interlinks)
 allilinks(links::Links) = (getilink(links, i) for i in 0:ninterlinks(links))
 getilink(links::Links, i::Int) = i == 0 ? links.intralink : links.interlinks[i]
-neighbors(links::Links, src, (s1, s2)::Tuple{Int,Int}) = 
+neighbors(links::Links, src, (s1, s2)::Tuple{Int,Int}) =
     Iterators.flatten(neighbors(ilink, src, (s1, s2)) for ilink in allilinks(links))
-neighbors(links, i, sublats, onlyintra::Bool) = 
+neighbors(links, i, sublats, onlyintra::Bool) =
     onlyintra ? neighbors(links.intralink, i, sublats) : neighbors(links, i, sublats)
 neighbors(links, i, sublats, onlyintra::Val{true}) = neighbors(links.intralink, i, sublats)
 neighbors(links, i, sublats, onlyintra::Val{false}) = neighbors(links, i, sublats)
@@ -218,7 +218,7 @@ Dim(e::Int) = Dim{e}()
 """
     LatticeConstant(c[, axis = missing])
 
-Create a `LatticeConstant{T} <: LatticeDirective` that can be used to uniformly 
+Create a `LatticeConstant{T} <: LatticeDirective` that can be used to uniformly
 rescale a lattice in space, so that the resulting lattice constant along a given
 `axis` is `c`. If `axis` is `missing` or there is no such `axis` in the lattice
 the axis with the maximum lattice constant is chosen.
@@ -240,10 +240,10 @@ LatticeConstant(a) = LatticeConstant(a, missing)
 ################################################################################
 """
     FillRegion(regionname::Symbol, args...)
-    FillRegion{E}(region::Function; seed = zero(SVector{E,Float64}), excludeaxes = (), maxsteps = 100_000_000)
+    FillRegion{E}(region::Function; seed = zero(SVector{E,Float64}), excludeaxes = (), maxsteps = typemax(Int))
 
-Create a `FillRegion{E,F,N} <: LatticeDirective` to fill a region in `E`-dimensional 
-space defined by `region(r) == true`, where function `region::F` can alternatively be 
+Create a `FillRegion{E,F,N} <: LatticeDirective` to fill a region in `E`-dimensional
+space defined by `region(r) == true`, where function `region::F` can alternatively be
 defined by a region `regionname` as `QBox.regionpresets[regionname](args...; kw...)`.
 
 Fill search starts at position `seed`, and takes a maximum of `maxsteps` along all lattice
@@ -275,7 +275,7 @@ FillRegion(name::Symbol, args...; kw...) = regionpresets[name](args...; kw...)
 
 FillRegion{E}(region::F;
     seed::Union{AbstractVector,Tuple} = zero(SVector{E,Float64}),
-    excludeaxes::NTuple{N,Int} = (), maxsteps = 100_000_000) where {E,F,N} =
+    excludeaxes::NTuple{N,Int} = (), maxsteps = typemax(Int)) where {E,F,N} =
         FillRegion{E,F,N}(region, SVector(seed), excludeaxes, maxsteps)
 
 ################################################################################
@@ -284,7 +284,7 @@ FillRegion{E}(region::F;
 """
     Precision(Type)
 
-Create a `Precision{T} <: LatticeDirective` especifying the numeric `Type` of space 
+Create a `Precision{T} <: LatticeDirective` especifying the numeric `Type` of space
 coordinates and other derived quantities.
 
 # Examples
@@ -305,13 +305,13 @@ end
     Supercell(matrix)
     Supercell(rescaling::Int)
 
-Create a `Supercell{S} <: LatticeDirective` that defines a supercell in terms of a 
+Create a `Supercell{S} <: LatticeDirective` that defines a supercell in terms of a
 vectors of integer indices `inds...` that relate the new lattice vectors `v` to
-the original ones `v0` as `v[i] = inds[i][j] * v0[j]`. Alternatively, `inds...` can be 
+the original ones `v0` as `v[i] = inds[i][j] * v0[j]`. Alternatively, `inds...` can be
 given as columns of `matrix` or as a uniform `rescaling` so that `mat = rescaling * I`.
 
 For higher efficiency, write `inds...` as several `NTuple{N,Int}` or `SVectors`, and
-`matrix` as an `SMatrix`. Parameter `S <: SMatrix` is the type of the `matrix` stored 
+`matrix` as an `SMatrix`. Parameter `S <: SMatrix` is the type of the `matrix` stored
 internally.
 
 # Examples
@@ -364,18 +364,18 @@ struct BoxIteratorLinking{T,E,L,N,EL,O<:SMatrix,C<:SMatrix} <: LinkingAlgorithm
 end
 
 """
-    LinkRule(algorithm[, sublats...]; mincells = 0, maxsteps = 100_000_000)
-    LinkRule(range[, sublats...]; mincells = 0, maxsteps = 100_000_000))
+    LinkRule(algorithm[, sublats...]; mincells = 0, maxsteps = typemax(Int))
+    LinkRule(range[, sublats...]; mincells = 0, maxsteps = typemax(Int)))
 
 Create a `LinkRule{S,SL} <: LatticeDirective` to compute links between sites in
-sublattices indicated by `sublats::SL` using `algorithm::S <: LinkingAlgorithm`. 
-`TreeLinking(range::Number)` and `SimpleLinking(isinrange::Function)` are available. 
-If a linking `range` instead an `algorithm` is given, the algorithm is chosen 
+sublattices indicated by `sublats::SL` using `algorithm::S <: LinkingAlgorithm`.
+`TreeLinking(range::Number)` and `SimpleLinking(isinrange::Function)` are available.
+If a linking `range` instead an `algorithm` is given, the algorithm is chosen
 automatically.
 
-Sublattices `sublats...` to be linked are indicated by pairs of integers or sublattice 
-names (of type `:Symbol`). A single integer or name can be used to indicate 
-intra-sublattice links for that sublattice. `mincells` indicates a minimum cell search 
+Sublattices `sublats...` to be linked are indicated by pairs of integers or sublattice
+names (of type `:Symbol`). A single integer or name can be used to indicate
+intra-sublattice links for that sublattice. `mincells` indicates a minimum cell search
 distance, and `maxsteps` a maximum number of cells to link.
 
 # Examples
@@ -401,10 +401,10 @@ struct LinkRule{S<:LinkingAlgorithm, SL} <: LatticeDirective
 end
 LinkRule(range; kw...) = LinkRule(; range = range, kw...)
 LinkRule(range, sublats...; kw...) = LinkRule(; range = range, sublats = sublats, kw...)
-LinkRule(; range = 10.0, sublats = missing, kw...) = 
+LinkRule(; range = 10.0, sublats = missing, kw...) =
     LinkRule(AutomaticRangeLinking(abs(range)), tuplesort(to_tuples_or_missing(sublats)); kw...)
 LinkRule(alg::S; kw...) where S<:LinkingAlgorithm = LinkRule(alg, missing; kw...)
-LinkRule(alg::S, sublats; mincells = 0, maxsteps = 100_000_000) where S<:LinkingAlgorithm =
+LinkRule(alg::S, sublats; mincells = 0, maxsteps = typemax(Int)) where S<:LinkingAlgorithm =
     LinkRule(alg, sublats, abs(mincells), maxsteps)
 
 #######################################################################
@@ -413,9 +413,9 @@ LinkRule(alg::S, sublats; mincells = 0, maxsteps = 100_000_000) where S<:Linking
 """
     Lattice([preset, ]directives...)
 
-Build a `Lattice{T,E,L,EL}` of `L` dimensions in `E`-dimensional embedding 
+Build a `Lattice{T,E,L,EL}` of `L` dimensions in `E`-dimensional embedding
 spaceof and composed of `T`-typed sites. Optional `preset::Union{Preset, Symbol}`
-is one of the `QBox.latticepresets` or a `Preset(preset, args...)`. 
+is one of the `QBox.latticepresets` or a `Preset(preset, args...)`.
 The `directives::LatticeDirective...` apply additional build instructions in order.
 
 # Examples
@@ -492,7 +492,7 @@ selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) 
 dummyslinks(lat::Lattice) = dummyslinks(lat.sublats)
 dummyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = fill(dummyslink(Slink{T,E}), length(sublats), length(sublats))
 
-SparseMatrixBuilder(lat::Lattice{T,E,L}, s1, s2) where {T,E,L} = 
+SparseMatrixBuilder(lat::Lattice{T,E,L}, s1, s2) where {T,E,L} =
     SparseMatrixBuilder(Tuple{SVector{E,T}, SVector{E,T}}, nsites(lat, s2), nsites(lat, s1), max((L + 1), coordination(lat)))
 
 function boundingboxlat(lat::Lattice{T,E}) where {T,E}
@@ -501,7 +501,7 @@ function boundingboxlat(lat::Lattice{T,E}) where {T,E}
     foreach(sl -> foreach(s -> _boundingboxlat!(bmin, bmax, s), sl.sites), lat.sublats)
     return (bmin, bmax)
 end
-@inline function _boundingboxlat!(bmin, bmax, site) 
+@inline function _boundingboxlat!(bmin, bmax, site)
     bmin .= min.(bmin, site)
     bmax .= max.(bmax, site)
     return nothing
@@ -510,7 +510,7 @@ end
 supercellmatrix(s::Supercell{<:UniformScaling}, lat::Lattice{T,E,L}) where {T,E,L} = SMatrix{L,L}(s.matrix.λ .* one(SMatrix{L,L,Int}))
 supercellmatrix(s::Supercell{<:SMatrix}, lat::Lattice{T,E,L}) where {T,E,L} = s.matrix
 
-function matchingsublats(lat::Lattice, lr::LinkRule{S,Missing}) where S 
+function matchingsublats(lat::Lattice, lr::LinkRule{S,Missing}) where S
     ns = nsublats(lat)
     match = vec([i.I for i in CartesianIndices((ns, ns))])
     return match
@@ -534,7 +534,7 @@ __matchingsublats(s, sublatnames) = findfirst(isequal(s), sublatnames)
 """
     lattice!(lat::Lattice, directives::LatticeDirective...)
 
-Apply `directives` to lattice `lat` in order, modifying it in place whenever 
+Apply `directives` to lattice `lat` in order, modifying it in place whenever
 possible.
 
 # Examples
@@ -561,7 +561,7 @@ function adjust_slinks_to_sublats!(lat::Lattice)
     return lat
 end
 
-function resizeilink(ilink::IL, lat::Lattice) where {IL<:Ilink} 
+function resizeilink(ilink::IL, lat::Lattice) where {IL<:Ilink}
     nsold = size(ilink.slinks, 1)
     ns = nsublats(lat)
     nsold == ns && return ilink
@@ -581,7 +581,7 @@ end
 
 _lattice!(lat::Lattice{T,E,L,EL}, d::Dim{E2}) where {T,E,L,EL,E2} = convert(Lattice{T,E2,L,E2*L}, lat)
 
-_lattice!(lat::Lattice{T,E,L,EL}, p::Precision{T2}) where {T,E,L,EL,T2} = 
+_lattice!(lat::Lattice{T,E,L,EL}, p::Precision{T2}) where {T,E,L,EL,T2} =
     convert(Lattice{T2,E,L,EL}, lat)
 
 _lattice!(lat::Lattice, sc::Supercell) = expand_unitcell(lat, sc)
@@ -589,10 +589,10 @@ _lattice!(lat::Lattice, sc::Supercell) = expand_unitcell(lat, sc)
 _lattice!(lat::Lattice, lr::LinkRule) = link!(lat, lr)
 
 function _lattice!(lat::Lattice{T,E,L}, l::LatticeConstant) where {T,E,L}
-    if L == 0 
+    if L == 0
         throw(DimensionMismatch("Cannot redefine the LatticeConstant of a non-periodic lattice"))
     else
-        if ismissing(l.axis) || !(1 <= l.axis <= L) 
+        if ismissing(l.axis) || !(1 <= l.axis <= L)
             axisnorm = maximum(norm(bravaismatrix(lat)[:,i]) for i in size(lbravaismatrix(lat), 2))
         else
             axisnorm = norm(bravaismatrix(lat)[:, l.axis])
@@ -602,7 +602,7 @@ function _lattice!(lat::Lattice{T,E,L}, l::LatticeConstant) where {T,E,L}
         end
         transform!(lat, rescale)
     end
-    return lat 
+    return lat
 end
 
 function _lattice!(lat::Lattice{T,E}, fr::FillRegion{E}) where {T,E}
@@ -652,8 +652,8 @@ end
 """
     transform(lat::Lattice, f::Function)
 
-Create a new `Lattice` as a transformation of lattice `lat` so that any site 
-at position `r::SVector` is moved to position `f(r)`. Links between sites are 
+Create a new `Lattice` as a transformation of lattice `lat` so that any site
+at position `r::SVector` is moved to position `f(r)`. Links between sites are
 kept the same as in `lat`.
 
 # Examples
@@ -674,7 +674,7 @@ transform(l::Lattice, f::F) where F<:Function = transform!(deepcopy(l), f)
 """
     combine(lats::Lattice...)
 
-Create a new `Lattice` from a set of lattices `lats...` that include a copy 
+Create a new `Lattice` from a set of lattices `lats...` that include a copy
 of all the different sublattices of `lats...`. All `lats` must share compatible
 Bravais vectors.
 
@@ -688,14 +688,14 @@ Lattice{Float64,2,2} : 2D lattice in 2D space with Float64 sites
     Unique Links : 0
 ```
 """
-function combine(lats::Lattice...) 
+function combine(lats::Lattice...)
     combine_nocopy(deepcopy.(lats)...)
 end
 
 """
     combine_nocopy(lats::Lattice...)
 
-Create a new `Lattice` from a set of lattices `lats...` that include all the 
+Create a new `Lattice` from a set of lattices `lats...` that include all the
 original sublattices of `lats...` (not a copy). All `lats` must share compatible
 Bravais vectors.
 
@@ -720,7 +720,7 @@ function ==(b1::B, b2::B) where {T,E,L,B<:Bravais{T,E,L}}
     all(vs->isapprox(vs[1],vs[2]), zip(vs1,vs2))
 end
 
-function combine_links(lats::NTuple{N,LL}, combined_sublats) where {N,T,E,L,LL<:Lattice{T,E,L}} 
+function combine_links(lats::NTuple{N,LL}, combined_sublats) where {N,T,E,L,LL<:Lattice{T,E,L}}
     intralink = combine_ilinks(map(l -> l.links.intralink, lats), combined_sublats)
     interlinks = Ilink{T,E,L}[]
     ndists = SVector{L,Int}[]
@@ -749,13 +749,13 @@ function combine_ilinks(is, combined_sublats)
 end
 
 function getilink(lat::Lattice, ndist)
-    if iszero(ndist) 
+    if iszero(ndist)
         return lat.links.intralink
     else
         index = findfirst(i -> i.ndist == ndist, lat.links.interlinks)
         if index === nothing
             return dummyilink(ndist, lat.sublats)
-        else 
+        else
             return lat.links.interlinks[index]
         end
     end
@@ -768,7 +768,7 @@ end
 function wrap(lat::Lattice{T,E,L}; exceptaxes::NTuple{N,Int} = ()) where {T,E,L,N}
     newsublats = deepcopy(lat.sublats)
     newbravais = keepaxes(lat.bravais, exceptaxes)
-    newlat = lattice!(Lattice(newsublats, newbravais), 
+    newlat = lattice!(Lattice(newsublats, newbravais),
                       LinkRule(WrapLinking(lat.links, lat.bravais, exceptaxes)))
     return newlat
 end
@@ -810,7 +810,7 @@ end
 function _mergedsublats(lat::Lattice{T,E}, oldsublatlist) where {T,E}
     newsublats = Sublat{T,E}[]
     for oldss in oldsublatlist
-        if isempty(oldss) 
+        if isempty(oldss)
             push!(newsublats, Sublat{T,E}(missing))
         else
             newsublat = Sublat{T,E}(lat.sublats[oldss[1]].name)
@@ -831,7 +831,7 @@ end
 
 function _mergedilink(oldilink, oldsublatlist, newsublats)
     newilink = dummyilink(oldilink.ndist, newsublats)
-    for (s1, oldss1) in enumerate(oldsublatlist), (s2, oldss2) in enumerate(oldsublatlist) 
+    for (s1, oldss1) in enumerate(oldsublatlist), (s2, oldss2) in enumerate(oldsublatlist)
         if !isempty(oldss1) && !isempty(oldss2)
             # rowlengths = ntuple(_ -> length(oldss1), length(oldss2))
             # rows = Tuple((oldilink.slinks[j, i].rdr for i in oldss1, j in oldss2))
