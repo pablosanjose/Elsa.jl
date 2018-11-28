@@ -124,7 +124,7 @@ function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; kw...) where {T,E,L
 
     energies = Matrix{T}(undef, (nenergies, npoints))
     states = Array{Complex{T},3}(undef, (statelength, nenergies, npoints))
-    copyslice!(energies,    CartesianIndices((1:nenergies, 1:1)), 
+    copyslice!(energies,    CartesianIndices((1:nenergies, 1:1)),
                energies_kn, CartesianIndices(1:nenergies))
     copyslice!(states,      CartesianIndices((1:statelength, 1:nenergies, 1:1)),
                states_kn,   CartesianIndices((1:statelength, 1:nenergies)))
@@ -156,7 +156,7 @@ function spectrum_dense(h::SparseMatrixCSC, buffermatrix; levels = missing, kw..
     range = ismissing(levels) ? (1:dimh) : (((dimh - levels)÷2 + 1):((dimh + levels)÷2))
     ee = eigen(Hermitian(buffermatrix), range)
     energies, states = ee.values, ee.vectors
-    resolve_degeneracies(energies, sates)
+    #resolve_degeneracies(energies, sates)
     return (energies, states)
 end
 

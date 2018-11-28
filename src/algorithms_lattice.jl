@@ -320,7 +320,7 @@ function siteclusters(lat::Lattice, sublat::Int, onlyintra)
 
     bincounter = 0
     clustercounter = 0
-    p = Progress(ns, 1, "Extracting subbands: ")
+    p = Progress(ns, 1, "Clustering nodes: ")
     while !isempty(pending) || any(iszero, sitebins)
         if isempty(pending)   # new cluster
             seed = findfirst(iszero, sitebins)

@@ -150,7 +150,7 @@ end
 
 function hamiltonian(sys::System{T,E,L}; k = zero(SVector{E,T}), kn = blochphases(k, sys), intracell::Bool = false) where {T,E,L}
 	length(kn) == L || throw(DimensionMismatch("The dimension of the normalized Bloch phases `kn` should match the lattice dimension $L"))
-	nsertblochphases!(sys.hbloch, kn, intracell)
+	insertblochphases!(sys.hbloch, kn, intracell)
     updateoperatormatrix!(sys.hbloch)
     return sys.hbloch.matrix
 end
