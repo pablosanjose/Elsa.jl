@@ -154,9 +154,10 @@ function spectrum_dense(h::SparseMatrixCSC, buffermatrix; levels = missing, kw..
     buffermatrix .= h
     dimh = size(h, 1)
     range = ismissing(levels) ? (1:dimh) : (((dimh - levels)÷2 + 1):((dimh + levels)÷2))
-    ee = eigen(Hermitian(buffermatrix), range)
+    ee = eigen!(Hermitian(buffermatrix), range)
     energies, states = ee.values, ee.vectors
-    #resolve_degeneracies(energies, sates)
+    # energies = rand(length(range)); states = rand(Complex{Float64}, (dimh, length(range)));
+    # resolve_degeneracies(energies, sates)
     return (energies, states)
 end
 
