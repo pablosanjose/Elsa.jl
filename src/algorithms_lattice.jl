@@ -53,7 +53,7 @@ end
 
 function _box_fill(::Val{N}, lat::Lattice{T,E,L}, isinregion::F, fillaxesbool, seed0, maxsteps, usecellaspos) where {N,T,E,L,F}
     seed = convert(SVector{E,T}, seed0)
-    fillvectors = SMatrix{E, N}(bravaismatrix(lat)[:, fillaxesbool])
+    fillvectors = SMatrix{E, N}(bravaismatrix(lat)[1:E, fillaxesbool])
     numsublats = nsublats(lat)
     nregisters = ifelse(isunlinked(lat), 0, numsublats)
     nsitesub = Int[nsites(sl) for sl in lat.sublats]
