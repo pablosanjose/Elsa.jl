@@ -12,7 +12,7 @@ function BrillouinMesh(lat::Lattice{T,E,L}) where {T,E,L}
 
     model = Model(Hopping(1))
     adjacency = hamiltonianoperator(lat, model).matrix
-    size(adjacency, 1) == nverts || throw(DimensionMismatch("mesh hamiltonian dimension does not match number of vertices"))
+    size(adjacency, 1) == nverts || throw(DimensionMismatch("mesh hamiltonian! dimension does not match number of vertices"))
 
     flatgroups = Int[]
     for n in 1:E  # We grow groups recursively till (n+1)-groups

@@ -21,10 +21,10 @@ toSVectors(::Type{T}) where {T} = SVector{0,T}[]
 toSVectors(::Type{T}, vs::Vararg{<:Any,N}) where {T,N} = [toSVector.(T, vs)...]
 toSVectors(vs...) = [promote(toSVector.(vs)...)...]
 
-padright(sv::SVector{E,T}, x::T, ::Val{E}) where {E,T} = sv
-padright(sv::SVector{E,T}, x::T2, ::Val{E2}) where {E,T,E2,T2} =
+padright(sv::StaticVector{E,T}, x::T, ::Val{E}) where {E,T} = sv
+padright(sv::StaticVector{E,T}, x::T2, ::Val{E2}) where {E,T,E2,T2} =
     SVector{E2, T2}(ntuple(i -> i > E ? x : T2(sv[i]), Val(E2)))
-padright(sv::SVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
+padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
 
 @inline padrightbottom(s::SMatrix{E,L}, st::Type{SMatrix{E2,L2,T2,EL2}}) where {E,L,E2,L2,T2,EL2} =
     SMatrix{E2,L2,T2,EL2}(ntuple(k -> _padrightbottom((k - 1) % E2 + 1, (k - 1) ÷ E2 + 1, zero(T2), s), Val(EL2)))
@@ -103,7 +103,7 @@ function fastrank(s::SMatrix{N,M,T}) where {N,M,T<:AbstractFloat}
     tol = M * N * eps(maximum(s))
     count = M
     for i in 0:M-1
-        if abs(R[M-i, M]) < tol 
+        if abs(R[M-i, M]) < tol
             count -= 1
         else
             break
@@ -113,13 +113,13 @@ function fastrank(s::SMatrix{N,M,T}) where {N,M,T<:AbstractFloat}
 end
 
 keepcolumns(s::SMatrix{E,L,T}, ::Tuple{}) where {E,L,T} = SMatrix{E,0,T}()
-keepcolumns(s::SMatrix, cols::NTuple{N,Int}) where  {N} = 
+keepcolumns(s::SMatrix, cols::NTuple{N,Int}) where  {N} =
     hcat(ntuple(i->s[:,cols[i]], Val(N))...)
 keepelements(s::SVector{L,T}, ::Tuple{}) where {L,T} = SVector{0,T}()
 keepelements(v::SVector, cols::NTuple{N,Int}) where {N} = v[SVector(cols)]
 
 zeroout(v::SVector{N,T}, ::Tuple{}) where {N,T} = v
-zeroout(v::SVector{S,T}, elements::NTuple{N,Int}) where {S,N,T} = 
+zeroout(v::SVector{S,T}, elements::NTuple{N,Int}) where {S,N,T} =
     SVector{S,T}(ntuple(i -> i in elements ? zero(T) : v[i], Val(S)))
 
 modifyat(s::SVector{N,T}, i, x) where {N,T} = SVector(ntuple(j -> j == i ? x : s[j], Val(N)))

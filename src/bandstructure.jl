@@ -112,25 +112,26 @@ struct Spectrum{T<:Real,L}
     bufferstate::Vector{Complex{T}}
 end
 
-function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; kw...) where {T,E,L}
+function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; levels = missing, degtol = sqrt(eps()), randomshift = missing, kw...) where {T,E,L}
     # shift = 0.02 .+ zero(SVector{E,T})
-    shift = 0.02 * rand(SVector{E,T})
+    shift = ismissing(randomshift) ? zero(SVector{E,T}) : randomshift * rand(SVector{E,T})
     knpoints = bzmesh.mesh.lattice.sublats[1].sites
     npoints = length(knpoints)
-    first_h = hamiltonian(sys, kn = knpoints[1] + shift)
-    buffermatrix = Matrix{Complex{T}}(undef, size(first_h))
-    (energies_kn, states_kn) = spectrum(first_h, buffermatrix; kw...)
-    (statelength, nenergies) = size(states_kn)
 
+    dimh = hamiltoniandim(sys)
+    nenergies = ismissing(levels) ? dimh : 2
+    statelength = dimh
+
+    preallocH = Matrix{Complex{T}}(undef, (dimh, dimh))
+
+    ordering = zeros(Int, nenergies)
     energies = Matrix{T}(undef, (nenergies, npoints))
     states = Array{Complex{T},3}(undef, (statelength, nenergies, npoints))
-    copyslice!(energies,    CartesianIndices((1:nenergies, 1:1)),
-               energies_kn, CartesianIndices(1:nenergies))
-    copyslice!(states,      CartesianIndices((1:statelength, 1:nenergies, 1:1)),
-               states_kn,   CartesianIndices((1:statelength, 1:nenergies)))
 
-    @showprogress "Diagonalising: " for nk in 2:npoints
-        (energies_nk, states_nk) = spectrum(hamiltonian(sys, kn = knpoints[nk] + shift), buffermatrix; kw...)
+    @showprogress "Diagonalising: " for nk in 1:npoints
+        (energies_nk, states_nk) = spectrum(hamiltonian!(sys, kn = knpoints[nk] + shift), preallocH; levels = nenergies, kw...)
+        # sort_spectrum!(energies_nk, states_nk, ordering)
+        resolve_degeneracies!(energies_nk, states_nk, sys, knpoints[nk], degtol)
         copyslice!(energies,    CartesianIndices((1:nenergies, nk:nk)),
                    energies_nk, CartesianIndices(1:nenergies))
         copyslice!(states,      CartesianIndices((1:statelength, 1:nenergies, nk:nk)),
@@ -142,22 +143,23 @@ function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; kw...) where {T,E,L
     return Spectrum(energies, nenergies, states, statelength, knpoints, npoints, bufferstate)
 end
 
-function spectrum(h::SparseMatrixCSC, buffermatrix; levels = missing, kw...)
-    if ismissing(levels) || size(h, 1) < 129 || levels/size(h,1) > 0.2
-        return spectrum_dense(h, buffermatrix; kw...)
+function spectrum(h::SparseMatrixCSC, preallocH; levels = 2, method = missing, kw...)
+    if method === :exact || ismissing(method) && (size(h, 1) < 129 || levels/size(h,1) > 0.2)
+        s = spectrum_dense(h, preallocH; levels = levels, kw...)
+    elseif method === :arnoldi
+        s = spectrum_arpack(h; levels = levels, kw...)
     else
-        return spectrum_arpack(h; kw...)
+        throw(ArgumentError("Unknown method. Choose between :arnoldi or :exact"))
     end
+    return s
 end
 
-function spectrum_dense(h::SparseMatrixCSC, buffermatrix; levels = missing, kw...)
-    buffermatrix .= h
+function spectrum_dense(h::SparseMatrixCSC, preallocH; levels = 2, kw...)
+    preallocH .= h
     dimh = size(h, 1)
-    range = ismissing(levels) ? (1:dimh) : (((dimh - levels)÷2 + 1):((dimh + levels)÷2))
-    ee = eigen!(Hermitian(buffermatrix), range)
+    range = ((dimh - levels)÷2 + 1):((dimh + levels)÷2)
+    ee = eigen!(Hermitian(preallocH), range, kw...)
     energies, states = ee.values, ee.vectors
-    # energies = rand(length(range)); states = rand(Complex{Float64}, (dimh, length(range)));
-    # resolve_degeneracies(energies, sates)
     return (energies, states)
 end
 
@@ -176,6 +178,66 @@ end
 #     energies = 1 ./ schur.eigenvalues
 #     return (energies, states)
 # end
+
+function sort_spectrum!(energies, states, ordering)
+    if !issorted(energies)
+        sortperm!(ordering, energies)
+        energies .= energies[ordering]
+        states .= states[:, ordering]
+    end
+    return (energies, states)
+end
+
+function hasdegeneracies(energies, degtol)
+    has = false
+    for i in eachindex(energies), j in (i+1):length(energies)
+        if abs(energies[i] - energies[j]) < degtol
+            has = true
+            break
+        end
+    end
+    return has
+end
+
+function degeneracies(energies, degtol)
+    if hasdegeneracies(energies, degtol)
+        deglist = Vector{Int}[]
+        isclassified = BitArray(false for _ in eachindex(energies))
+        for i in eachindex(energies)
+            isclassified[i] && continue
+            degeneracyfound = false
+            for j in (i + 1):length(energies)
+                if !isclassified[j] && abs(energies[i] - energies[j]) < degtol
+                    !degeneracyfound && push!(deglist, [i])
+                    degeneracyfound = true
+                    push!(deglist[end], j)
+                    isclassified[j] = true
+                end
+            end
+        end
+        return deglist
+    else
+        return nothing
+    end
+end
+
+function resolve_degeneracies!(energies, states, sys::System{T,E,L}, kn, degtol) where {T,E,L}
+    degsubspaces = degeneracies(energies, degtol)
+    if !(degsubspaces === nothing)
+        for subspaceinds in degsubspaces
+            for axis = 1:L
+                v = velocity!(sys, kn = kn, axis = axis)  # Need to do it in-place for each subspace
+                subspace = view(states, :, subspaceinds)
+                vsubspace = subspace' * v * subspace
+                veigen = eigen!(vsubspace)
+                subspace .= subspace * veigen.vectors
+                success = !hasdegeneracies(veigen.values, degtol)
+                success && break
+            end
+        end
+    end
+    return nothing
+end
 
 #######################################################################
 # Bandstructure
