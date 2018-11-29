@@ -12,7 +12,7 @@ function expand_unitcell(lat::Lattice{T,E,L,EL}, supercell::Supercell) where {T,
     invscell = inv(smat)
     fillaxesbool = fill(true, L)
     seed = zero(SVector{E,T})
-    isinregion = 
+    isinregion =
         let invscell = invscell # avoid boxing issue #15276 (depends on compiler, but just in case)
             cell -> all(e -> - extended_eps() <= e < 1 - extended_eps(), invscell * cell)
         end
@@ -20,8 +20,8 @@ function expand_unitcell(lat::Lattice{T,E,L,EL}, supercell::Supercell) where {T,
     newlattice = Lattice(newsublats, Bravais(newbravais))
     open2old = smat
     iterated2old = one(SMatrix{L,L,Int})
-    return isunlinked(lat) ? newlattice : 
-        link!(newlattice, LinkRule(BoxIteratorLinking(lat.links, iter, open2old, 
+    return isunlinked(lat) ? newlattice :
+        link!(newlattice, LinkRule(BoxIteratorLinking(lat.links, iter, open2old,
             iterated2old, lat.bravais, nsiteslist(lat)); mincells = cellrange(lat.links)))
 end
 
@@ -37,23 +37,23 @@ function fill_region(lat::Lattice{T,E,L}, fr::FillRegion{E,F,N}) where {T,E,L,F,
     filldims = L - N
     filldims == 0 && error("Need at least one lattice vector to fill region")
     any(fr.region(fr.seed + site) for site in sitegenerator(lat)) || error("Unit cell centered at seed position does not contain any site in region")
-    
+
     newsublats, iter = _box_fill(Val(filldims), lat, fr.region, fillaxesbool, fr.seed, fr.maxsteps, false)
-    
+
     closeaxesbool = SVector{L}(fillaxesbool)
     openaxesbool = (!).(closeaxesbool)
     newbravais = selectbravaisvectors(lat, openaxesbool, Val(N))
     newlattice = Lattice(newsublats, newbravais)
     open2old = nmatrix(openaxesbool, Val(N))
     iterated2old = nmatrix(closeaxesbool, Val(filldims))
-    return isunlinked(lat) ? newlattice : 
-        link!(newlattice, LinkRule(BoxIteratorLinking(lat.links, iter, open2old, iterated2old, 
+    return isunlinked(lat) ? newlattice :
+        link!(newlattice, LinkRule(BoxIteratorLinking(lat.links, iter, open2old, iterated2old,
                                     lat.bravais, nsiteslist(lat)); mincells = cellrange(lat.links)))
 end
 
 function _box_fill(::Val{N}, lat::Lattice{T,E,L}, isinregion::F, fillaxesbool, seed0, maxsteps, usecellaspos) where {N,T,E,L,F}
     seed = convert(SVector{E,T}, seed0)
-    fillvectors = SMatrix{E, N}(bravaismatrix(lat)[:, fillaxesbool])
+    fillvectors = SMatrix{E, N}(bravaismatrix(lat)[1:E, fillaxesbool])
     numsublats = nsublats(lat)
     nregisters = ifelse(isunlinked(lat), 0, numsublats)
     nsitesub = Int[nsites(sl) for sl in lat.sublats]
@@ -69,7 +69,7 @@ function _box_fill(::Val{N}, lat::Lattice{T,E,L}, isinregion::F, fillaxesbool, s
         for sl in 1:numsublats, siten in 1:nsitesub[sl]
             sitepos = cellpos + pos_sites[sl][siten]
             checkpos = usecellaspos ? SVector(cell) : sitepos
-            if isinregion(checkpos) 
+            if isinregion(checkpos)
                 inregion = true
                 push!(newsublats[sl].sites, sitepos)
                 nregisters == 0 || registersite!(iter, cell, sl, siten)
@@ -82,22 +82,22 @@ function _box_fill(::Val{N}, lat::Lattice{T,E,L}, isinregion::F, fillaxesbool, s
 end
 
 # converts ndist in newlattice (or in fillcells) to ndist in oldlattice
-nmatrix(axesbool::SVector{L,Bool}, ::Val{N}) where {L,N} = 
+nmatrix(axesbool::SVector{L,Bool}, ::Val{N}) where {L,N} =
     SMatrix{L,N,Int}(one(SMatrix{L,L,Int})[:, axesbool])
 cellrange(links::Links) = isempty(links.interlinks) ? 0 : maximum(max(abs.(ilink.ndist)...) for ilink in links.interlinks)
 
 #######################################################################
 # Links interface
 #######################################################################
-# Linking rules for an Matrix{Slink}_{s2 j, s1 i} at ndist, enconding 
+# Linking rules for an Matrix{Slink}_{s2 j, s1 i} at ndist, enconding
 # the link (s1, r[i]) -> (s2, r[j]) + ndist
-# Linking rules are given by isvalidlink functions. With the restrictive 
-# intralink choice i < j we can append new sites without reordering the 
+# Linking rules are given by isvalidlink functions. With the restrictive
+# intralink choice i < j we can append new sites without reordering the
 # intralink slink lists (it's lower-triangular sparse)
 
 isvalidlink(isinter::Bool, (s1, s2)) = isinter || s1 <= s2
 isvalidlink(isinter::Bool, (s1, s2), (i, j)::Tuple{Int,Int}) = isinter || s1 < s2 || i < j
-isvalidlink(isinter::Bool, (s1, s2), validsublats) = 
+isvalidlink(isinter::Bool, (s1, s2), validsublats) =
     isvalidlink(isinter, (s1, s2)) && ((s1, s2) in validsublats || (s2, s1) in validsublats)
 
 function link!(lat::Lattice, lr::LinkRule{AutomaticRangeLinking})
@@ -121,11 +121,11 @@ function link!(lat::Lattice{T,E,L}, lr::LinkRule{S}) where {T,E,L,S<:LinkingAlgo
     iter = BoxIterator(Tuple(ndist_zero), maxiterations = lr.maxsteps)
     for cell in iter
         ndist = SVector(cell)
-        
+
         ndist == ndist_zero && (acceptcell!(iter, cell); continue) # intracell already done
         iswithinmin(cell, lr.mincells) && acceptcell!(iter, cell) # enforce a minimum search range
         isnotlinked(ndist, br, lr) && continue # skip if we can be sure it's not linked
-        
+
         dist = br * ndist
         ilink = buildIlink(lat, lr, pre, (dist, ndist))
         if !isempty(ilink)
@@ -144,7 +144,7 @@ function isnotlinked(ndist, br, lr::LinkRule{B}) where {T,E,L,NL,B<:BoxIteratorL
     nm = lr.alg.open2old
     ndist0 = nm * ndist
     linked = all((
-        brnorm2 = dot(nm[:,j], nm[:,j]); 
+        brnorm2 = dot(nm[:,j], nm[:,j]);
         any(abs(dot(ndist0 + ilink.ndist, nm[:,j])) < brnorm2 for ilink in lr.alg.links.interlinks))
         for j in 1:NL)
     return !linked
@@ -155,7 +155,7 @@ function buildIlink(lat::Lattice{T,E}, lr, pre, (dist, ndist)) where {T,E}
     nsl = nsublats(lat)
 
     slinks = dummyslinks(lat.sublats) # placeholder to be replaced below
-   
+
     validsublats = matchingsublats(lat, lr)
     for s1 in 1:nsl, s2 in 1:nsl
         isvalidlink(isinter, (s1, s2), validsublats) || continue
@@ -173,14 +173,14 @@ function buildSlink(lat::Lattice{T,E}, lr, pre, (dist, ndist, isinter), (s1, s2)
     return Slink(sparse(slinkbuilder))
 end
 
-linkprecompute(linkrules::LinkRule{<:SimpleLinking}, lat::Lattice) = 
+linkprecompute(linkrules::LinkRule{<:SimpleLinking}, lat::Lattice) =
     lat.sublats
-    
-linkprecompute(linkrules::LinkRule{TreeLinking}, lat::Lattice) = 
+
+linkprecompute(linkrules::LinkRule{TreeLinking}, lat::Lattice) =
     ([KDTree(sl.sites, leafsize = linkrules.alg.leafsize) for sl in lat.sublats],
      lat.sublats)
 
-linkprecompute(linkrules::LinkRule{<:WrapLinking}, lat::Lattice) = 
+linkprecompute(linkrules::LinkRule{<:WrapLinking}, lat::Lattice) =
     nothing
 
 function linkprecompute(lr::LinkRule{<:BoxIteratorLinking}, lat::Lattice)
@@ -199,7 +199,7 @@ end
 # Given a iterated2old that is a rectangular identity, this inserts a 0:0 range in the corresponding zero-rows, i.e.
 # translates the bounding box to live in the oldsystem cell space instead of the fill cell space
 _maprange(bbox::NTuple{2,MVector{N,Int}}, nsites, iterated2old::SMatrix{L,N}) where {L,N} = ntuple(Val(L+1)) do n
-    if n <= L 
+    if n <= L
         m = findnonzeroinrow(iterated2old, n)
         if m == 0
             0:0
@@ -278,7 +278,7 @@ function add_neighbors!(slinkbuilder, lr::LinkRule{<:BoxIteratorLinking}, maps, 
     ndold_intracell = lr.alg.iterated2old * SVector(celliter)
     ndold_intracell_shifted = ndold_intracell - ndold_intercell
     dist = bravaismatrix(lr.alg.bravais) * ndold_intracell
-    
+
     oldlinks = lr.alg.links
 
     isvalidlink(false, (s1, s2)) &&
@@ -290,10 +290,10 @@ function add_neighbors!(slinkbuilder, lr::LinkRule{<:BoxIteratorLinking}, maps, 
     return nothing
 end
 
-function _add_neighbors_ilink!(slinkbuilder, ilink_old, maps2, isinter, (s1, s2), (i, iold, ndist_old), dist)    
+function _add_neighbors_ilink!(slinkbuilder, ilink_old, maps2, isinter, (s1, s2), (i, iold, ndist_old), dist)
     slink_old = ilink_old.slinks[s2, s1]
     isempty(slink_old) && return nothing
-    
+
     for (jold, rdr_old) in neighbors_rdr(slink_old, iold)
         isvalid = checkbounds(Bool, maps2, Tuple(ndist_old)..., jold)
         if isvalid
