@@ -191,7 +191,7 @@ function linkprecompute(lr::LinkRule{<:BoxIteratorLinking}, lat::Lattice)
              OffsetArray(zeros(Int, map(length, range)), range))
             for nsites in nslist]
     for (s, register) in enumerate(lr.alg.iter.registers), (inew, (cell, iold)) in enumerate(register.cellinds)
-       maps[s][Tuple(iterated2old * SVector(cell))..., iold] = inew
+        maps[s][Tuple(iterated2old * SVector(cell))..., iold] = inew
     end
     return maps
 end
@@ -320,7 +320,7 @@ function siteclusters(lat::Lattice, sublat::Int, onlyintra)
 
     bincounter = 0
     clustercounter = 0
-    p = Progress(ns, 1, "Extracting subbands: ")
+    p = Progress(ns, 1, "Clustering nodes: ")
     while !isempty(pending) || any(iszero, sitebins)
         if isempty(pending)   # new cluster
             seed = findfirst(iszero, sitebins)

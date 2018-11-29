@@ -5,12 +5,10 @@ uuid = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 version = "0.3.2"
 
 [[AbstractPlotting]]
-deps = ["ColorBrewer", "ColorTypes", "Colors", "FileIO", "FixedPointNumbers", "FreeType", "FreeTypeAbstraction", "GeometryTypes", "IntervalSets", "LinearAlgebra", "Markdown", "Observables", "Packing", "PlotUtils", "Printf", "Random", "Serialization", "Showoff", "SignedDistanceFields", "StaticArrays", "Statistics", "Test", "UnicodeFun"]
-git-tree-sha1 = "0e969852e9c20f24ad6ef705faa8db32f0990238"
-repo-rev = "master"
-repo-url = "https://github.com/JuliaPlots/AbstractPlotting.jl.git"
+deps = ["ColorBrewer", "ColorTypes", "Colors", "FreeType", "FreeTypeAbstraction", "GeometryTypes", "IntervalSets", "LinearAlgebra", "Packing", "PlotUtils", "Printf", "Random", "Reactive", "Serialization", "Showoff", "SignedDistanceFields", "StaticArrays", "Statistics", "Test", "UnicodeFun"]
+git-tree-sha1 = "3330e2318b55d874cd66eac72a7fa887f8bc4571"
 uuid = "537997a7-5e4e-5d89-9595-2241ea00577e"
-version = "0.9.0+"
+version = "0.9.0"
 
 [[ArnoldiMethod]]
 deps = ["DelimitedFiles", "LinearAlgebra", "Random", "SparseArrays", "StaticArrays", "Test"]
@@ -320,12 +318,6 @@ deps = ["Distances", "LinearAlgebra", "Mmap", "StaticArrays", "Test"]
 git-tree-sha1 = "aab46b96ae5c2a9c08146188016d6312276094e5"
 uuid = "b8a86587-4115-5ab1-83bc-aa920d37bbce"
 version = "0.4.2"
-
-[[Observables]]
-deps = ["Test"]
-git-tree-sha1 = "dc02cec22747d1d10d9f70d8a1c03432b5bfbcd0"
-uuid = "510215fc-4207-5dde-b226-833fc4488ee2"
-version = "0.2.3"
 
 [[OffsetArrays]]
 deps = ["DelimitedFiles", "Test"]
