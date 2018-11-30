@@ -3,7 +3,7 @@ module QBox
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
       Arpack, ProgressMeter
 
-import Base: convert, iterate, IteratorSize, IteratorEltype, eltype, ==
+import Base: convert, iterate, ==
 import SparseArrays: sparse!
 
 export LatticeDirective, Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
@@ -21,6 +21,7 @@ include("boxiterator.jl")
 include("sparsebuilder.jl")
 include("presets.jl")
 include("lattice.jl")
+include("neighboriterator.jl")
 include("algorithms_lattice.jl")
 include("model.jl")
 include("blochoperator.jl")

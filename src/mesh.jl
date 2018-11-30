@@ -7,16 +7,16 @@ struct Elements{N}
     groups::Vector{Vector{SVector{N,Int}}}
 end
 
-function Elements(lat::Lattice{T,E}, ::Val{N} = Val(E+1); sublat::Int = 1) where {T,E,N} 
+function Elements(lat::Lattice{T,E}, ::Val{N} = Val(E+1); sublat::Int = 1) where {T,E,N}
     groupsintra = buildelementgroups(lat, sublat, Val(true), Val(N))
     groups = buildelementgroups(lat, sublat, Val(false), Val(N))
     return Elements(groupsintra, groups)
 end
-        
-Base.show(io::IO, elements::Elements{N}) where {N} = 
+
+Base.show(io::IO, elements::Elements{N}) where {N} =
     print(io, "Elements{$N}: groups of connected $N-vertex elements
-    Total elements     : $(nelements(elements)) 
-    Total groups       : $(ngroups(elements)) 
+    Total elements     : $(nelements(elements))
+    Total groups       : $(ngroups(elements))
     Intracell elements : $(nelementsintra(elements))
     Intracell groups   : $(ngroupsintra(elements))")
 
@@ -36,11 +36,11 @@ function buildelementgroups(lat, sublat, onlyintra, ::Val{N}) where {N}
     for (s, sitesubband) in enumerate(sitesubbands), src in sitesubband
         addelements!(elementgroups[s], src, lat.links, sublat, onlyintra, candidatebuffer, buffer1, buffer2)
     end
-    
+
     for egroup in elementgroups
         alignnormals!(egroup, lat.sublats[sublat].sites)
     end
-    
+
     return elementgroups
 end
 # candidatebuffer is a list of N-elements with src as a first vertex
@@ -55,7 +55,7 @@ function addelements!(group::Vector{SVector{N,Int}}, src::Int, links, sublat, on
     for pass in 2:N
         (imin, imax) = (imax + 1, length(candidatebuffer))
         for i in imin:imax
-            neighborbuffer = 
+            neighborbuffer =
                 _common_ordered_neighbors!(buffer1, buffer2, candidatebuffer[i], pass - 1, links, sublat, onlyintra)
             for neigh in neighborbuffer
                 push!(candidatebuffer, modifyat(candidatebuffer[i], pass, neigh))
@@ -85,7 +85,7 @@ function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int},
     return buffer1
 end
 
-function alignnormals!(elements::Vector{SVector{N,Int}}, sites::Vector{SVector{E,T}}) where {N,E,T}    
+function alignnormals!(elements::Vector{SVector{N,Int}}, sites::Vector{SVector{E,T}}) where {N,E,T}
     for (i, element) in enumerate(elements)
         volume = elementvolume(sites[element])
         volume < zero(T) && (elements[i] = switchlast(element))
