@@ -295,12 +295,14 @@ function addilink!(meshlinks::Links, bzilink::Ilink, sp::Spectrum, linkthreshold
     states = sp.states
 
     slinkbuilder = SparseMatrixBuilder(bandmesh, 1, 1)
+    neighiter = NeighborIterator(bzilink, 1, (1,1))
+    
     @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
         n_src = linearindices[ne_src, nk_src]
         r1 = meshnodes[n_src]
         copyslice!(state,  CartesianIndices(1:sp.statelength),
                    states, CartesianIndices((1:sp.statelength, ne_src:ne_src, nk_src:nk_src)))
-        @inbounds for nk_target in neighbors(bzilink, nk_src, (1,1))
+        @inbounds for nk_target in neighbors!(neighiter, nk_src)
             ne_target = findmostparallel(state, states, nk_target, linkthreshold)
             if !iszero(ne_target)
                 n_target = linearindices[ne_target, nk_target]

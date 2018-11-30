@@ -121,9 +121,6 @@ nsources(s::Slink) = size(s.rdr, 2)
 ntargets(s::Slink) = size(s.rdr, 1)
 sources(s::Slink) = 1:nsources(s)
 targets(s::Slink) = 1:ntargets(s)
-neighbors(s::Slink, src) = (rowvals(s.rdr)[j] for j in nzrange(s.rdr, src))
-neighbors_rdr(s::Slink, src) = ((rowvals(s.rdr)[j], nonzeros(s.rdr)[j]) for j in nzrange(s.rdr, src))
-neighbors_rdr(s::Slink) = zip(s.rdr.rowval, s.rdr.nzval)
 
 _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
@@ -149,10 +146,6 @@ nlinks(ss::Array{<:Slink}, i) = nlinks(ss[i])
 nsublats(ilink::Ilink) = size(ilink.slinks, 1)
 
 Base.isempty(ilink::Ilink) = nlinks(ilink) == 0
-
-neighbors(ilink::Ilink, src, (s1,s2)::Tuple{Int,Int}) = neighbors(ilink.slinks[s2, s1], src)
-neighbors(ilinks::Vector{<:Ilink}, src, (s1,s2)::Tuple{Int,Int}) = Iterators.flatten(neighbors(ilink, src, (s1, s2)) for ilink in ilinks)
-
 transform!(i::IL, f::F) where {IL<:Ilink, F<:Function} = (transform!.(i.slinks, f); i)
 
 #######################################################################
@@ -183,12 +176,6 @@ nsublats(links::Links) = nsublats(links.intralink)
 ninterlinks(links::Links) = length(links.interlinks)
 allilinks(links::Links) = (getilink(links, i) for i in 0:ninterlinks(links))
 getilink(links::Links, i::Int) = i == 0 ? links.intralink : links.interlinks[i]
-neighbors(links::Links, src, (s1, s2)::Tuple{Int,Int}) =
-    Iterators.flatten(neighbors(ilink, src, (s1, s2)) for ilink in allilinks(links))
-neighbors(links, i, sublats, onlyintra::Bool) =
-    onlyintra ? neighbors(links.intralink, i, sublats) : neighbors(links, i, sublats)
-neighbors(links, i, sublats, onlyintra::Val{true}) = neighbors(links.intralink, i, sublats)
-neighbors(links, i, sublats, onlyintra::Val{false}) = neighbors(links, i, sublats)
 
 transform!(l::L, f::F) where {L<:Links, F<:Function} = (transform!(l.intralink, f); transform!.(l.interlinks, f); return l)
 

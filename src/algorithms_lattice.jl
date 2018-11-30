@@ -310,6 +310,9 @@ end
 # siteclusters : find disconnected site groups in a sublattice
 #######################################################################
 
+# We have a queue of pending sites (nodes). Each time its emptied we open a new bin, which is assigned to a new cluster (binclusters[newbin] = newcluster). We add one unclassified site to the queue (one whose bin is zero, sitebins[site] == 0), and start crawling its neighbors. Unclassified neighbors are added to the current bin, and placed in the pending queue. If we find a classified neighbor belonging to a older cluster, the bin cluster is changed to that cluster.
+
+
 function siteclusters(lat::Lattice, sublat::Int, onlyintra)
     isunlinked(lat) && return [Int[]]
 
@@ -320,6 +323,7 @@ function siteclusters(lat::Lattice, sublat::Int, onlyintra)
 
     bincounter = 0
     clustercounter = 0
+    neighiter = NeighborIterator(lat.links, 1, (sublat, sublat), onlyintra)
     p = Progress(ns, 1, "Clustering nodes: ")
     while !isempty(pending) || any(iszero, sitebins)
         if isempty(pending)   # new cluster
@@ -331,7 +335,7 @@ function siteclusters(lat::Lattice, sublat::Int, onlyintra)
             push!(pending, seed)
         end
         src = pop!(pending)
-        for neigh in neighbors(lat.links, src, (sublat, sublat), onlyintra)
+        for neigh in neighbors!(neighiter, src)
             if sitebins[neigh] == 0   # unclassified neighbor
                 push!(pending, neigh)
                 sitebins[neigh] = bincounter; next!(p)
@@ -341,7 +345,7 @@ function siteclusters(lat::Lattice, sublat::Int, onlyintra)
             end
         end
     end
-    clusters = [Int[] for _ in 1:maximum(binclusters)]
+    clusters = Vector{Int}[Int[] for _ in 1:maximum(binclusters)]
     for i in 1:ns
         push!(clusters[binclusters[sitebins[i]]], i)
     end
