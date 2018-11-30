@@ -2,7 +2,7 @@
 # NeighborIterator
 #######################################################################
 
-mutable struct NeighborIterator{L}
+struct NeighborIterator{L}
     l::L
     src::Int
     s1::Int

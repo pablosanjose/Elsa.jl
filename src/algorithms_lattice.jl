@@ -323,6 +323,7 @@ function siteclusters(lat::Lattice, sublat::Int, onlyintra)
 
     bincounter = 0
     clustercounter = 0
+    neighiter = NeighborIterator(lat.links, 1, (sublat, sublat), onlyintra)
     p = Progress(ns, 1, "Clustering nodes: ")
     while !isempty(pending) || any(iszero, sitebins)
         if isempty(pending)   # new cluster
@@ -334,7 +335,7 @@ function siteclusters(lat::Lattice, sublat::Int, onlyintra)
             push!(pending, seed)
         end
         src = pop!(pending)
-        for neigh in neighbors(lat.links, src, (sublat, sublat), onlyintra)
+        for neigh in neighbors!(neighiter, src)
             if sitebins[neigh] == 0   # unclassified neighbor
                 push!(pending, neigh)
                 sitebins[neigh] = bincounter; next!(p)

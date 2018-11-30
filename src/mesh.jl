@@ -34,7 +34,8 @@ function buildelementgroups(lat, sublat, onlyintra, ::Val{N}) where {N}
 
     elementgroups = [SVector{N,Int}[] for _ in sitesubbands]
     for (s, sitesubband) in enumerate(sitesubbands), src in sitesubband
-        addelements!(elementgroups[s], src, lat.links, sublat, onlyintra, candidatebuffer, buffer1, buffer2)
+        neighiter = NeighborIterator(lat.links, src, (sublat, sublat), onlyintra)
+        addelements!(elementgroups[s], src, neighiter, candidatebuffer, buffer1, buffer2)
     end
 
     for egroup in elementgroups
@@ -47,7 +48,7 @@ end
 # a given (src, 0, 0...) multiplies to (src, n1, 0...) and (src, n2, 0...), where n1,n2 are src neighbors
 # _common_ordered_neighbors! does this for each (src, ....), adding neighs to src to buffer1, and then looking
 # among neigh to ni at each levels for common neighbors, adding them to buffer2. Interchange and continue
-function addelements!(group::Vector{SVector{N,Int}}, src::Int, links, sublat, onlyintra, candidatebuffer, buffer1, buffer2) where {N}
+function addelements!(group::Vector{SVector{N,Int}}, src::Int, neighiter, candidatebuffer, buffer1, buffer2) where {N}
     resize!(candidatebuffer, 0)
     candidatebuffer = SVector{N,Int}[]
     push!(candidatebuffer, modifyat(zero(SVector{N,Int}), 1, src))
@@ -56,7 +57,7 @@ function addelements!(group::Vector{SVector{N,Int}}, src::Int, links, sublat, on
         (imin, imax) = (imax + 1, length(candidatebuffer))
         for i in imin:imax
             neighborbuffer =
-                _common_ordered_neighbors!(buffer1, buffer2, candidatebuffer[i], pass - 1, links, sublat, onlyintra)
+                _common_ordered_neighbors!(buffer1, buffer2, candidatebuffer[i], pass - 1, neighiter)
             for neigh in neighborbuffer
                 push!(candidatebuffer, modifyat(candidatebuffer[i], pass, neigh))
             end
@@ -69,15 +70,15 @@ function addelements!(group::Vector{SVector{N,Int}}, src::Int, links, sublat, on
     return group
 end
 
-function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int}, upto, links, sublat, onlyintra) where {N}
+function _common_ordered_neighbors!(buffer1, buffer2, candidate::SVector{N,Int}, upto, neighiter) where {N}
     min_neighbor = maximum(candidate)
     resize!(buffer1, 0)
     resize!(buffer2, 0)
-    for neigh in neighbors(links, candidate[1], (sublat, sublat), onlyintra)
+    for neigh in neighbors!(neighiter, candidate[1])
         push!(buffer1, neigh)
     end
     for j in 2:upto
-        for neigh in neighbors(links, candidate[j], (sublat, sublat), onlyintra)
+        for neigh in neighbors!(neighiter, candidate[j])
             (neigh > min_neighbor) && (neigh in buffer1) && push!(buffer2, neigh)
         end
         buffer1, buffer2 = buffer2, buffer1
