@@ -49,21 +49,5 @@ NeighborIterator(l, src, (s1,s2)::Tuple{Int,Int}) = NeighborIterator(l, src, s1,
 neighbors!(ni::NeighborIterator, src) = (ni.src = src; return ni)
 neighbors(p...) = NeighborIterator(p...)
 
-#######################################################################
-# Old interface
-#######################################################################
-
-# neighbors(ilink::Ilink, src, (s1,s2)::Tuple{Int,Int}) = neighbors(ilink.slinks[s2, s1], src)
-# neighbors(ilinks::Vector{<:Ilink}, src, (s1,s2)::Tuple{Int,Int}) = Iterators.flatten(neighbors(ilink, src, (s1, s2)) for ilink in ilinks)
-# # neighbors(s::Slink, src) = (rowvals(s.rdr)[j] for j in nzrange(s.rdr, src))
-# neighbors(s::Slink, src) = view(rowvals(s.rdr), nzrange(s.rdr, src))
-#
-# neighbors(links::Links, src, (s1, s2)::Tuple{Int,Int}) =
-#     Iterators.flatten(neighbors(ilink, src, (s1, s2)) for ilink in allilinks(links))
-# neighbors(links, i, sublats, onlyintra::Bool) =
-#     onlyintra ? neighbors(links.intralink, i, sublats) : neighbors(links, i, sublats)
-# neighbors(links, i, sublats, onlyintra::Val{true}) = neighbors(links.intralink, i, sublats)
-# neighbors(links, i, sublats, onlyintra::Val{false}) = neighbors(links, i, sublats)
-
 neighbors_rdr(s::Slink, src) = ((rowvals(s.rdr)[j], nonzeros(s.rdr)[j]) for j in nzrange(s.rdr, src))
 neighbors_rdr(s::Slink) = zip(s.rdr.rowval, s.rdr.nzval)
