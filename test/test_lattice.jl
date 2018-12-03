@@ -1,7 +1,7 @@
 module LatticeTest
 
 using Test
-using QBox 
+using QBox
 using QBox: nsites, nlinks
 
 @test Bravais() isa Bravais{Float64,0,0,0}
@@ -54,7 +54,7 @@ using QBox: nsites, nlinks
 @test QBox.nlinks(Lattice(:bcc, LinkRule(1), FillRegion(:spheroid, (10,4,4)))) == 8216
 
 @test LinkRule(1.2, 1, (2,3)) isa LinkRule{QBox.AutomaticRangeLinking,Tuple{Tuple{Int64,Int64},Tuple{Int64,Int64}}}
-@test LinkRule(1, sublats = (1, (2, 3))).sublats == ((1, 1), (2, 3)) 
+@test LinkRule(1, sublats = (1, (2, 3))).sublats == ((1, 1), (2, 3))
 
 @test begin
     lat1 = Lattice(:honeycomb, LinkRule(1/sqrt(3)), FillRegion(:circle, 7))
@@ -79,3 +79,5 @@ end
     lat = mergesublats(Lattice(Preset(:honeycomb_bilayer, twistindex = 2)), (2,1,1,1))
     QBox.nlinks(lat) == 32 && QBox.nsublats(lat) == 2
 end
+
+end # module

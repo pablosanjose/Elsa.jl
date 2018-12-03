@@ -3,13 +3,13 @@ module QBox
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
       Arpack, ProgressMeter
 
-import Base: convert, iterate, IteratorSize, IteratorEltype, eltype, ==
+import Base: convert, iterate, ==
 import SparseArrays: sparse!
 
 export LatticeDirective, Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
        Dim, FillRegion, LinkRule, TreeLinking, SimpleLinking, Precision
 export System, Model, Onsite, Hopping, BrillouinMesh, Bandstructure
-export transform, transform!, lattice!, combine, wrap, mergesublats, hamiltonian
+export transform, transform!, lattice!, combine, wrap, mergesublats, hamiltonian!, velocity!
 export @SMatrix, @SVector, SMatrix, SVector
 
 abstract type LatticeDirective end
@@ -21,9 +21,10 @@ include("boxiterator.jl")
 include("sparsebuilder.jl")
 include("presets.jl")
 include("lattice.jl")
+include("neighboriterator.jl")
 include("algorithms_lattice.jl")
 include("model.jl")
-include("hamiltonian.jl")
+include("blochoperator.jl")
 include("system.jl")
 include("mesh.jl")
 include("bandstructure.jl")

@@ -1,5 +1,5 @@
 ENV["OMP_NUM_THREADS"] = 4
-const SIZE = 10000
+const SIZE = 30000
 
 using Pardiso
 using Random
@@ -14,8 +14,8 @@ pardisoinit(ps)
 # set_matrixtype!(ps, 13)
 set_matrixtype!(ps, -4)
 set_msglvl!(ps, Pardiso.MESSAGE_LEVEL_ON)
-# b = rand(Complex{Float64}, SIZE);
-b = zeros[Complex{Float64}, SIZE]; b[1] = 1.0 + 0im;
+b = rand(Complex{Float64}, SIZE);
+# b = zeros[Complex{Float64}, SIZE]; b[1] = 1.0 + 0im;
 A0 = sprand(Complex{Float64}, SIZE, SIZE, 2.0/SIZE);
 A = A0 + A0' + spdiagm(0 => 0.1 .* real.(b));
 x = similar(b);

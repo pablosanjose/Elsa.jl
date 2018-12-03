@@ -8,9 +8,9 @@ BoxRegister{N}() where N = BoxRegister(Tuple{NTuple{N,Int}, Int}[])
     BoxIterator(seed::NTuple{N,Int}; maxiterations = missing, nregisters = 0)
 
 Cartesian iterator `iter` over N-tuples of integers (`cell`s) that starts at `seed` and
-grows outwards in the form of a box of increasing sides (not necesarily equal) until it 
-encompasses a certain N-dimensional region. The field `iter.monitor::Bool` is used by 
-the user at each iteration to signal whether the current `cell` is inside the region. 
+grows outwards in the form of a box of increasing sides (not necesarily equal) until it
+encompasses a certain N-dimensional region. The field `iter.monitor::Bool` is used by
+the user at each iteration to signal whether the current `cell` is inside the region.
 The option `nregisters = n` creates `n` `BoxRegister`s that store `(cell, index)`
 """
 struct BoxIterator{N}
@@ -24,12 +24,12 @@ struct BoxIterator{N}
     registers::Vector{BoxRegister{N}}
 end
 
-IteratorSize(::BoxIterator) = SizeUnknown()
-IteratorEltype(::BoxIterator) = HasElType()
-eltype(::BoxIterator{N}) where {N} = NTuple{N,Int}
+Base.IteratorSize(::BoxIterator) = Base.SizeUnknown()
+Base.IteratorEltype(::BoxIterator) = Base.HasEltype()
+Base.eltype(::BoxIterator{N}) where {N} = NTuple{N,Int}
 boundingboxiter(b::BoxIterator) = (b.npos, b.ppos)
 
-function BoxIterator(seed::NTuple{N}; maxiterations::Union{Int,Missing} = missing, nregisters::Int = 0) where {N} 
+function BoxIterator(seed::NTuple{N}; maxiterations::Union{Int,Missing} = missing, nregisters::Int = 0) where {N}
     BoxIterator(seed, maxiterations, MVector(1, 2),
         ones(MVector{N,Bool}), ones(MVector{N,Bool}), MVector(seed), MVector(seed),
         nregisters > 0 ? [BoxRegister{N}() for i in 1:nregisters] : BoxRegister{N}[])
