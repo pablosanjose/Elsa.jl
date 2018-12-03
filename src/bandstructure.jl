@@ -40,7 +40,7 @@ Brillouin(sys::System; kw...) = Brillouin(sys.lattice; kw...)
 Base.show(io::IO, m::Brillouin{T,L,N}) where {T,L,N} =
     print(io, "Brillouin{$T,$L} : discretization of $L-dimensional Brillouin zone
     Mesh type  : $(m.uniform ? "uniform" : "simple")
-    Vertices   : $(nsites(m.mesh.lattice))
+    Vertices   : $(nsites(m.lattice))
     Partitions : $(m.partitions)")
 
 # phi-space sampling z, k-space G'z. M = diagonal(partitions)
@@ -108,10 +108,10 @@ struct BandSampling{T<:Real,L}
     bufferstate::Vector{Complex{T}}
 end
 
-function BandSampling(sys::System{T,E,L}, bzmesh::Brillouin; levels = missing, degtol = sqrt(eps()), randomshift = missing, kw...) where {T,E,L}
+function BandSampling(sys::System{T,E,L}, brillouin::Brillouin; levels = missing, degtol = sqrt(eps()), randomshift = missing, kw...) where {T,E,L}
     # shift = 0.02 .+ zero(SVector{E,T})
     shift = ismissing(randomshift) ? zero(SVector{E,T}) : randomshift * rand(SVector{E,T})
-    knpoints = bzmesh.mesh.lattice.sublats[1].sites
+    knpoints = brillouin.lattice.sublats[1].sites
     npoints = length(knpoints)
 
     dimh = hamiltoniandim(sys)
@@ -263,52 +263,50 @@ function Bandstructure(sys::System{T,E,L}, brillouin::Brillouin{T,L}; linkthresh
     return Bandstructure(bandsmesh, states, bandsampling.nenergies, bandsampling.npoints)
 end
 
-function bandslattice(bz::Brillouin{T,L}, bandsampling, linkthreshold) where {T,L}
-    bandmeshlat = Lattice(Sublat{T,L+1}(), Bravais(SMatrix{L+1,L,T}(I)))
-    addnodes!(bandmeshlat, bandsampling)
-    bzmeshlat = bz.mesh.lattice
-    bzmeshlinks = bzmeshlat.links
-    for bzmeshilink in allilinks(bzmeshlat)
-        addilink!(bandmeshlat.links, bzmeshilink, bandsampling, linkthreshold, bandmeshlat)
+function bandslattice(brillouin::Brillouin{T,L}, bandsampling, linkthreshold) where {T,L}
+    bands = Lattice(Sublat{T,L+1}(), Bravais(SMatrix{L+1,L,T}(I)))
+    addnodes!(bands, bandsampling)
+    for brilink in allilinks(brillouin.lattice)
+        addilink!(bands.links, brilink, bandsampling, linkthreshold, bands)
     end
-    return bandmeshlat
+    return bands
 end
 
-function addnodes!(bandmeshlat, bandsampling)
-    meshnodes = bandmeshlat.sublats[1].sites
+function addnodes!(bands, bandsampling)
+    bandnodes = bands.sublats[1].sites
     for nk in 1:bandsampling.npoints, ne in 1:bandsampling.nenergies
-        push!(meshnodes, vcat(bandsampling.knpoints[nk], bandsampling.energies[ne, nk]))
+        push!(bandnodes, vcat(bandsampling.knpoints[nk], bandsampling.energies[ne, nk]))
     end
-    return bandmeshlat
+    return bands
 end
 
-function addilink!(meshlinks::Links, bzilink::Ilink, sp::BandSampling, linkthreshold, bandmesh)
-    meshnodes = bandmesh.sublats[1,1].sites
-    dist = bravaismatrix(bandmesh) * bzilink.ndist
+function addilink!(bandlinks::Links, bzilink::Ilink, sp::BandSampling, linkthreshold, bands)
+    bandnodes = bands.sublats[1,1].sites
+    dist = bravaismatrix(bands) * bzilink.ndist
     linearindices = LinearIndices(sp.energies)
     state = sp.bufferstate
     states = sp.states
 
-    slinkbuilder = SparseMatrixBuilder(bandmesh, 1, 1)
+    slinkbuilder = SparseMatrixBuilder(bands, 1, 1)
     neighiter = NeighborIterator(bzilink, 1, (1,1))
 
     @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
         n_src = linearindices[ne_src, nk_src]
-        r1 = meshnodes[n_src]
+        r1 = bandnodes[n_src]
         copyslice!(state,  CartesianIndices(1:sp.statelength),
                    states, CartesianIndices((1:sp.statelength, ne_src:ne_src, nk_src:nk_src)))
         @inbounds for nk_target in neighbors!(neighiter, nk_src)
             ne_target = findmostparallel(state, states, nk_target, linkthreshold)
             if !iszero(ne_target)
                 n_target = linearindices[ne_target, nk_target]
-                r2 = meshnodes[n_target] + dist
+                r2 = bandnodes[n_target] + dist
                 pushtocolumn!(slinkbuilder, n_target, _rdr(r1, r2))
             end
         end
         finalisecolumn!(slinkbuilder)
     end
-    push!(meshlinks, Ilink(bzilink.ndist, fill(Slink(sparse(slinkbuilder)), 1, 1)))
-    return meshlinks
+    push!(bandlinks, Ilink(bzilink.ndist, fill(Slink(sparse(slinkbuilder)), 1, 1)))
+    return bandlinks
 end
 
 function findmostparallel(state::Vector{Complex{T}}, states, ktarget, linkthreshold) where {T}
