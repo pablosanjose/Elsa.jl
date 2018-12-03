@@ -1,8 +1,8 @@
 #######################################################################
-# BrillouinMesh
+# Brillouin
 #######################################################################
 """
-    BrillouinMesh(lat::Lattice; uniform::Bool = false, partitions = 5)
+    Brillouin(lat::Lattice; uniform::Bool = false, partitions = 5)
 
 Discretizes the Brillouin zone of Lattice `lat` into hypertriangular finite
 elements, using a certain number of `partitions` per Bravais axis (accepts
@@ -12,47 +12,43 @@ the type of mesh, either "uniform" (as close to equilateral as possible) or
 
 # Examples
 ```jldoctest
-julia> BrillouinMesh(Lattice(:honeycomb), uniform = true, partitions = 200)
-BrillouinMesh{Float64,2} : discretization of 2-dimensional Brillouin zone
+julia> Brillouin(Lattice(:honeycomb), uniform = true, partitions = 200)
+Brillouin{Float64,2} : discretization of 2-dimensional Brillouin zone
     Mesh type  : uniform
     Vertices   : 40000
     Partitions : (200, 200)
     3-elements : 80000
 ```
 """
-struct BrillouinMesh{T,L,N,LL}
-    mesh::Mesh{T,L,L,N,LL}
+struct Brillouin{T,L,LL}
+    lattice::Lattice{T,L,L,LL}
     uniform::Bool
     partitions::NTuple{L,Int}
 end
 
-function BrillouinMesh(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 5) where {T,E,L}
+function Brillouin(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 5) where {T,E,L}
     partitions_tuple = tontuple(Val(L), partitions)
     if uniform
-        meshlat = uniform_mesh(lat, partitions_tuple)
+        lattice = uniform_discretization(lat, partitions_tuple)
     else
-        meshlat = simple_mesh(lat, partitions_tuple)
+        lattice = simple_discretization(lat, partitions_tuple)
     end
-    mesh = Mesh(meshlat)
-    return BrillouinMesh(mesh, uniform, partitions_tuple)
+    return Brillouin(lattice, uniform, partitions_tuple)
 end
-BrillouinMesh(sys::System; kw...) = BrillouinMesh(sys.lattice; kw...)
+Brillouin(sys::System; kw...) = Brillouin(sys.lattice; kw...)
 
-Base.show(io::IO, m::BrillouinMesh{T,L,N}) where {T,L,N} =
-    print(io, "BrillouinMesh{$T,$L} : discretization of $L-dimensional Brillouin zone
+Base.show(io::IO, m::Brillouin{T,L,N}) where {T,L,N} =
+    print(io, "Brillouin{$T,$L} : discretization of $L-dimensional Brillouin zone
     Mesh type  : $(m.uniform ? "uniform" : "simple")
-    Vertices   : $(nsites(m.mesh.lattice))
-    Partitions : $(m.partitions)
-    $N-elements : $(nelements(m))")
-
-nelements(m::BrillouinMesh) = nelements(m.mesh)
+    Vertices   : $(nsites(m.lattice))
+    Partitions : $(m.partitions)")
 
 # phi-space sampling z, k-space G'z. M = diagonal(partitions)
 # M G' z =  Tr * n, where n are SVector{L,Int}, and Tr is a hypertriangular lattice
 # For some integer S = (n1,n2...), (z1, z2, z3) = I (corners of BZ).
 # Hence S = round.(Tr^{-1} G' M) = supercell. Bravais are z_i for n = I, so simply S^{-1}
 # Links should be fixed at the Tr level, then transform so that D * Tr = S^{-1}, and do Supercell(S)
-function uniform_mesh(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,Int}) where {T,E,L}
+function uniform_discretization(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,Int}) where {T,E,L}
     M = diagsmatrix(partitions_tuple)
     A = qr(bravaismatrix(lat)).R
     Gt = qr(transpose(inv(A))).R
@@ -71,7 +67,7 @@ end
 # Transformation D takes hypertriangular to minisquare (phi-space delta): D * Tr = M^{-1}
 # However, Tr has to be chosen to match bravais angles of G' as much as possible: Trsigned
 # Build+link Trsigned, transform, Supercell(M)
-function simple_mesh(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,Int}) where {T,E,L}
+function simple_discretization(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,Int}) where {T,E,L}
     M = diagsmatrix(partitions_tuple)
     A = qr(bravaismatrix(lat)).R
     Gt = qr(transpose(inv(A))).R
@@ -99,10 +95,10 @@ end
 hypertriangular(s::SMatrix{L,L}) where L = s
 
 #######################################################################
-# Spectrum
+# BandSampling
 #######################################################################
 
-struct Spectrum{T<:Real,L}
+struct BandSampling{T<:Real,L}
     energies::Matrix{T}
     nenergies::Int
     states::Array{Complex{T},3}
@@ -112,10 +108,10 @@ struct Spectrum{T<:Real,L}
     bufferstate::Vector{Complex{T}}
 end
 
-function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; levels = missing, degtol = sqrt(eps()), randomshift = missing, kw...) where {T,E,L}
+function BandSampling(sys::System{T,E,L}, brillouin::Brillouin; levels = missing, degtol = sqrt(eps()), randomshift = missing, kw...) where {T,E,L}
     # shift = 0.02 .+ zero(SVector{E,T})
     shift = ismissing(randomshift) ? zero(SVector{E,T}) : randomshift * rand(SVector{E,T})
-    knpoints = bzmesh.mesh.lattice.sublats[1].sites
+    knpoints = brillouin.lattice.sublats[1].sites
     npoints = length(knpoints)
 
     dimh = hamiltoniandim(sys)
@@ -140,7 +136,7 @@ function Spectrum(sys::System{T,E,L}, bzmesh::BrillouinMesh; levels = missing, d
 
     bufferstate = zeros(Complex{T}, statelength)
 
-    return Spectrum(energies, nenergies, states, statelength, knpoints, npoints, bufferstate)
+    return BandSampling(energies, nenergies, states, statelength, knpoints, npoints, bufferstate)
 end
 
 function spectrum(h::SparseMatrixCSC, preallocH; levels = 2, method = missing, kw...)
@@ -179,14 +175,14 @@ end
 #     return (energies, states)
 # end
 
-function sort_spectrum!(energies, states, ordering)
-    if !issorted(energies)
-        sortperm!(ordering, energies)
-        energies .= energies[ordering]
-        states .= states[:, ordering]
-    end
-    return (energies, states)
-end
+# function sort_spectrum!(energies, states, ordering)
+#     if !issorted(energies)
+#         sortperm!(ordering, energies)
+#         energies .= energies[ordering]
+#         states .= states[:, ordering]
+#     end
+#     return (energies, states)
+# end
 
 function hasdegeneracies(energies, degtol)
     has = false
@@ -244,7 +240,7 @@ end
 #######################################################################
 
 struct Bandstructure{T,N,L,NL}  # E = N = L + 1 (nodes are [Blochphases..., energy])
-    mesh::Mesh{T,N,L,N,NL}
+    bands::Mesh{T,N,L,N,NL}
     states::Matrix{Complex{T}}
     nenergies::Int
     npoints::Int
@@ -257,63 +253,60 @@ Base.show(io::IO, bs::Bandstructure{T,N,L}) where {T,N,L} =
     Size of state vectors : $(size(bs.states, 1))")
 
 Bandstructure(sys::System; uniform = false, partitions = 5, kw...) =
-    Bandstructure(sys, BrillouinMesh(sys.lattice; uniform = uniform, partitions = partitions); kw...)
+    Bandstructure(sys, Brillouin(sys.lattice; uniform = uniform, partitions = partitions); kw...)
 
-function Bandstructure(sys::System{T,E,L}, bz::BrillouinMesh{T,L}; linkthreshold = 0.5, kw...) where {T,E,L}
-    spectrum = Spectrum(sys, bz; kw...)
-    bzmeshlat = bz.mesh.lattice
-    bmeshlat = bandmeshlat(bz, spectrum, linkthreshold)
-    states = reshape(spectrum.states, spectrum.statelength, :)
-    bandmesh = Mesh(bmeshlat)
-    return Bandstructure(bandmesh, states, spectrum.nenergies, spectrum.npoints)
+function Bandstructure(sys::System{T,E,L}, brillouin::Brillouin{T,L}; linkthreshold = 0.5, kw...) where {T,E,L}
+    bandsampling = BandSampling(sys, brillouin; kw...)
+    bandslat = bandslattice(brillouin, bandsampling, linkthreshold)
+    states = reshape(bandsampling.states, bandsampling.statelength, :)
+    bandsmesh = Mesh(bandslat)
+    return Bandstructure(bandsmesh, states, bandsampling.nenergies, bandsampling.npoints)
 end
 
-function bandmeshlat(bz::BrillouinMesh{T,L}, spectrum, linkthreshold) where {T,L}
-    bandmeshlat = Lattice(Sublat{T,L+1}(), Bravais(SMatrix{L+1,L,T}(I)))
-    addnodes!(bandmeshlat, spectrum)
-    bzmeshlat = bz.mesh.lattice
-    bzmeshlinks = bzmeshlat.links
-    for bzmeshilink in allilinks(bzmeshlat)
-        addilink!(bandmeshlat.links, bzmeshilink, spectrum, linkthreshold, bandmeshlat)
+function bandslattice(brillouin::Brillouin{T,L}, bandsampling, linkthreshold) where {T,L}
+    bands = Lattice(Sublat{T,L+1}(), Bravais(SMatrix{L+1,L,T}(I)))
+    addnodes!(bands, bandsampling)
+    for brilink in allilinks(brillouin.lattice)
+        addilink!(bands.links, brilink, bandsampling, linkthreshold, bands)
     end
-    return bandmeshlat
+    return bands
 end
 
-function addnodes!(bandmeshlat, spectrum)
-    meshnodes = bandmeshlat.sublats[1].sites
-    for nk in 1:spectrum.npoints, ne in 1:spectrum.nenergies
-        push!(meshnodes, vcat(spectrum.knpoints[nk], spectrum.energies[ne, nk]))
+function addnodes!(bands, bandsampling)
+    bandnodes = bands.sublats[1].sites
+    for nk in 1:bandsampling.npoints, ne in 1:bandsampling.nenergies
+        push!(bandnodes, vcat(bandsampling.knpoints[nk], bandsampling.energies[ne, nk]))
     end
-    return bandmeshlat
+    return bands
 end
 
-function addilink!(meshlinks::Links, bzilink::Ilink, sp::Spectrum, linkthreshold, bandmesh)
-    meshnodes = bandmesh.sublats[1,1].sites
-    dist = bravaismatrix(bandmesh) * bzilink.ndist
+function addilink!(bandlinks::Links, bzilink::Ilink, sp::BandSampling, linkthreshold, bands)
+    bandnodes = bands.sublats[1,1].sites
+    dist = bravaismatrix(bands) * bzilink.ndist
     linearindices = LinearIndices(sp.energies)
     state = sp.bufferstate
     states = sp.states
 
-    slinkbuilder = SparseMatrixBuilder(bandmesh, 1, 1)
+    slinkbuilder = SparseMatrixBuilder(bands, 1, 1)
     neighiter = NeighborIterator(bzilink, 1, (1,1))
-    
+
     @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
         n_src = linearindices[ne_src, nk_src]
-        r1 = meshnodes[n_src]
+        r1 = bandnodes[n_src]
         copyslice!(state,  CartesianIndices(1:sp.statelength),
                    states, CartesianIndices((1:sp.statelength, ne_src:ne_src, nk_src:nk_src)))
         @inbounds for nk_target in neighbors!(neighiter, nk_src)
             ne_target = findmostparallel(state, states, nk_target, linkthreshold)
             if !iszero(ne_target)
                 n_target = linearindices[ne_target, nk_target]
-                r2 = meshnodes[n_target] + dist
+                r2 = bandnodes[n_target] + dist
                 pushtocolumn!(slinkbuilder, n_target, _rdr(r1, r2))
             end
         end
         finalisecolumn!(slinkbuilder)
     end
-    push!(meshlinks, Ilink(bzilink.ndist, fill(Slink(sparse(slinkbuilder)), 1, 1)))
-    return meshlinks
+    push!(bandlinks, Ilink(bzilink.ndist, fill(Slink(sparse(slinkbuilder)), 1, 1)))
+    return bandlinks
 end
 
 function findmostparallel(state::Vector{Complex{T}}, states, ktarget, linkthreshold) where {T}

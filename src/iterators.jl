@@ -1,3 +1,7 @@
+#######################################################################
+# BoxIterator
+#######################################################################
+
 struct BoxRegister{N}
     cellinds::Vector{Tuple{NTuple{N,Int}, Int}}
 end
@@ -152,4 +156,113 @@ end
 function registersite!(iter, cell, sublat, idx)
     push!(iter.registers[sublat].cellinds, (cell, idx))
     return nothing
+end
+
+#######################################################################
+# NeighborIterator
+#######################################################################
+
+mutable struct NeighborIterator{L}
+    l::L
+    src::Int
+    s1::Int
+    s2::Int
+end
+Base.IteratorSize(::NeighborIterator) = Base.HasLength()
+Base.IteratorEltype(::NeighborIterator) = Base.HasEltype()
+Base.eltype(::NeighborIterator) = Int
+Base.length(ni::NeighborIterator{<:Ilink}) = numneighbors(ni, 0)
+function Base.length(ni::NeighborIterator{<:Links})
+    l = numneighbors(ni, 0)
+    for nilink in 1:ninterlinks(ni.l)
+        l += numneighbors(ni, nilink)
+    end
+    return l
+end
+numneighbors(ni::NeighborIterator, nlink) = length(nzrange(slink(ni, nlink).rdr, ni.src))
+
+slink(ni::NeighborIterator{<:Links}, nilink) = iszero(nilink) ? ni.l.intralink.slinks[ni.s2, ni.s1] : ni.l.interlinks[nilink].slinks[ni.s2, ni.s1]
+slink(ni::NeighborIterator{<:Ilink}, nilink) = ni.l.slinks[ni.s2, ni.s1]
+maxilinkindex(ni::NeighborIterator{<:Links}) = ninterlinks(ni.l)
+maxilinkindex(ni::NeighborIterator{<:Ilink}) = 0
+
+function iterate(ni::NeighborIterator{<:Links}, state = (0, 1))
+    (nilink, ptr) = state
+    nilink > maxilinkindex(ni) && return nothing
+    s = slink(ni, nilink)
+    range = nzrange(s.rdr, ni.src)
+    ptr > length(range) && return iterate(ni, (nilink + 1, 1))
+    targets = rowvals(s.rdr)
+    return (targets[range[ptr]], (nilink, ptr + 1))
+end
+function iterate(ni::NeighborIterator{<:Ilink}, state = (0, 1, slink(ni, 0)))
+    (nilink, ptr, s) = state
+    range = nzrange(s.rdr, ni.src)
+    targets = rowvals(s.rdr)
+    ptr > length(range) ? nothing : @inbounds (targets[range[ptr]], (nilink, ptr + 1, s))
+end
+
+NeighborIterator(l::Links, src, sublats, onlyintra::Val{true}) =  NeighborIterator(l.intralink, src, sublats)
+NeighborIterator(l::Links, src, sublats, onlyintra::Val{false}) =  NeighborIterator(l, src, sublats)
+NeighborIterator(l, src, (s1,s2)::Tuple{Int,Int}) = NeighborIterator(l, src, s1, s2)
+
+neighbors!(ni::NeighborIterator, src) = (ni.src = src; return ni)
+neighbors(p...) = NeighborIterator(p...)
+
+neighbors_rdr(s::Slink, src) = ((rowvals(s.rdr)[j], nonzeros(s.rdr)[j]) for j in nzrange(s.rdr, src))
+neighbors_rdr(s::Slink) = zip(s.rdr.rowval, s.rdr.nzval)
+
+#######################################################################
+# SparseMatrixBuilder
+#######################################################################
+
+mutable struct SparseMatrixBuilder{T}
+    m::Int
+    n::Int
+    colptr::Vector{Int}
+    rowval::Vector{Int}
+    nzval::Vector{T}
+    colcounter::Int
+    rowvalcounter::Int
+end
+
+function SparseMatrixBuilder(::Type{T}, m, n, coordinationhint = 1) where T
+    colptr = Vector{Int}(undef, n + 1)
+    colptr[1] = 1
+    rowval = Int[]; sizehint!(rowval, round(Int, 0.5 * coordinationhint * n))
+    nzval = T[];    sizehint!(nzval,  round(Int, 0.5 * coordinationhint * n))
+    # The 0.5 is due to storing undirected links only
+    return SparseMatrixBuilder(m, n, colptr, rowval, nzval, 1, 1)
+end
+
+function pushtocolumn!(s::SparseMatrixBuilder, row, x, skipdupcheck = true)
+    if skipdupcheck || !isintail(row, s.rowval, s.colptr[s.colcounter])
+        push!(s.rowval, row)
+        push!(s.nzval, x)
+        s.rowvalcounter += 1
+    end
+    return x
+end
+
+function isintail(element, container, start::Int)
+    for i in start:length(container)
+        container[i] == element && return true
+    end
+    return false
+end
+
+function finalisecolumn!(s::SparseMatrixBuilder)
+    s.colcounter > s.n && throw(DimensionMismatch("Pushed too many columns to matrix"))
+    s.colcounter += 1
+    s.colptr[s.colcounter] = s.rowvalcounter
+    return nothing
+end
+
+function SparseArrays.sparse(s::SparseMatrixBuilder)
+    if s.colcounter < s.n + 1
+        for col in (s.colcounter + 1):(s.n + 1)
+            s.colptr[col] = s.rowvalcounter
+        end
+    end
+    return SparseMatrixCSC(s.m, s.n, s.colptr, s.rowval, s.nzval)
 end
