@@ -83,102 +83,6 @@ arelinearindep(matrix::SMatrix{E,L}) where {E,L} = E >= L && (L == 0 || fastrank
 
 keepaxes(br::Bravais, unwrappedaxes) = Bravais(keepcolumns(bravaismatrix(br), unwrappedaxes))
 
-#######################################################################
-# Sublattice links (Slink) : links between two given sublattices
-#######################################################################
-
-# Slink follows the same structure as sparse matrices. Field targets are
-# indices of target sites for all origin sites, one after the other. Field
-# srcpointers, of length (nsites in s1) + 1, stores the position (offset[n1]) in targets
-# where the targets for site n1 start. The last extra element allows to compute
-# the target ranges easily for all n1. Finally, rdr is of the same length as targets
-# and stores the relative vector positions of n1 and its target.
-struct Slink{T,E}
-    rdr::SparseMatrixCSC{Tuple{SVector{E,T}, SVector{E,T}}, Int}
-end
-
-function Slink{T,E}(ntargets::Int, nsources::Int; coordination::Int = E + 1) where {T,E}
-    rdr = spzeros(Tuple{SVector{E,T}, SVector{E,T}}, ntargets, nsources)
-    sizehint!(rdr.rowval, coordination * nsources)
-    sizehint!(rdr.nzval, coordination * nsources)
-    return Slink(rdr)
-end
-
-# static placeholders for unlinked lattices
-const dummyslinkF64 = ntuple(E -> Slink{Float64,E}(0,0), Val(4))
-const dummyslinkF32 = ntuple(E -> Slink{Float32,E}(0,0), Val(4))
-dummyslink(S::Type{Slink{Float64,E}}) where {E} = _dummyslink(S, dummyslinkF64)
-dummyslink(S::Type{Slink{Float32,E}}) where {E} = _dummyslink(S, dummyslinkF32)
-@noinline _dummyslink(S::Type{Slink{T,E}}, dummytuple) where {T,E} = E > length(dummytuple) ? S(0,0) : dummytuple[E]
-
-Base.getindex(s::Slink, i, j) = Base.getindex(s.rdr, i, j)
-Base.setindex!(s::Slink, r, i, j) = Base.setindex!(s.rdr, r, i, j)
-Base.zero(::Type{Slink{T,E}}) where {T,E} = dummyslink(Slink{T,E})
-Base.isempty(slink::Slink) = (nlinks(slink) == 0)
-nlinks(slink::Slink) = nnz(slink.rdr)
-
-nsources(s::Slink) = size(s.rdr, 2)
-ntargets(s::Slink) = size(s.rdr, 1)
-sources(s::Slink) = 1:nsources(s)
-targets(s::Slink) = 1:ntargets(s)
-
-_rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
-
-function transform!(s::Slink, f::F) where F<:Function
-    frdr(rdr) = _rdr(f(rdr[1] - 0.5 * rdr[2]), f(rdr[1] + 0.5 * rdr[2]))
-    s.rdr.nzval .= frdr.(s.rdr.nzval)
-    return s
-end
-
-#######################################################################
-# Intercell links (Clink) : links between two different unit cells
-#######################################################################
-struct Ilink{T,E,L}
-    ndist::SVector{L,Int} # n-distance of targets
-    slinks::Matrix{Slink{T,E}}
-end
-
-dummyilink(ndist::SVector, sublats::Vector{<:Sublat}) = Ilink(ndist, dummyslinks(sublats))
-
-nlinks(ilinks::Vector{<:Ilink}) = isempty(ilinks) ? 0 : sum(nlinks, ilinks)
-nlinks(ilink::Ilink) = isempty(ilink.slinks) ? 0 : sum(i -> nlinks(ilink.slinks, i), eachindex(ilink.slinks))
-nlinks(ss::Array{<:Slink}, i) = nlinks(ss[i])
-nsublats(ilink::Ilink) = size(ilink.slinks, 1)
-
-Base.isempty(ilink::Ilink) = nlinks(ilink) == 0
-transform!(i::IL, f::F) where {IL<:Ilink, F<:Function} = (transform!.(i.slinks, f); i)
-
-#######################################################################
-# Links struct
-#######################################################################
-mutable struct Links{T,E,L}  # mutable to be able to update it with link!
-    intralink::Ilink{T,E,L}
-    interlinks::Vector{Ilink{T,E,L}}
-end
-
-dummylinks(lat) = dummylinks(lat.sublats, lat.bravais)
-dummylinks(sublats::Vector{Sublat{T,E}}, bravais::Bravais{T,E,L}) where {T,E,L} =
-    Links(dummyilink(zero(SVector{L, Int}), sublats), Ilink{T,E,L}[])
-
-function Base.push!(links::Links, ilink::Ilink)
-    if iszero(ilink.ndist)
-        links.intralink = ilink
-    else
-        ind = findfirst(il -> il.ndist == ilink.ndist, links.interlinks)
-        ind === nothing ? push!(links.interlinks, ilink) : links.interlinks[ind] = ilink
-    end
-    return links
-end
-
-nlinks(links::Links) = nlinks(links.intralink) + nlinks(links.interlinks)
-
-nsublats(links::Links) = nsublats(links.intralink)
-ninterlinks(links::Links) = length(links.interlinks)
-allilinks(links::Links) = (getilink(links, i) for i in 0:ninterlinks(links))
-getilink(links::Links, i::Int) = i == 0 ? links.intralink : links.interlinks[i]
-
-transform!(l::L, f::F) where {L<:Links, F<:Function} = (transform!(l.intralink, f); transform!.(l.interlinks, f); return l)
-
 ################################################################################
 ## Dim LatticeDirective
 ################################################################################
@@ -457,64 +361,6 @@ seedtype(::Type{Lattice{T,E,L,EL}}, ::Precision{T2}) where {T,E,L,EL,T2} = Latti
 seedtype(::Type{S}, ::FillRegion, ts...) where {S<:Lattice} = S
 seedtype(::Type{L}, opt) where {L<:Lattice} = L
 
-vectorsastuples(lat::Lattice) = vectorsastuples(lat.bravais.matrix)
-vectorsastuples(br::Bravais) =  vectorsastuples(br.matrix)
-vectorsastuples(mat::SMatrix{E,L}) where {E,L} = ntuple(l -> round.((mat[:,l]... ,), digits = 6), Val(L))
-nsites(lat::Lattice, s::Int) = s > nsublats(lat) ? 0 : nsites(lat.sublats[s])
-nsites(lat::Lattice) = isempty(lat.sublats) ? 0 : sum(nsites, lat.sublats)
-nsiteslist(lat::Lattice) = [nsites(sublat) for sublat in lat.sublats]
-nsublats(lat::Lattice)::Int = length(lat.sublats)
-sublatnames(lat::Lattice) = Union{Symbol,Missing}[slat.name for slat in lat.sublats]
-nlinks(lat::Lattice) = nlinks(lat.links)
-isunlinked(lat::Lattice) = nlinks(lat.links) == 0
-coordination(lat::Lattice) = (2 * nlinks(lat.links.intralink) + nlinks(lat.links.interlinks))/nsites(lat)
-allilinks(lat::Lattice) = allilinks(lat.links)
-getilink(lat::Lattice, i::Int) = getilink(lat.links, i)
-bravaismatrix(lat::Lattice) = bravaismatrix(lat.bravais)
-bravaismatrix(br::Bravais) = br.matrix
-sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)
-linkgenerator_r1r2(ilink::Ilink) = ((rdr[1] -rdr[2]/2, rdr[1] + rdr[2]/2) for s in ilink.slinks for (_,rdr) in neighbors_rdr(s))
-selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) where {T,E,L} =
-   Bravais(SMatrix{E,L,T}(lat.bravais.matrix[:,bools]))
-dummyslinks(lat::Lattice) = dummyslinks(lat.sublats)
-dummyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = fill(dummyslink(Slink{T,E}), length(sublats), length(sublats))
-
-SparseMatrixBuilder(lat::Lattice{T,E,L}, s1, s2) where {T,E,L} =
-    SparseMatrixBuilder(Tuple{SVector{E,T}, SVector{E,T}}, nsites(lat, s2), nsites(lat, s1), max((L + 1), coordination(lat)))
-
-function boundingboxlat(lat::Lattice{T,E}) where {T,E}
-    bmin = zero(MVector{E, T})
-    bmax = zero(MVector{E, T})
-    foreach(sl -> foreach(s -> _boundingboxlat!(bmin, bmax, s), sl.sites), lat.sublats)
-    return (bmin, bmax)
-end
-@inline function _boundingboxlat!(bmin, bmax, site)
-    bmin .= min.(bmin, site)
-    bmax .= max.(bmax, site)
-    return nothing
-end
-
-supercellmatrix(s::Supercell{<:UniformScaling}, lat::Lattice{T,E,L}) where {T,E,L} = SMatrix{L,L}(s.matrix.λ .* one(SMatrix{L,L,Int}))
-supercellmatrix(s::Supercell{<:SMatrix}, lat::Lattice{T,E,L}) where {T,E,L} = s.matrix
-
-function matchingsublats(lat::Lattice, lr::LinkRule{S,Missing}) where S
-    ns = nsublats(lat)
-    match = vec([i.I for i in CartesianIndices((ns, ns))])
-    return match
-end
-matchingsublats(lat::Lattice, lr::LinkRule{S,T}) where {S,T} = _matchingsublats(sublatnames(lat), lr.sublats)
-function _matchingsublats(sublatnames, lrsublats)
-    match = Tuple{Int,Int}[]
-    for (s1, s2) in lrsublats
-        m1 = __matchingsublats(s1, sublatnames)
-        m2 = __matchingsublats(s2, sublatnames)
-        m1 isa Int && m2 isa Int && push!(match, tuplesort((m1, m2)))
-    end
-    return sort!(match)
-end
-__matchingsublats(s::Int, sublatnames) = s <= length(sublatnames) ? s : nothing
-__matchingsublats(s, sublatnames) = findfirst(isequal(s), sublatnames)
-
 #######################################################################
 # Apply LatticeDirectives
 #######################################################################
@@ -607,6 +453,81 @@ Base.show(io::IO, lat::Lattice{T,E,L}) where {T,E,L}=
     Total sites      : $(nsites(lat))
     Total links      : $(nlinks(lat))
     Coordination     : $(coordination(lat))")
+
+#######################################################################
+# Lattice utilities
+#######################################################################
+
+vectorsastuples(lat::Lattice) = vectorsastuples(lat.bravais.matrix)
+vectorsastuples(br::Bravais) =  vectorsastuples(br.matrix)
+vectorsastuples(mat::SMatrix{E,L}) where {E,L} = ntuple(l -> round.((mat[:,l]... ,), digits = 6), Val(L))
+nsites(lat::Lattice, s::Int) = s > nsublats(lat) ? 0 : nsites(lat.sublats[s])
+nsites(lat::Lattice) = isempty(lat.sublats) ? 0 : sum(nsites, lat.sublats)
+nsiteslist(lat::Lattice) = [nsites(sublat) for sublat in lat.sublats]
+nsublats(lat::Lattice)::Int = length(lat.sublats)
+sublatnames(lat::Lattice) = Union{Symbol,Missing}[slat.name for slat in lat.sublats]
+nlinks(lat::Lattice) = nlinks(lat.links)
+isunlinked(lat::Lattice) = nlinks(lat.links) == 0
+coordination(lat::Lattice) = (2 * nlinks(lat.links.intralink) + nlinks(lat.links.interlinks))/nsites(lat)
+allilinks(lat::Lattice) = allilinks(lat.links)
+getilink(lat::Lattice, i::Int) = getilink(lat.links, i)
+bravaismatrix(lat::Lattice) = bravaismatrix(lat.bravais)
+bravaismatrix(br::Bravais) = br.matrix
+sitegenerator(lat::Lattice) = (site for sl in lat.sublats for site in sl.sites)
+linkgenerator_r1r2(ilink::Ilink) = ((rdr[1] -rdr[2]/2, rdr[1] + rdr[2]/2) for s in ilink.slinks for (_,rdr) in neighbors_rdr(s))
+selectbravaisvectors(lat::Lattice{T, E}, bools::AbstractVector{Bool}, ::Val{L}) where {T,E,L} =
+   Bravais(SMatrix{E,L,T}(lat.bravais.matrix[1:E,bools]))
+
+# static placeholders for unlinked lattices
+const dummyslinkF64 = ntuple(E -> Slink{Float64,E}(0,0), Val(4))
+const dummyslinkF32 = ntuple(E -> Slink{Float32,E}(0,0), Val(4))
+const dummyslinkF16 = ntuple(E -> Slink{Float16,E}(0,0), Val(4))
+dummyslink(S::Type{Slink{Float64,E}}) where {E} = _dummyslink(S, dummyslinkF64)
+dummyslink(S::Type{Slink{Float32,E}}) where {E} = _dummyslink(S, dummyslinkF32)
+dummyslink(S::Type{Slink{Float16,E}}) where {E} = _dummyslink(S, dummyslinkF16)
+@noinline _dummyslink(S::Type{Slink{T,E}}, dummytuple) where {T,E} = E > length(dummytuple) ? S(0,0) : dummytuple[E]
+dummyslinks(lat::Lattice) = dummyslinks(lat.sublats)
+dummyslinks(sublats::Vector{Sublat{T,E}}) where {T,E} = fill(dummyslink(Slink{T,E}), length(sublats), length(sublats))
+dummyilink(ndist::SVector, sublats::Vector{<:Sublat}) = Ilink(ndist, dummyslinks(sublats))
+dummylinks(lat) = dummylinks(lat.sublats, lat.bravais)
+dummylinks(sublats::Vector{Sublat{T,E}}, bravais::Bravais{T,E,L}) where {T,E,L} =
+    Links(dummyilink(zero(SVector{L, Int}), sublats), Ilink{T,E,L}[])
+
+SparseMatrixBuilder(lat::Lattice{T,E,L}, s1, s2) where {T,E,L} =
+    SparseMatrixBuilder(Tuple{SVector{E,T}, SVector{E,T}}, nsites(lat, s2), nsites(lat, s1), max((L + 1), coordination(lat)))
+
+function boundingboxlat(lat::Lattice{T,E}) where {T,E}
+    bmin = zero(MVector{E, T})
+    bmax = zero(MVector{E, T})
+    foreach(sl -> foreach(s -> _boundingboxlat!(bmin, bmax, s), sl.sites), lat.sublats)
+    return (bmin, bmax)
+end
+@inline function _boundingboxlat!(bmin, bmax, site)
+    bmin .= min.(bmin, site)
+    bmax .= max.(bmax, site)
+    return nothing
+end
+
+supercellmatrix(s::Supercell{<:UniformScaling}, lat::Lattice{T,E,L}) where {T,E,L} = SMatrix{L,L}(s.matrix.λ .* one(SMatrix{L,L,Int}))
+supercellmatrix(s::Supercell{<:SMatrix}, lat::Lattice{T,E,L}) where {T,E,L} = s.matrix
+
+function matchingsublats(lat::Lattice, lr::LinkRule{S,Missing}) where S
+    ns = nsublats(lat)
+    match = vec([i.I for i in CartesianIndices((ns, ns))])
+    return match
+end
+matchingsublats(lat::Lattice, lr::LinkRule{S,T}) where {S,T} = _matchingsublats(sublatnames(lat), lr.sublats)
+function _matchingsublats(sublatnames, lrsublats)
+    match = Tuple{Int,Int}[]
+    for (s1, s2) in lrsublats
+        m1 = __matchingsublats(s1, sublatnames)
+        m2 = __matchingsublats(s2, sublatnames)
+        m1 isa Int && m2 isa Int && push!(match, tuplesort((m1, m2)))
+    end
+    return sort!(match)
+end
+__matchingsublats(s::Int, sublatnames) = s <= length(sublatnames) ? s : nothing
+__matchingsublats(s, sublatnames) = findfirst(isequal(s), sublatnames)
 
 #######################################################################
 # Transform lattices
@@ -858,4 +779,355 @@ function _mergedslinks(slinks::Matrix{S}, indcols, indrows) where {T, E, S<:Slin
         end
     end
     return Slink(sparse(builder))
+end
+
+#######################################################################
+# siteclusters : find disconnected site groups in a sublattice
+#######################################################################
+# We have a queue of pending sites (nodes). Each time its emptied we open a new bin, which is assigned to a new cluster (binclusters[newbin] = newcluster). We add one unclassified site to the queue (one whose bin is zero, sitebins[site] == 0), and start crawling its neighbors. Unclassified neighbors are added to the current bin, and placed in the pending queue. If we find a classified neighbor belonging to a older cluster, the bin cluster is changed to that cluster.
+
+function siteclusters(lat::Lattice, sublat::Int, onlyintra)
+    isunlinked(lat) && return [Int[]]
+
+    ns = nsites(lat.sublats[sublat])
+    sitebins = fill(0, ns)  # sitebins[site] = bin
+    binclusters = Int[]     # binclusters[bin] = cluster number
+    pending = Int[]
+
+    bincounter = 0
+    clustercounter = 0
+    neighiter = NeighborIterator(lat.links, 1, (sublat, sublat), onlyintra)
+    p = Progress(ns, 1, "Clustering nodes: ")
+    while !isempty(pending) || any(iszero, sitebins)
+        if isempty(pending)   # new cluster
+            seed = findfirst(iszero, sitebins)
+            bincounter += 1
+            clustercounter = isempty(binclusters) ? 1 : maximum(binclusters) + 1
+            sitebins[seed] = bincounter; next!(p)
+            push!(binclusters, clustercounter)
+            push!(pending, seed)
+        end
+        src = pop!(pending)
+        for neigh in neighbors!(neighiter, src)
+            if sitebins[neigh] == 0   # unclassified neighbor
+                push!(pending, neigh)
+                sitebins[neigh] = bincounter; next!(p)
+            else
+                clustercounter = min(clustercounter, binclusters[sitebins[neigh]])
+                binclusters[bincounter] = clustercounter
+            end
+        end
+    end
+    clusters = Vector{Int}[Int[] for _ in 1:maximum(binclusters)]
+    for i in 1:ns
+        push!(clusters[binclusters[sitebins[i]]], i)
+    end
+    return clusters
+end
+
+################################################################################
+## expand_unitcell
+################################################################################
+
+function expand_unitcell(lat::Lattice{T,E,L,EL}, supercell::Supercell) where {T,E,L,EL}
+    if L == 0
+        @warn("cannot expand a non-periodic lattice")
+        return(lat)
+    end
+    smat = supercellmatrix(supercell, lat)
+    newbravais = bravaismatrix(lat) * smat
+    invscell = inv(smat)
+    fillaxesbool = fill(true, L)
+    seed = zero(SVector{E,T})
+    isinregion =
+        let invscell = invscell # avoid boxing issue #15276 (depends on compiler, but just in case)
+            cell -> all(e -> - extended_eps() <= e < 1 - extended_eps(), invscell * cell)
+        end
+    newsublats, iter = _box_fill(Val(L), lat, isinregion, fillaxesbool, seed, missing, true)
+    newlattice = Lattice(newsublats, Bravais(newbravais))
+    open2old = smat
+    iterated2old = one(SMatrix{L,L,Int})
+    return isunlinked(lat) ? newlattice :
+        link!(newlattice, LinkRule(BoxIteratorLinking(lat.links, iter, open2old,
+            iterated2old, lat.bravais, nsiteslist(lat)); mincells = cellrange(lat.links)))
+end
+
+################################################################################
+# fill_region() : fill a region with a lattice
+################################################################################
+
+function fill_region(lat::Lattice{T,E,L}, fr::FillRegion{E,F,N}) where {T,E,L,F,N} #N is number of excludeaxes
+    L == 0 && error("Non-periodic lattice cannot be used for region fill")
+    fillaxesbool = [!any(i .== fr.excludeaxes) for i=1:L]
+    filldims = L - N
+    filldims == 0 && error("Need at least one lattice vector to fill region")
+    any(fr.region(fr.seed + site) for site in sitegenerator(lat)) || error("Unit cell centered at seed position does not contain any site in region")
+
+    newsublats, iter = _box_fill(Val(filldims), lat, fr.region, fillaxesbool, fr.seed, fr.maxsteps, false)
+
+    closeaxesbool = SVector{L}(fillaxesbool)
+    openaxesbool = (!).(closeaxesbool)
+    newbravais = selectbravaisvectors(lat, openaxesbool, Val(N))
+    newlattice = Lattice(newsublats, newbravais)
+    open2old = nmatrix(openaxesbool, Val(N))
+    iterated2old = nmatrix(closeaxesbool, Val(filldims))
+    return isunlinked(lat) ? newlattice :
+        link!(newlattice, LinkRule(BoxIteratorLinking(lat.links, iter, open2old, iterated2old,
+                                    lat.bravais, nsiteslist(lat)); mincells = cellrange(lat.links)))
+end
+
+function _box_fill(::Val{N}, lat::Lattice{T,E,L}, isinregion::F, fillaxesbool, seed0, maxsteps, usecellaspos) where {N,T,E,L,F}
+    seed = convert(SVector{E,T}, seed0)
+    fillvectors = SMatrix{E, N}(bravaismatrix(lat)[1:E, fillaxesbool])
+    numsublats = nsublats(lat)
+    nregisters = ifelse(isunlinked(lat), 0, numsublats)
+    nsitesub = Int[nsites(sl) for sl in lat.sublats]
+
+    pos_sites = Vector{SVector{E,T}}[SVector{E,T}[seed + site for site in slat.sites] for slat in lat.sublats]
+    newsublats = Sublat{T,E}[Sublat(sl.name, Vector{SVector{E,T}}()) for sl in lat.sublats]
+    zeroseed = ntuple(_->0, Val(N))
+    iter = BoxIterator(zeroseed, maxiterations = maxsteps, nregisters = nregisters)
+
+    for cell in iter
+        inregion = false
+        cellpos = fillvectors * SVector(cell)
+        for sl in 1:numsublats, siten in 1:nsitesub[sl]
+            sitepos = cellpos + pos_sites[sl][siten]
+            checkpos = usecellaspos ? SVector(cell) : sitepos
+            if isinregion(checkpos)
+                inregion = true
+                push!(newsublats[sl].sites, sitepos)
+                nregisters == 0 || registersite!(iter, cell, sl, siten)
+            end
+        end
+        inregion && acceptcell!(iter, cell)
+    end
+
+    return newsublats, iter
+end
+
+# converts ndist in newlattice (or in fillcells) to ndist in oldlattice
+nmatrix(axesbool::SVector{L,Bool}, ::Val{N}) where {L,N} =
+    SMatrix{L,N,Int}(one(SMatrix{L,L,Int})[1:L, axesbool])
+cellrange(links::Links) = isempty(links.interlinks) ? 0 : maximum(max(abs.(ilink.ndist)...) for ilink in links.interlinks)
+
+#######################################################################
+# Links interface
+#######################################################################
+# Linking rules for an Matrix{Slink}_{s2 j, s1 i} at ndist, enconding
+# the link (s1, r[i]) -> (s2, r[j]) + ndist
+# Linking rules are given by isvalidlink functions. With the restrictive
+# intralink choice i < j we can append new sites without reordering the
+# intralink slink lists (it's lower-triangular sparse)
+
+isvalidlink(isinter::Bool, (s1, s2)) = isinter || s1 <= s2
+isvalidlink(isinter::Bool, (s1, s2), (i, j)::Tuple{Int,Int}) = isinter || s1 < s2 || i < j
+isvalidlink(isinter::Bool, (s1, s2), validsublats) =
+    isvalidlink(isinter, (s1, s2)) && ((s1, s2) in validsublats || (s2, s1) in validsublats)
+
+function link!(lat::Lattice, lr::LinkRule{AutomaticRangeLinking})
+    if nsites(lat) < 200 # Heuristic cutoff
+        newlr = convert(LinkRule{SimpleLinking}, lr)
+    else
+        newlr = convert(LinkRule{TreeLinking}, lr)
+    end
+    return link!(lat, newlr)
+end
+
+function link!(lat::Lattice{T,E,L}, lr::LinkRule{S}) where {T,E,L,S<:LinkingAlgorithm}
+    # clearlinks!(lat)
+    pre = linkprecompute(lr, lat)
+    br = bravaismatrix(lat)
+    ndist_zero = zero(SVector{L,Int})
+    dist_zero = br * ndist_zero
+    lat.links.intralink = buildIlink(lat, lr, pre, (dist_zero, ndist_zero))
+    L==0 && return lat
+
+    iter = BoxIterator(Tuple(ndist_zero), maxiterations = lr.maxsteps)
+    for cell in iter
+        ndist = SVector(cell)
+
+        ndist == ndist_zero && (acceptcell!(iter, cell); continue) # intracell already done
+        iswithinmin(cell, lr.mincells) && acceptcell!(iter, cell) # enforce a minimum search range
+        isnotlinked(ndist, br, lr) && continue # skip if we can be sure it's not linked
+
+        dist = br * ndist
+        ilink = buildIlink(lat, lr, pre, (dist, ndist))
+        if !isempty(ilink)
+            push!(lat.links.interlinks, ilink)
+            acceptcell!(iter, cell)
+        end
+    end
+    return lat
+end
+
+@inline iswithinmin(cell, min) = all(abs(c) <= min for c in cell)
+
+# Logic to exlude cells that are not linked to zero cell by any ilink
+isnotlinked(ndist, br, lr) = false # default fallback, used unless lr.alg isa BoxIteratorLinking
+function isnotlinked(ndist, br, lr::LinkRule{B}) where {T,E,L,NL,B<:BoxIteratorLinking{T,E,L,NL}}
+    nm = lr.alg.open2old
+    ndist0 = nm * ndist
+    linked = all((
+        brnorm2 = dot(nm[:,j], nm[:,j]);
+        any(abs(dot(ndist0 + ilink.ndist, nm[:,j])) < brnorm2 for ilink in lr.alg.links.interlinks))
+        for j in 1:NL)
+    return !linked
+end
+
+function buildIlink(lat::Lattice{T,E}, lr, pre, (dist, ndist)) where {T,E}
+    isinter = any(n -> n != 0, ndist)
+    nsl = nsublats(lat)
+
+    slinks = dummyslinks(lat.sublats) # placeholder to be replaced below
+
+    validsublats = matchingsublats(lat, lr)
+    for s1 in 1:nsl, s2 in 1:nsl
+        isvalidlink(isinter, (s1, s2), validsublats) || continue
+        slinks[s2, s1] = buildSlink(lat, lr, pre, (dist, ndist, isinter), (s1, s2))
+    end
+    return Ilink(ndist, slinks)
+end
+
+function buildSlink(lat::Lattice{T,E}, lr, pre, (dist, ndist, isinter), (s1, s2)) where {T,E}
+    slinkbuilder = SparseMatrixBuilder(lat, s1, s2)
+    for (i, r1) in enumerate(lat.sublats[s1].sites)
+        add_neighbors!(slinkbuilder, lr, pre, (dist, ndist, isinter), (s1, s2), (i, r1))
+        finalisecolumn!(slinkbuilder)
+    end
+    return Slink(sparse(slinkbuilder))
+end
+
+linkprecompute(linkrules::LinkRule{<:SimpleLinking}, lat::Lattice) =
+    lat.sublats
+
+linkprecompute(linkrules::LinkRule{TreeLinking}, lat::Lattice) =
+    ([KDTree(sl.sites, leafsize = linkrules.alg.leafsize) for sl in lat.sublats],
+     lat.sublats)
+
+linkprecompute(linkrules::LinkRule{<:WrapLinking}, lat::Lattice) =
+    nothing
+
+function linkprecompute(lr::LinkRule{<:BoxIteratorLinking}, lat::Lattice)
+    # Build an OffsetArray for each sublat s : maps[s] = oa[cells..., iold] = inew, where cells are oldsystem cells, not fill cells
+    nslist = lr.alg.nslist
+    iterated2old = lr.alg.iterated2old
+    maps = [(range = _maprange(boundingboxiter(lr.alg.iter), nsites, iterated2old);
+             OffsetArray(zeros(Int, map(length, range)), range))
+            for nsites in nslist]
+    for (s, register) in enumerate(lr.alg.iter.registers), (inew, (cell, iold)) in enumerate(register.cellinds)
+        maps[s][Tuple(iterated2old * SVector(cell))..., iold] = inew
+    end
+    return maps
+end
+
+# Given a iterated2old that is a rectangular identity, this inserts a 0:0 range in the corresponding zero-rows, i.e.
+# translates the bounding box to live in the oldsystem cell space instead of the fill cell space
+_maprange(bbox::NTuple{2,MVector{N,Int}}, nsites, iterated2old::SMatrix{L,N}) where {L,N} = ntuple(Val(L+1)) do n
+    if n <= L
+        m = findnonzeroinrow(iterated2old, n)
+        if m == 0
+            0:0
+        else
+            bbox[1][m]:bbox[2][m]
+        end
+    else
+        1:nsites
+    end
+end
+
+function findnonzeroinrow(ss, n)
+    for m in 1:size(ss, 2)
+      ss[n, m] != 0 && return m
+    end
+    return 0
+end
+
+function add_neighbors!(slinkbuilder, lr::LinkRule{<:SimpleLinking}, sublats, (dist, ndist, isinter), (s1, s2), (i, r1))
+    for (j, r2) in enumerate(sublats[s2].sites)
+        r2 += dist
+        if lr.alg.isinrange(r2 - r1) && isvalidlink(isinter, (s1, s2), (i, j))
+            pushtocolumn!(slinkbuilder, j, _rdr(r1, r2))
+        end
+    end
+    return nothing
+end
+
+function add_neighbors!(slinkbuilder, lr::LinkRule{TreeLinking}, (trees, sublats), (dist, ndist, isinter), (s1, s2), (i, r1))
+    range = lr.alg.range + extended_eps()
+    neighs = inrange(trees[s2], r1 - dist, range)
+    sites2 = sublats[s2].sites
+    for j in neighs
+        if isvalidlink(isinter, (s1, s2), (i, j))
+            r2 = sites2[j] + dist
+            pushtocolumn!(slinkbuilder, j, _rdr(r1, r2))
+        end
+    end
+    return nothing
+end
+
+function add_neighbors!(slinkbuilder, lr::LinkRule{<:WrapLinking}, ::Nothing, (dist, ndist, isinter), (s1, s2), (i, r1))
+    oldbravais = bravaismatrix(lr.alg.bravais)
+    unwrappedaxes = lr.alg.unwrappedaxes
+    add_neighbors_wrap!(slinkbuilder, ndist, isinter, i, (s1, s2), lr.alg.links.intralink, oldbravais, unwrappedaxes, true)
+    for ilink in lr.alg.links.interlinks
+        add_neighbors_wrap!(slinkbuilder, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, false)
+        # This skipdupcheck == false required to exclude interlinks = intralinks in small wrapped lattices
+    end
+    return nothing
+end
+
+function add_neighbors_wrap!(slinkbuilder, ndist, isinter, i, (s1, s2), ilink, oldbravais, unwrappedaxes, skipdupcheck)
+    oldslink = ilink.slinks[s2, s1]
+    if !isempty(oldslink) && keepelements(ilink.ndist, unwrappedaxes) == ndist
+        olddist = oldbravais * zeroout(ilink.ndist, unwrappedaxes)
+        for (j, rdr_old) in neighbors_rdr(oldslink, i)
+            if isvalidlink(isinter, (s1, s2), (i, j))
+                pushtocolumn!(slinkbuilder, j, (rdr_old[1] - olddist / 2, rdr_old[2] - olddist), skipdupcheck)
+            end
+        end
+    end
+    return nothing
+end
+
+# Notation:
+#   celliter = ndist of the filling BoxIterator for a given site i0
+#   i0 = index of that site in original lattice (in sublat s1)
+#   ndist = ndist of the new unit under consideration (different from the equivalent ndistold)
+#   ndold_intercell = that same ndist translated to an ndist in the original lattice, i.e. ndistold
+#   ndold_intracell = ndistold of old unitcell containing site i
+#   ndold_intracell_shifted = same as ndold_intracell but shifted by -ndist of the new neighboring cell
+#   dist = distold of old unit cell containing new site i in the new unit cell
+function add_neighbors!(slinkbuilder, lr::LinkRule{<:BoxIteratorLinking}, maps, (dist, ndist, isinter), (s1, s2), (i, r1))
+    (celliter, iold) = lr.alg.iter.registers[s1].cellinds[i]
+    ndold_intercell = lr.alg.open2old * ndist
+    ndold_intracell = lr.alg.iterated2old * SVector(celliter)
+    ndold_intracell_shifted = ndold_intracell - ndold_intercell
+    dist = bravaismatrix(lr.alg.bravais) * ndold_intracell
+
+    oldlinks = lr.alg.links
+
+    isvalidlink(false, (s1, s2)) &&
+        _add_neighbors_ilink!(slinkbuilder, oldlinks.intralink, maps[s2], isinter, (s1, s2), (i, iold, ndold_intracell_shifted), dist)
+    for ilink in oldlinks.interlinks
+        isvalidlink(true, (s1, s2)) &&
+            _add_neighbors_ilink!(slinkbuilder, ilink, maps[s2], isinter, (s1, s2), (i, iold, ndold_intracell_shifted + ilink.ndist), dist)
+    end
+    return nothing
+end
+
+function _add_neighbors_ilink!(slinkbuilder, ilink_old, maps2, isinter, (s1, s2), (i, iold, ndist_old), dist)
+    slink_old = ilink_old.slinks[s2, s1]
+    isempty(slink_old) && return nothing
+
+    for (jold, rdr_old) in neighbors_rdr(slink_old, iold)
+        isvalid = checkbounds(Bool, maps2, Tuple(ndist_old)..., jold)
+        if isvalid
+            j = maps2[Tuple(ndist_old)..., jold]
+            if j != 0 && isvalidlink(isinter, (s1, s2), (i, j))
+                pushtocolumn!(slinkbuilder, j, (rdr_old[1] + dist, rdr_old[2]))
+            end
+        end
+    end
+    return nothing
 end

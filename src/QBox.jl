@@ -8,7 +8,7 @@ import SparseArrays: sparse!
 
 export LatticeDirective, Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
        Dim, FillRegion, LinkRule, TreeLinking, SimpleLinking, Precision
-export System, Model, Onsite, Hopping, BrillouinMesh, Bandstructure
+export System, Model, Onsite, Hopping, Brillouin, Bandstructure
 export transform, transform!, lattice!, combine, wrap, mergesublats, hamiltonian!, velocity!
 export @SMatrix, @SVector, SMatrix, SVector
 
@@ -17,12 +17,10 @@ abstract type LatticePresets end
 abstract type ModelTerm end
 
 include("tools.jl")
-include("boxiterator.jl")
-include("sparsebuilder.jl")
 include("presets.jl")
+include("links.jl")
+include("iterators.jl")
 include("lattice.jl")
-include("neighboriterator.jl")
-include("algorithms_lattice.jl")
 include("model.jl")
 include("blochoperator.jl")
 include("system.jl")
