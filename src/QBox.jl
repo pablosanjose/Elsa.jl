@@ -17,12 +17,10 @@ abstract type LatticePresets end
 abstract type ModelTerm end
 
 include("tools.jl")
-include("boxiterator.jl")
-include("sparsebuilder.jl")
 include("presets.jl")
 include("links.jl")
+include("iterators.jl")
 include("lattice.jl")
-include("neighboriterator.jl")
 include("model.jl")
 include("blochoperator.jl")
 include("system.jl")
