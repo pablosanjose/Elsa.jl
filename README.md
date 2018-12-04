@@ -1,4 +1,4 @@
-# QBox.jl: efficient lattice simulation algorithms - a Julia library
+# Elsa.jl: efficient lattice simulation algorithms - a Julia library
 
 A work-in-progress package for building discrete lattices and implementing arbitrary tight-binding models on them. This aims to be a successor of [MathQ](http://www.icmm.csic.es/sanjose/MathQ/MathQ.html), with a better design, better extensibility and superior functionality and performance.
 
