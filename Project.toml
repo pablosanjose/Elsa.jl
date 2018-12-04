@@ -1,4 +1,4 @@
-name = "QBox"
+name = "Elsa.jl"
 uuid = "7d9ed76e-ca25-11e8-1412-8ff3848046c2"
 authors = ["Pablo San-Jose <lekand@gmail.com>"]
 version = "0.1.0"
