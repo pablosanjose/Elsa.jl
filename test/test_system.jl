@@ -1,7 +1,7 @@
 module SystemTest
 
 using Test
-using QBox, SparseArrays, LinearAlgebra
+using Elsa, SparseArrays, LinearAlgebra
 
 @test begin
     sys = System(Lattice(:square, LinkRule(2), Supercell(3)), Model(Onsite(1), Hopping(.3)))
