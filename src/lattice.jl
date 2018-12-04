@@ -135,7 +135,7 @@ LatticeConstant(a) = LatticeConstant(a, missing)
 
 Create a `FillRegion{E,F,N} <: LatticeDirective` to fill a region in `E`-dimensional
 space defined by `region(r) == true`, where function `region::F` can alternatively be
-defined by a region `regionname` as `QBox.regionpresets[regionname](args...; kw...)`.
+defined by a region `regionname` as `Elsa.regionpresets[regionname](args...; kw...)`.
 
 Fill search starts at position `seed`, and takes a maximum of `maxsteps` along all lattice
 Bravais vectors, excluding those specified by `excludeaxes::NTuple{N,Int}`.
@@ -148,7 +148,7 @@ false
 julia> r = FillRegion(:square, 20); r.region([10,10])
 true
 
-julia> Tuple(keys(QBox.regionpresets))
+julia> Tuple(keys(Elsa.regionpresets))
 (:ellipse, :circle, :sphere, :cuboid, :cube, :rectangle, :spheroid, :square)
 
 julia> r = FillRegion{3}(r -> 0<=r[1]<=1 && abs(r[2]) <= sec(r[1]); excludeaxes = (3,)); r.region((0,1,2))
@@ -275,7 +275,7 @@ julia> lr = LinkRule(1, (2, :A), 1, (3,1)); (lr.alg.range, lr.sublats)
 (1.0, ((2, :A), (1, 1), (3, 1)))
 
 julia> LinkRule(2.0, (1, 2)) |> typeof
-LinkRule{QBox.AutomaticRangeLinking,Tuple{Tuple{Int64,Int64}}}
+LinkRule{Elsa.AutomaticRangeLinking,Tuple{Tuple{Int64,Int64}}}
 
 julia> LinkRule(TreeLinking(2.0)) |> typeof
 LinkRule{TreeLinking,Missing}
@@ -306,7 +306,7 @@ LinkRule(alg::S, sublats; mincells = 0, maxsteps = typemax(Int)) where S<:Linkin
 
 Build a `Lattice{T,E,L,EL}` of `L` dimensions in `E`-dimensional embedding
 spaceof and composed of `T`-typed sites. Optional `preset::Union{Preset, Symbol}`
-is one of the `QBox.latticepresets` or a `Preset(preset, args...)`.
+is one of the `Elsa.latticepresets` or a `Preset(preset, args...)`.
 The `directives::LatticeDirective...` apply additional build instructions in order.
 
 # Examples
@@ -332,7 +332,7 @@ Lattice{Float32,3,2} : 2D lattice in 3D space with Float32 sites
     Sublattice names : (:Ab, :Bb, :At, :Bt)
     Unique Links : 18171
 
-julia> Tuple(keys(QBox.latticepresets))
+julia> Tuple(keys(Elsa.latticepresets))
 (:bcc, :graphene, :honeycomb, :cubic, :linear, :fcc, :honeycomb_bilayer, :square, :triangular)
 ```
 """

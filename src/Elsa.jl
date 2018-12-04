@@ -1,4 +1,4 @@
-module QBox
+module Elsa
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
       Arpack, ProgressMeter

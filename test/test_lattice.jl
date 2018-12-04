@@ -1,8 +1,8 @@
 module LatticeTest
 
 using Test
-using QBox
-using QBox: nsites, nlinks
+using Elsa
+using Elsa: nsites, nlinks
 
 @test Bravais() isa Bravais{Float64,0,0,0}
 @test Bravais((1,2),(3,3)) isa Bravais{Int64,2,2,4}
@@ -44,16 +44,16 @@ using QBox: nsites, nlinks
 @test Sublat(Float64, :A, (3f0,3)) isa Sublat{Float64,2}
 
 @test Lattice(:honeycomb, Dim(3), Precision(Float32)) isa Lattice{Float32,3,2}
-@test QBox.nsites(Lattice(:honeycomb, FillRegion(:square, 300))) == 207946
-@test QBox.nsites(Lattice(:square, Supercell(31))) == 961
-@test QBox.nsites(Lattice(:bcc, FillRegion(:spheroid, (10,4,4)))) == 1365
+@test Elsa.nsites(Lattice(:honeycomb, FillRegion(:square, 300))) == 207946
+@test Elsa.nsites(Lattice(:square, Supercell(31))) == 961
+@test Elsa.nsites(Lattice(:bcc, FillRegion(:spheroid, (10,4,4)))) == 1365
 
-@test QBox.nlinks(Lattice(:honeycomb, LinkRule(1/√3), FillRegion(:square, 300))) == 311273
-@test QBox.nlinks(Lattice(:square, Supercell(31), LinkRule(2))) == 6074
-@test QBox.nlinks(Lattice(:square, LinkRule(2), Supercell(31))) == 6074
-@test QBox.nlinks(Lattice(:bcc, LinkRule(1), FillRegion(:spheroid, (10,4,4)))) == 8216
+@test Elsa.nlinks(Lattice(:honeycomb, LinkRule(1/√3), FillRegion(:square, 300))) == 311273
+@test Elsa.nlinks(Lattice(:square, Supercell(31), LinkRule(2))) == 6074
+@test Elsa.nlinks(Lattice(:square, LinkRule(2), Supercell(31))) == 6074
+@test Elsa.nlinks(Lattice(:bcc, LinkRule(1), FillRegion(:spheroid, (10,4,4)))) == 8216
 
-@test LinkRule(1.2, 1, (2,3)) isa LinkRule{QBox.AutomaticRangeLinking,Tuple{Tuple{Int64,Int64},Tuple{Int64,Int64}}}
+@test LinkRule(1.2, 1, (2,3)) isa LinkRule{Elsa.AutomaticRangeLinking,Tuple{Tuple{Int64,Int64},Tuple{Int64,Int64}}}
 @test LinkRule(1, sublats = (1, (2, 3))).sublats == ((1, 1), (2, 3))
 
 @test begin
@@ -71,13 +71,13 @@ end
     isapprox(lat1.sublats[1].sites[1], 2 * lat2.sublats[1].sites[1])
 end
 
-@test QBox.nlinks(wrap(Lattice(:square, LinkRule(√2), Supercell(2)), exceptaxes = (1,))) == 14
-@test QBox.nlinks(wrap(Lattice(:square, LinkRule(√2), Supercell(2)), exceptaxes = (2,))) == 14
-@test QBox.nlinks(wrap(Lattice(:square, LinkRule(√2), Supercell(2)))) == 6
+@test Elsa.nlinks(wrap(Lattice(:square, LinkRule(√2), Supercell(2)), exceptaxes = (1,))) == 14
+@test Elsa.nlinks(wrap(Lattice(:square, LinkRule(√2), Supercell(2)), exceptaxes = (2,))) == 14
+@test Elsa.nlinks(wrap(Lattice(:square, LinkRule(√2), Supercell(2)))) == 6
 
 @test begin
     lat = mergesublats(Lattice(Preset(:honeycomb_bilayer, twistindex = 2)), (2,1,1,1))
-    QBox.nlinks(lat) == 32 && QBox.nsublats(lat) == 2
+    Elsa.nlinks(lat) == 32 && Elsa.nsublats(lat) == 2
 end
 
 end # module
