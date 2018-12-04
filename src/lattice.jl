@@ -142,21 +142,21 @@ Bravais vectors, excluding those specified by `excludeaxes::NTuple{N,Int}`.
 
 # Examples
 ```jldoctest
-julia> r = Region(:circle, 10); r.region([10,10])
+julia> r = Region(:circle, 10); r.isinregion([10,10])
 false
 
-julia> r = Region(:square, 20); r.region([10,10])
+julia> r = Region(:square, 20); r.isinregion([10,10])
 true
 
 julia> Tuple(keys(Elsa.regionpresets))
 (:ellipse, :circle, :sphere, :cuboid, :cube, :rectangle, :spheroid, :square)
 
-julia> r = Region{3}(r -> 0<=r[1]<=1 && abs(r[2]) <= sec(r[1]); excludeaxes = (3,)); r.region((0,1,2))
+julia> r = Region{3}(r -> 0<=r[1]<=1 && abs(r[2]) <= sec(r[1]); excludeaxes = (3,)); r.isinregion((0,1,2))
 true
 ```
 """
 struct Region{E,F<:Function,N} <: LatticeDirective
-    region::F
+    isinregion::F
     seed::SVector{E, Float64}
     excludeaxes::NTuple{N,Int}
     maxsteps::Int
@@ -861,9 +861,9 @@ function fill_region(lat::Lattice{T,E,L}, fr::Region{E,F,N}) where {T,E,L,F,N} #
     fillaxesbool = [!any(i .== fr.excludeaxes) for i=1:L]
     filldims = L - N
     filldims == 0 && error("Need at least one lattice vector to fill region")
-    any(fr.region(fr.seed + site) for site in sitegenerator(lat)) || error("Unit cell centered at seed position does not contain any site in region")
+    any(fr.isinregion(fr.seed + site) for site in sitegenerator(lat)) || error("Unit cell centered at seed position does not contain any site in region")
 
-    newsublats, iter = _box_fill(Val(filldims), lat, fr.region, fillaxesbool, fr.seed, fr.maxsteps, false)
+    newsublats, iter = _box_fill(Val(filldims), lat, fr.isinregion, fillaxesbool, fr.seed, fr.maxsteps, false)
 
     closeaxesbool = SVector{L}(fillaxesbool)
     openaxesbool = (!).(closeaxesbool)
@@ -885,7 +885,7 @@ function _box_fill(::Val{N}, lat::Lattice{T,E,L}, isinregion::F, fillaxesbool, s
 
     pos_sites = Vector{SVector{E,T}}[SVector{E,T}[seed + site for site in slat.sites] for slat in lat.sublats]
     newsublats = Sublat{T,E}[Sublat(sl.name, Vector{SVector{E,T}}()) for sl in lat.sublats]
-    zeroseed = ntuple(_->0, Val(N))
+    zeroseed = zero(SVector{N,Int})
     iter = BoxIterator(zeroseed, maxiterations = maxsteps, nregisters = nregisters)
 
     for cell in iter
@@ -943,7 +943,7 @@ function link!(lat::Lattice{T,E,L}, lr::LinkRule{S}) where {T,E,L,S<:LinkingAlgo
     lat.links.intralink = buildIlink(lat, lr, pre, (dist_zero, ndist_zero))
     L==0 && return lat
 
-    iter = BoxIterator(Tuple(ndist_zero), maxiterations = lr.maxsteps)
+    iter = BoxIterator(ndist_zero; maxiterations = lr.maxsteps)
     for cell in iter
         ndist = SVector(cell)
 
