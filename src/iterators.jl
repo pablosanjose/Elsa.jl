@@ -33,6 +33,7 @@ Base.IteratorEltype(::BoxIterator) = Base.HasEltype()
 Base.eltype(::BoxIterator{N}) where {N} = NTuple{N,Int}
 boundingboxiter(b::BoxIterator) = (b.npos, b.ppos)
 
+BoxIterator(seed::SVector; kw...) = BoxIterator(Tuple(seed); kw...)
 function BoxIterator(seed::NTuple{N}; maxiterations::Union{Int,Missing} = missing, nregisters::Int = 0) where {N}
     BoxIterator(seed, maxiterations, MVector(1, 2),
         ones(MVector{N,Bool}), ones(MVector{N,Bool}), MVector(seed), MVector(seed),
