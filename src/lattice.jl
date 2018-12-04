@@ -127,13 +127,13 @@ end
 LatticeConstant(a) = LatticeConstant(a, missing)
 
 ################################################################################
-## FillRegion LatticeDirective
+## Region LatticeDirective
 ################################################################################
 """
-    FillRegion(regionname::Symbol, args...)
-    FillRegion{E}(region::Function; seed = zero(SVector{E,Float64}), excludeaxes = (), maxsteps = typemax(Int))
+    Region(regionname::Symbol, args...)
+    Region{E}(region::Function; seed = zero(SVector{E,Float64}), excludeaxes = (), maxsteps = typemax(Int))
 
-Create a `FillRegion{E,F,N} <: LatticeDirective` to fill a region in `E`-dimensional
+Create a `Region{E,F,N} <: LatticeDirective` to fill a region in `E`-dimensional
 space defined by `region(r) == true`, where function `region::F` can alternatively be
 defined by a region `regionname` as `Elsa.regionpresets[regionname](args...; kw...)`.
 
@@ -142,32 +142,32 @@ Bravais vectors, excluding those specified by `excludeaxes::NTuple{N,Int}`.
 
 # Examples
 ```jldoctest
-julia> r = FillRegion(:circle, 10); r.region([10,10])
+julia> r = Region(:circle, 10); r.region([10,10])
 false
 
-julia> r = FillRegion(:square, 20); r.region([10,10])
+julia> r = Region(:square, 20); r.region([10,10])
 true
 
 julia> Tuple(keys(Elsa.regionpresets))
 (:ellipse, :circle, :sphere, :cuboid, :cube, :rectangle, :spheroid, :square)
 
-julia> r = FillRegion{3}(r -> 0<=r[1]<=1 && abs(r[2]) <= sec(r[1]); excludeaxes = (3,)); r.region((0,1,2))
+julia> r = Region{3}(r -> 0<=r[1]<=1 && abs(r[2]) <= sec(r[1]); excludeaxes = (3,)); r.region((0,1,2))
 true
 ```
 """
-struct FillRegion{E,F<:Function,N} <: LatticeDirective
+struct Region{E,F<:Function,N} <: LatticeDirective
     region::F
     seed::SVector{E, Float64}
     excludeaxes::NTuple{N,Int}
     maxsteps::Int
 end
 
-FillRegion(name::Symbol, args...; kw...) = regionpresets[name](args...; kw...)
+Region(name::Symbol, args...; kw...) = regionpresets[name](args...; kw...)
 
-FillRegion{E}(region::F;
+Region{E}(region::F;
     seed::Union{AbstractVector,Tuple} = zero(SVector{E,Float64}),
     excludeaxes::NTuple{N,Int} = (), maxsteps = typemax(Int)) where {E,F,N} =
-        FillRegion{E,F,N}(region, SVector(seed), excludeaxes, maxsteps)
+        Region{E,F,N}(region, SVector(seed), excludeaxes, maxsteps)
 
 ################################################################################
 ##   Precision LatticeDirective
@@ -318,7 +318,7 @@ Lattice{Float64,3,2} : 2D lattice in 3D space with Float64 sites
     Sublattice names : (:C, :D)
     Unique Links : 0
 
-julia> Lattice(:honeycomb, LinkRule(1/√3), FillRegion(:circle, 100))
+julia> Lattice(:honeycomb, LinkRule(1/√3), Region(:circle, 100))
 Lattice{Float64,2,0} : 0D lattice in 2D space with Float64 sites
     Bravais vectors : ()
     Number of sites : 72562
@@ -358,7 +358,7 @@ seedtype(::Type{Lattice{T,E,L,EL}}, ::Sublat{T2,E2}) where {T,E,L,EL,T2,E2} = La
 seedtype(::Type{S}, ::Bravais{T2,E,L,EL}) where {T,S<:Lattice{T},T2,E,L,EL} = Lattice{T,E,L,EL}
 seedtype(::Type{Lattice{T,E,L,EL}}, ::Dim{E2}) where {T,E,L,EL,E2} = Lattice{T,E2,L,E2*L}
 seedtype(::Type{Lattice{T,E,L,EL}}, ::Precision{T2}) where {T,E,L,EL,T2} = Lattice{T2,E,L,EL}
-seedtype(::Type{S}, ::FillRegion, ts...) where {S<:Lattice} = S
+seedtype(::Type{S}, ::Region, ts...) where {S<:Lattice} = S
 seedtype(::Type{L}, opt) where {L<:Lattice} = L
 
 #######################################################################
@@ -438,7 +438,7 @@ function _lattice!(lat::Lattice{T,E,L}, l::LatticeConstant) where {T,E,L}
     return lat
 end
 
-function _lattice!(lat::Lattice{T,E}, fr::FillRegion{E}) where {T,E}
+function _lattice!(lat::Lattice{T,E}, fr::Region{E}) where {T,E}
     fill_region(lat, fr)
 end
 
@@ -856,7 +856,7 @@ end
 # fill_region() : fill a region with a lattice
 ################################################################################
 
-function fill_region(lat::Lattice{T,E,L}, fr::FillRegion{E,F,N}) where {T,E,L,F,N} #N is number of excludeaxes
+function fill_region(lat::Lattice{T,E,L}, fr::Region{E,F,N}) where {T,E,L,F,N} #N is number of excludeaxes
     L == 0 && error("Non-periodic lattice cannot be used for region fill")
     fillaxesbool = [!any(i .== fr.excludeaxes) for i=1:L]
     filldims = L - N

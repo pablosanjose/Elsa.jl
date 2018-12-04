@@ -15,7 +15,7 @@ end
 end
 
 @test begin
-    sys = System(Lattice(:honeycomb, LinkRule(1), FillRegion(:square, 5)), Model(Onsite(1), Hopping(.3, (1,2))))
+    sys = System(Lattice(:honeycomb, LinkRule(1), Region(:square, 5)), Model(Onsite(1), Hopping(.3, (1,2))))
     iszero(velocity!(sys))
 end
 

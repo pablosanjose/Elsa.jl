@@ -56,14 +56,14 @@ latticepresets = Dict(
     )
 
 regionpresets = Dict(
-    :circle => (radius = 10.0, ; kw...) -> FillRegion{2}(_region_ellipse((radius, radius)); kw...),
-    :ellipse => (radii = (10.0, 15.0), ; kw...) -> FillRegion{2}(_region_ellipse(radii); kw...),
-    :square => (side = s, ; kw...) -> FillRegion{2}(_region_rectangle((side, side)); kw...),
-    :rectangle => (sides = (10.0, 15.0), ; kw...) -> FillRegion{2}(_region_ellipsoid((radius, radius, radius)); kw...),
-    :sphere => (radius = 10.0, ; kw...) -> FillRegion{3}(_region_ellipsoid((radius, radius, radius)); kw...),
-    :spheroid => (radii = (10.0, 15.0, 20.0), ; kw...) -> FillRegion{3}(_region_ellipsoid(radii); kw...),
-    :cube => (side = 10.0, ; kw...) -> FillRegion{3}(_region_cuboid((side, side, side)); kw...),
-    :cuboid => (sides = (10.0, 15.0, 20.0), ; kw...) -> FillRegion{3}(_region_cuboid(sides); kw...)
+    :circle => (radius = 10.0, ; kw...) -> Region{2}(_region_ellipse((radius, radius)); kw...),
+    :ellipse => (radii = (10.0, 15.0), ; kw...) -> Region{2}(_region_ellipse(radii); kw...),
+    :square => (side = s, ; kw...) -> Region{2}(_region_rectangle((side, side)); kw...),
+    :rectangle => (sides = (10.0, 15.0), ; kw...) -> Region{2}(_region_ellipsoid((radius, radius, radius)); kw...),
+    :sphere => (radius = 10.0, ; kw...) -> Region{3}(_region_ellipsoid((radius, radius, radius)); kw...),
+    :spheroid => (radii = (10.0, 15.0, 20.0), ; kw...) -> Region{3}(_region_ellipsoid(radii); kw...),
+    :cube => (side = 10.0, ; kw...) -> Region{3}(_region_cuboid((side, side, side)); kw...),
+    :cuboid => (sides = (10.0, 15.0, 20.0), ; kw...) -> Region{3}(_region_cuboid(sides); kw...)
     )
 
 

@@ -44,21 +44,21 @@ using Elsa: nsites, nlinks
 @test Sublat(Float64, :A, (3f0,3)) isa Sublat{Float64,2}
 
 @test Lattice(:honeycomb, Dim(3), Precision(Float32)) isa Lattice{Float32,3,2}
-@test Elsa.nsites(Lattice(:honeycomb, FillRegion(:square, 300))) == 207946
+@test Elsa.nsites(Lattice(:honeycomb, Region(:square, 300))) == 207946
 @test Elsa.nsites(Lattice(:square, Supercell(31))) == 961
-@test Elsa.nsites(Lattice(:bcc, FillRegion(:spheroid, (10,4,4)))) == 1365
+@test Elsa.nsites(Lattice(:bcc, Region(:spheroid, (10,4,4)))) == 1365
 
-@test Elsa.nlinks(Lattice(:honeycomb, LinkRule(1/√3), FillRegion(:square, 300))) == 311273
+@test Elsa.nlinks(Lattice(:honeycomb, LinkRule(1/√3), Region(:square, 300))) == 311273
 @test Elsa.nlinks(Lattice(:square, Supercell(31), LinkRule(2))) == 6074
 @test Elsa.nlinks(Lattice(:square, LinkRule(2), Supercell(31))) == 6074
-@test Elsa.nlinks(Lattice(:bcc, LinkRule(1), FillRegion(:spheroid, (10,4,4)))) == 8216
+@test Elsa.nlinks(Lattice(:bcc, LinkRule(1), Region(:spheroid, (10,4,4)))) == 8216
 
 @test LinkRule(1.2, 1, (2,3)) isa LinkRule{Elsa.AutomaticRangeLinking,Tuple{Tuple{Int64,Int64},Tuple{Int64,Int64}}}
 @test LinkRule(1, sublats = (1, (2, 3))).sublats == ((1, 1), (2, 3))
 
 @test begin
-    lat1 = Lattice(:honeycomb, LinkRule(1/sqrt(3)), FillRegion(:circle, 7))
-    lat2 = Lattice(:square, LinkRule(2), FillRegion(:circle, 6))
+    lat1 = Lattice(:honeycomb, LinkRule(1/sqrt(3)), Region(:circle, 7))
+    lat2 = Lattice(:square, LinkRule(2), Region(:circle, 6))
     lat3 = combine(lat1, lat2)
     (nlinks(lat3) == nlinks(lat1) + nlinks(lat2)) &&
     (nsites(lat3) == nsites(lat1) + nsites(lat2))
