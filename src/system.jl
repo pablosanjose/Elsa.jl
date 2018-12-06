@@ -69,6 +69,7 @@ function hamiltoniandim(lat, model)
     return dim
 end
 hamiltoniandim(sys::System) = size(sys.hbloch.matrix, 1)
+hamiltoniandim(h::AbstractMatrix) = size(h, 1)
 
 sparse!(I, J, V, dimh, workspace::SparseWorkspace) =
     sparse!(I, J, V, dimh, dimh, +,

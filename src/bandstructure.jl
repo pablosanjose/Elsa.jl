@@ -108,8 +108,6 @@ struct BandSampling{T<:Real,L}
     bufferstate::Vector{Complex{T}}
 end
 
-# BandSampling(sys::System{T,E,L}, brillouin::Brillouin; kw...) =
-#     BandSampling(kn -> hamiltonian!(sys, kn = kn), hamiltoniandim(sys), brillouin.lattice)
 function BandSampling(hfunc::Function, dimh, lat::Lattice{T,E,L}, vfunc; levels = missing, degtol = sqrt(eps()), randomshift = missing, kw...) where {T,E,L}
     shift = ismissing(randomshift) ? zero(SVector{E,T}) : randomshift * rand(SVector{E,T})
     points = lat.sublats[1].sites
@@ -255,13 +253,17 @@ Base.show(io::IO, bs::Bandstructure{T,N,L}) where {T,N,L} =
 
 Bandstructure(sys::System; uniform = false, partitions = 5, kw...) =
     Bandstructure(sys, Brillouin(sys.lattice; uniform = uniform, partitions = partitions); kw...)
-
 Bandstructure(sys::System{T,E,L}, brillouin::Brillouin{T,L}; kw...) where {T,E,L} =
-    Bandstructure(kn -> hamiltonian!(sys, kn = kn), hamiltoniandim(sys), brillouin.lattice,
-                  (kn, axis) -> velocity!(sys, kn = kn, axis = axis))
+    Bandstructure(kn -> hamiltonian!(sys, kn = kn), hamiltoniandim(sys), brillouin.lattice;
+                  velocity = (kn, axis) -> velocity!(sys, kn = kn, axis = axis), kw...)
+Bandstructure(hfunc::Function, lat::Lattice{T,E}; kw...) where {T,E} =
+    Bandstructure(hfunc, hamiltoniandim(hfunc(zero(SVector{E,T}))), lat; kw...)
+Bandstructure(hfunc::Function, points::AbstractVector{<:SVector}; kw...) =
+    Bandstructure(hfunc, Lattice(Sublat(points)); kw...)
 
-function Bandstructure(hfunc::Function, hdim, lat::Lattice, vfunc = missing; linkthreshold = 0.5, kw...)
-    bandsampling = BandSampling(hfunc, hdim, lat, vfunc; kw...)
+
+function Bandstructure(hfunc::Function, hdim, lat::Lattice; velocity = missing, linkthreshold = 0.5, kw...)
+    bandsampling = BandSampling(hfunc, hdim, lat, velocity; kw...)
     bandslat = bandslattice(lat, bandsampling, linkthreshold)
     states = reshape(bandsampling.states, bandsampling.statelength, :)
     bandsmesh = Mesh(bandslat)
