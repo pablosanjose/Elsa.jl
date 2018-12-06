@@ -103,18 +103,18 @@ struct BandSampling{T<:Real,L}
     nenergies::Int
     states::Array{Complex{T},3}
     statelength::Int
-    knpoints::Vector{SVector{L,T}}
+    points::Vector{SVector{L,T}}
     npoints::Int
     bufferstate::Vector{Complex{T}}
 end
 
-function BandSampling(sys::System{T,E,L}, brillouin::Brillouin; levels = missing, degtol = sqrt(eps()), randomshift = missing, kw...) where {T,E,L}
-    # shift = 0.02 .+ zero(SVector{E,T})
+# BandSampling(sys::System{T,E,L}, brillouin::Brillouin; kw...) =
+#     BandSampling(kn -> hamiltonian!(sys, kn = kn), hamiltoniandim(sys), brillouin.lattice)
+function BandSampling(hfunc::Function, dimh, lat::Lattice{T,E,L}, vfunc; levels = missing, degtol = sqrt(eps()), randomshift = missing, kw...) where {T,E,L}
     shift = ismissing(randomshift) ? zero(SVector{E,T}) : randomshift * rand(SVector{E,T})
-    knpoints = brillouin.lattice.sublats[1].sites
-    npoints = length(knpoints)
+    points = lat.sublats[1].sites
+    npoints = length(points)
 
-    dimh = hamiltoniandim(sys)
     nenergies = ismissing(levels) ? dimh : 2
     statelength = dimh
 
@@ -124,19 +124,19 @@ function BandSampling(sys::System{T,E,L}, brillouin::Brillouin; levels = missing
     energies = Matrix{T}(undef, (nenergies, npoints))
     states = Array{Complex{T},3}(undef, (statelength, nenergies, npoints))
 
-    @showprogress "Diagonalising: " for nk in 1:npoints
-        (energies_nk, states_nk) = spectrum(hamiltonian!(sys, kn = knpoints[nk] + shift), preallocH; levels = nenergies, kw...)
+    @showprogress "Diagonalising: " for n in 1:npoints
+        (energies_n, states_n) = spectrum(hfunc(points[n] + shift), preallocH; levels = nenergies, kw...)
         # sort_spectrum!(energies_nk, states_nk, ordering)
-        resolve_degeneracies!(energies_nk, states_nk, sys, knpoints[nk], degtol)
-        copyslice!(energies,    CartesianIndices((1:nenergies, nk:nk)),
-                   energies_nk, CartesianIndices(1:nenergies))
-        copyslice!(states,      CartesianIndices((1:statelength, 1:nenergies, nk:nk)),
-                   states_nk,   CartesianIndices((1:statelength, 1:nenergies)))
+        resolve_degeneracies!(energies_n, states_n, vfunc, points[n], degtol)
+        copyslice!(energies,    CartesianIndices((1:nenergies, n:n)),
+                   energies_n, CartesianIndices(1:nenergies))
+        copyslice!(states,      CartesianIndices((1:statelength, 1:nenergies, n:n)),
+                   states_n,   CartesianIndices((1:statelength, 1:nenergies)))
     end
 
     bufferstate = zeros(Complex{T}, statelength)
 
-    return BandSampling(energies, nenergies, states, statelength, knpoints, npoints, bufferstate)
+    return BandSampling(energies, nenergies, states, statelength, points, npoints, bufferstate)
 end
 
 function spectrum(h::SparseMatrixCSC, preallocH; levels = 2, method = missing, kw...)
@@ -217,12 +217,13 @@ function degeneracies(energies, degtol)
     end
 end
 
-function resolve_degeneracies!(energies, states, sys::System{T,E,L}, kn, degtol) where {T,E,L}
+resolve_degeneracies!(energies, states, vfunc::Missing, kn, degtol) = nothing
+function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}, degtol) where {L}
     degsubspaces = degeneracies(energies, degtol)
     if !(degsubspaces === nothing)
         for subspaceinds in degsubspaces
             for axis = 1:L
-                v = velocity!(sys, kn = kn, axis = axis)  # Need to do it in-place for each subspace
+                v = vfunc(kn, axis)  # Need to do it in-place for each subspace
                 subspace = view(states, :, subspaceinds)
                 vsubspace = subspace' * v * subspace
                 veigen = eigen!(vsubspace)
@@ -255,19 +256,23 @@ Base.show(io::IO, bs::Bandstructure{T,N,L}) where {T,N,L} =
 Bandstructure(sys::System; uniform = false, partitions = 5, kw...) =
     Bandstructure(sys, Brillouin(sys.lattice; uniform = uniform, partitions = partitions); kw...)
 
-function Bandstructure(sys::System{T,E,L}, brillouin::Brillouin{T,L}; linkthreshold = 0.5, kw...) where {T,E,L}
-    bandsampling = BandSampling(sys, brillouin; kw...)
-    bandslat = bandslattice(brillouin, bandsampling, linkthreshold)
+Bandstructure(sys::System{T,E,L}, brillouin::Brillouin{T,L}; kw...) where {T,E,L} =
+    Bandstructure(kn -> hamiltonian!(sys, kn = kn), hamiltoniandim(sys), brillouin.lattice,
+                  (kn, axis) -> velocity!(sys, kn = kn, axis = axis))
+
+function Bandstructure(hfunc::Function, hdim, lat::Lattice, vfunc = missing; linkthreshold = 0.5, kw...)
+    bandsampling = BandSampling(hfunc, hdim, lat, vfunc; kw...)
+    bandslat = bandslattice(lat, bandsampling, linkthreshold)
     states = reshape(bandsampling.states, bandsampling.statelength, :)
     bandsmesh = Mesh(bandslat)
     return Bandstructure(bandsmesh, states, bandsampling.nenergies, bandsampling.npoints)
 end
 
-function bandslattice(brillouin::Brillouin{T,L}, bandsampling, linkthreshold) where {T,L}
+function bandslattice(lat::Lattice{T,L}, bandsampling, linkthreshold) where {T,L}
     bands = Lattice(Sublat{T,L+1}(), Bravais(SMatrix{L+1,L,T}(I)))
     addnodes!(bands, bandsampling)
-    for brilink in allilinks(brillouin.lattice)
-        addilink!(bands.links, brilink, bandsampling, linkthreshold, bands)
+    for samplingilink in allilinks(lat)
+        addilink!(bands.links, samplingilink, bandsampling, linkthreshold, bands)
     end
     return bands
 end
@@ -275,20 +280,20 @@ end
 function addnodes!(bands, bandsampling)
     bandnodes = bands.sublats[1].sites
     for nk in 1:bandsampling.npoints, ne in 1:bandsampling.nenergies
-        push!(bandnodes, vcat(bandsampling.knpoints[nk], bandsampling.energies[ne, nk]))
+        push!(bandnodes, vcat(bandsampling.points[nk], bandsampling.energies[ne, nk]))
     end
     return bands
 end
 
-function addilink!(bandlinks::Links, bzilink::Ilink, sp::BandSampling, linkthreshold, bands)
+function addilink!(bandlinks::Links, samplingilink::Ilink, sp::BandSampling, linkthreshold, bands)
     bandnodes = bands.sublats[1,1].sites
-    dist = bravaismatrix(bands) * bzilink.ndist
+    dist = bravaismatrix(bands) * samplingilink.ndist
     linearindices = LinearIndices(sp.energies)
     state = sp.bufferstate
     states = sp.states
 
     slinkbuilder = SparseMatrixBuilder(bands, 1, 1)
-    neighiter = NeighborIterator(bzilink, 1, (1,1))
+    neighiter = NeighborIterator(samplingilink, 1, (1,1))
 
     @showprogress "Linking bands: " for nk_src in 1:sp.npoints, ne_src in 1:sp.nenergies
         n_src = linearindices[ne_src, nk_src]
@@ -305,7 +310,7 @@ function addilink!(bandlinks::Links, bzilink::Ilink, sp::BandSampling, linkthres
         end
         finalisecolumn!(slinkbuilder)
     end
-    push!(bandlinks, Ilink(bzilink.ndist, fill(Slink(sparse(slinkbuilder)), 1, 1)))
+    push!(bandlinks, Ilink(samplingilink.ndist, fill(Slink(sparse(slinkbuilder)), 1, 1)))
     return bandlinks
 end
 
