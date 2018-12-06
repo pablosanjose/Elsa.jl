@@ -260,6 +260,9 @@ Bandstructure(hfunc::Function, lat::Lattice{T,E}; kw...) where {T,E} =
     Bandstructure(hfunc, hamiltoniandim(hfunc(zero(SVector{E,T}))), lat; kw...)
 Bandstructure(hfunc::Function, points::AbstractVector{<:SVector}; kw...) =
     Bandstructure(hfunc, Lattice(Sublat(points)); kw...)
+Bandstructure(hfunc::Function, points::AbstractVector{<:Number}; kw...) =
+    Bandstructure(hfunc, Lattice(Sublat(SVector.(points))); kw...)
+
 
 
 function Bandstructure(hfunc::Function, hdim, lat::Lattice; velocity = missing, linkthreshold = 0.5, kw...)
