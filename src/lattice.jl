@@ -170,7 +170,17 @@ Region{E}(region::F;
         Region{E,F,N}(region, SVector(seed), excludeaxes, maxsteps)
 
 ################################################################################
-##   Precision LatticeDirective
+# RegionIterator
+################################################################################
+
+struct RegionIterator{F,E,L}
+    region::Region{F,N}
+    iter::BoxIterator{N}
+    collect
+end
+
+################################################################################
+#  Precision LatticeDirective
 ################################################################################
 """
     Precision(Type)
