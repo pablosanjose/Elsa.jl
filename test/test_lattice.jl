@@ -10,12 +10,6 @@ using Elsa: nsites, nlinks
 @test Bravais([1.,2.], @SVector [3,3]) isa Bravais{Float64,2,2,4}
 @test Bravais(@SMatrix [1. 2.; 3 3]) isa Bravais{Float64,2,2,4}
 
-@test Bravais(Float32) isa Bravais{Float32,0,0,0}
-@test Bravais(Float32, (1,2),(3,3)) isa Bravais{Float32,2,2,4}
-@test Bravais(Float32, [1.,2.],[3.,3]) isa Bravais{Float32,2,2,4}
-@test Bravais(Float32, [1.,2.], @SVector [3,3]) isa Bravais{Float32,2,2,4}
-@test Bravais(Float32, @SMatrix [1. 2.; 3 3]) isa Bravais{Float32,2,2,4}
-
 @test Bravais(Float32[1.,2.], @SVector [3f0,3f0]) isa Bravais{Float32,2,2,4}
 
 @test Sublat() isa Sublat{Float64,0}
@@ -29,36 +23,27 @@ using Elsa: nsites, nlinks
 @test Sublat((3,4.), [3,3]) isa Sublat{Float64,2}
 @test Sublat(@SVector[3f0,3f0]) isa Sublat{Float32,2}
 
-@test Sublat(Float32, ) isa Sublat{Float32,0}
-@test Sublat(Float32, (3,3)) isa Sublat{Float32,2}
-@test Sublat(Float32, (3,3.)) isa Sublat{Float32,2}
-@test Sublat(Float32, [3,3.]) isa Sublat{Float32,2}
-@test Sublat(Float32, @SVector[3,3]) isa Sublat{Float32,2}
-@test Sublat(Float32, @SVector[3.,3]) isa Sublat{Float32,2}
-@test Sublat(Float32, @SVector[3.,3], (3,3)) isa Sublat{Float32,2}
-@test Sublat(Float32, [3,4.], [3,3]) isa Sublat{Float32,2}
-@test Sublat(Float32, (3,4.), [3,3]) isa Sublat{Float32,2}
-@test Sublat(Float64, @SVector[3f0,3f0]) isa Sublat{Float64,2}
+@test Sublat(Elsa.cartesian([3,4.], [3,3], 1:3)) isa Sublat{Float64,3}
 
-@test Sublat(:A, @SVector[3f0,3f0], (3,4)) isa Sublat{Float32,2}
-@test Sublat(Float64, :A, (3f0,3)) isa Sublat{Float64,2}
+@test Sublat(@SVector[3f0,3f0], (3,4), name = :A) isa Sublat{Float32,2}
+@test Sublat((3f0,3.0), name = :A) isa Sublat{Float64,2}
 
 @test Lattice(:honeycomb, Dim(3), Precision(Float32)) isa Lattice{Float32,3,2}
-@test Elsa.nsites(Lattice(:honeycomb, FillRegion(:square, 300))) == 207946
+@test Elsa.nsites(Lattice(:honeycomb, Region(:square, 300))) == 207946
 @test Elsa.nsites(Lattice(:square, Supercell(31))) == 961
-@test Elsa.nsites(Lattice(:bcc, FillRegion(:spheroid, (10,4,4)))) == 1365
+@test Elsa.nsites(Lattice(:bcc, Region(:spheroid, (10,4,4)))) == 1365
 
-@test Elsa.nlinks(Lattice(:honeycomb, LinkRule(1/√3), FillRegion(:square, 300))) == 311273
+@test Elsa.nlinks(Lattice(:honeycomb, LinkRule(1/√3), Region(:square, 300))) == 311273
 @test Elsa.nlinks(Lattice(:square, Supercell(31), LinkRule(2))) == 6074
 @test Elsa.nlinks(Lattice(:square, LinkRule(2), Supercell(31))) == 6074
-@test Elsa.nlinks(Lattice(:bcc, LinkRule(1), FillRegion(:spheroid, (10,4,4)))) == 8216
+@test Elsa.nlinks(Lattice(:bcc, LinkRule(1), Region(:spheroid, (10,4,4)))) == 8216
 
 @test LinkRule(1.2, 1, (2,3)) isa LinkRule{Elsa.AutomaticRangeLinking,Tuple{Tuple{Int64,Int64},Tuple{Int64,Int64}}}
 @test LinkRule(1, sublats = (1, (2, 3))).sublats == ((1, 1), (2, 3))
 
 @test begin
-    lat1 = Lattice(:honeycomb, LinkRule(1/sqrt(3)), FillRegion(:circle, 7))
-    lat2 = Lattice(:square, LinkRule(2), FillRegion(:circle, 6))
+    lat1 = Lattice(:honeycomb, LinkRule(1/sqrt(3)), Region(:circle, 7))
+    lat2 = Lattice(:square, LinkRule(2), Region(:circle, 6))
     lat3 = combine(lat1, lat2)
     (nlinks(lat3) == nlinks(lat1) + nlinks(lat2)) &&
     (nsites(lat3) == nsites(lat1) + nsites(lat2))

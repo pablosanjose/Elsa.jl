@@ -17,11 +17,11 @@ latticepresets = Dict(
     :triangular => () ->
         Lattice(Sublat((0.,0.)), Bravais((cos(pi/3), sin(pi/3)),(-cos(pi/3), sin(pi/3)))),
     :honeycomb => () ->
-        Lattice(Sublat(:A, (0.0, -0.5/sqrt(3.0))),
-        Sublat(:B, (0.0, 0.5/sqrt(3.0))), Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3)))),
+        Lattice(Sublat((0.0, -0.5/sqrt(3.0)); name = :A),
+        Sublat((0.0, 0.5/sqrt(3.0)); name = :B), Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3)))),
     :graphene => () ->
-        Lattice(Sublat(:A, (0.0, -0.5/sqrt(3.0))),
-        Sublat(:B, (0.0, 0.5/sqrt(3.0))), Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3))), 
+        Lattice(Sublat((0.0, -0.5/sqrt(3.0)); name = :A),
+        Sublat((0.0, 0.5/sqrt(3.0)); name = :B), Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3))),
         LinkRule(1/√3)),
     :cubic => () ->
         Lattice(Sublat((0., 0., 0.)), Bravais((1., 0., 0.), (0., 1., 0.), (0., 0., 1.))),
@@ -29,14 +29,14 @@ latticepresets = Dict(
         Lattice(Sublat((0., 0., 0.)), Bravais(@SMatrix([-1. -1. 0.; 1. -1. 0.; 0. 1. -1.])'/sqrt(2.))),
     :bcc => () ->
         Lattice(Sublat((0., 0., 0.)), Bravais((1., 0., 0.), (0., 1., 0.), (0.5, 0.5, 0.5))),
-    :honeycomb_bilayer => 
+    :honeycomb_bilayer =>
         function (;twistindex = 1, twistindices = (twistindex, 0), interlayerdistance = 1.0, linkrangeintralayer = 1/sqrt(3))
             (m, r) = twistindices
             θ = acos((3m^2 + 3m*r +r^2/2)/(3m^2 + 3m*r + r^2))
-            sAbot = Sublat(:Ab, (0.0, -0.5/sqrt(3.0), - interlayerdistance / 2))
-            sBbot = Sublat(:Bb, (0.0,  0.5/sqrt(3.0), - interlayerdistance / 2))
-            sAtop = Sublat(:At, (0.0, -0.5/sqrt(3.0),   interlayerdistance / 2))
-            sBtop = Sublat(:Bt, (0.0,  0.5/sqrt(3.0),   interlayerdistance / 2))
+            sAbot = Sublat((0.0, -0.5/sqrt(3.0), - interlayerdistance / 2); name = :Ab)
+            sBbot = Sublat((0.0,  0.5/sqrt(3.0), - interlayerdistance / 2); name = :Bb)
+            sAtop = Sublat((0.0, -0.5/sqrt(3.0),   interlayerdistance / 2); name = :At)
+            sBtop = Sublat((0.0,  0.5/sqrt(3.0),   interlayerdistance / 2); name = :Bt)
             bravais = Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3)))
             if gcd(r, 3) == 1
                 scbot, sctop = @SMatrix[m -(m+r); (m+r) 2m+r], @SMatrix[m+r -m; m 2m+r]
@@ -56,14 +56,14 @@ latticepresets = Dict(
     )
 
 regionpresets = Dict(
-    :circle => (radius = 10.0, ; kw...) -> FillRegion{2}(_region_ellipse((radius, radius)); kw...),
-    :ellipse => (radii = (10.0, 15.0), ; kw...) -> FillRegion{2}(_region_ellipse(radii); kw...),
-    :square => (side = s, ; kw...) -> FillRegion{2}(_region_rectangle((side, side)); kw...),
-    :rectangle => (sides = (10.0, 15.0), ; kw...) -> FillRegion{2}(_region_ellipsoid((radius, radius, radius)); kw...),
-    :sphere => (radius = 10.0, ; kw...) -> FillRegion{3}(_region_ellipsoid((radius, radius, radius)); kw...),
-    :spheroid => (radii = (10.0, 15.0, 20.0), ; kw...) -> FillRegion{3}(_region_ellipsoid(radii); kw...),
-    :cube => (side = 10.0, ; kw...) -> FillRegion{3}(_region_cuboid((side, side, side)); kw...),
-    :cuboid => (sides = (10.0, 15.0, 20.0), ; kw...) -> FillRegion{3}(_region_cuboid(sides); kw...)
+    :circle => (radius = 10.0, ; kw...) -> Region{2}(_region_ellipse((radius, radius)); kw...),
+    :ellipse => (radii = (10.0, 15.0), ; kw...) -> Region{2}(_region_ellipse(radii); kw...),
+    :square => (side = s, ; kw...) -> Region{2}(_region_rectangle((side, side)); kw...),
+    :rectangle => (sides = (10.0, 15.0), ; kw...) -> Region{2}(_region_ellipsoid((radius, radius, radius)); kw...),
+    :sphere => (radius = 10.0, ; kw...) -> Region{3}(_region_ellipsoid((radius, radius, radius)); kw...),
+    :spheroid => (radii = (10.0, 15.0, 20.0), ; kw...) -> Region{3}(_region_ellipsoid(radii); kw...),
+    :cube => (side = 10.0, ; kw...) -> Region{3}(_region_cuboid((side, side, side)); kw...),
+    :cuboid => (sides = (10.0, 15.0, 20.0), ; kw...) -> Region{3}(_region_cuboid(sides); kw...)
     )
 
 

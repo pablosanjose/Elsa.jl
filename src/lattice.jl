@@ -2,7 +2,7 @@
 # Sublattice (Sublat) : a group of identical sites (e.g. same orbitals)
 #######################################################################
 """
-    Sublat([name::Symbol = missing, ]sites...)
+    Sublat(sites...; name::Symbol = missing)
 
 Create a `Sublat{T,E} <: LatticeDirective` that adds a sublattice, of
 name `name`, with sites at positions `sites` in `E` dimensional space.
@@ -12,23 +12,24 @@ For higher efficiency write `sites` as `Tuple`s or `SVector`s.
 
 # Examples
 ```jldoctest
-julia> Sublat(:A, (0, 0), (1, 1), (1, -1))
+julia> Sublat((0, 0), (1, 1), (1, -1), name = :A)
 Sublat{Int64,2}(:A, SArray{Tuple{2},Int64,1,2}[[0, 0], [1, 1], [1, -1]])
 
-julia> Sublat(Float32, :A, (0, 0), (1, 1), (1, -1))
+julia> Sublat(Float32, (0, 0), (1, 1), (1, -1), name = :A)
 Sublat{Float32,2}(:A, StaticArrays.SArray{Tuple{2},Float32,1,2}[[0.0, 0.0], [1.0, 1.0], [1.0, -1.0]])
+
+julia> Sublat(Elsa.cartesian(1:3, [-1,1]), name = :cartesian)
+Sublat{Int64,2}(:cartesian, StaticArrays.SArray{Tuple{2},Int64,1,2}[[1, -1], [2, -1], [3, -1], [1, 1], [2, 1], [3, 1]])
 ```
 """
 struct Sublat{T,E} <: LatticeDirective
-    name::Union{Symbol,Missing}
+    name::Symbol
     sites::Vector{SVector{E,T}}
 end
 
-Sublat(vs...) = Sublat(missing, toSVectors(vs...))
-Sublat(name::Symbol, vs::(<:Union{Tuple, AbstractVector{<:Number}})...) = Sublat(name, toSVectors(vs...))
-Sublat(::Type{T}, vs...) where {T} = Sublat(missing, toSVectors(T, vs...))
-Sublat(::Type{T}, name::Symbol, vs...) where {T} = Sublat(name, toSVectors(T, vs...))
-Sublat{T,E}(name = missing) where {T,E} = Sublat(name, SVector{E,T}[])
+Sublat(sites::Vector{<:SVector}; name = :missing) = Sublat(name, sites)
+Sublat(vs::Union{Tuple, AbstractVector{<:Number}}...; kw...) = Sublat(toSVectors(vs...); kw...)
+Sublat{T,E}(;kw...) where {T,E} = Sublat(SVector{E,T}[]; kw...)
 
 nsites(s::Sublat) = length(s.sites)
 # dim(s::Sublat{T,E}) where {T,E} = E
@@ -68,7 +69,6 @@ struct Bravais{T,E,L,EL} <: LatticeDirective
 end
 
 Bravais(vs...) = Bravais(toSMatrix(vs...))
-Bravais(::Type{T}, vs...) where {T} = Bravais(toSMatrix(T, vs...))
 
 transform(b::Bravais{T,E,0,0}, f::F) where {T,E,F<:Function} = b
 function transform(b::Bravais{T,E,L,EL}, f::F) where {T,E,L,EL,F<:Function}
@@ -127,13 +127,13 @@ end
 LatticeConstant(a) = LatticeConstant(a, missing)
 
 ################################################################################
-## FillRegion LatticeDirective
+## Region LatticeDirective
 ################################################################################
 """
-    FillRegion(regionname::Symbol, args...)
-    FillRegion{E}(region::Function; seed = zero(SVector{E,Float64}), excludeaxes = (), maxsteps = typemax(Int))
+    Region(regionname::Symbol, args...)
+    Region{E}(region::Function; seed = zero(SVector{E,Float64}), excludeaxes = (), maxsteps = typemax(Int))
 
-Create a `FillRegion{E,F,N} <: LatticeDirective` to fill a region in `E`-dimensional
+Create a `Region{E,F,N} <: LatticeDirective` to fill a region in `E`-dimensional
 space defined by `region(r) == true`, where function `region::F` can alternatively be
 defined by a region `regionname` as `Elsa.regionpresets[regionname](args...; kw...)`.
 
@@ -142,32 +142,32 @@ Bravais vectors, excluding those specified by `excludeaxes::NTuple{N,Int}`.
 
 # Examples
 ```jldoctest
-julia> r = FillRegion(:circle, 10); r.region([10,10])
+julia> r = Region(:circle, 10); r.region([10,10])
 false
 
-julia> r = FillRegion(:square, 20); r.region([10,10])
+julia> r = Region(:square, 20); r.region([10,10])
 true
 
 julia> Tuple(keys(Elsa.regionpresets))
 (:ellipse, :circle, :sphere, :cuboid, :cube, :rectangle, :spheroid, :square)
 
-julia> r = FillRegion{3}(r -> 0<=r[1]<=1 && abs(r[2]) <= sec(r[1]); excludeaxes = (3,)); r.region((0,1,2))
+julia> r = Region{3}(r -> 0<=r[1]<=1 && abs(r[2]) <= sec(r[1]); excludeaxes = (3,)); r.region((0,1,2))
 true
 ```
 """
-struct FillRegion{E,F<:Function,N} <: LatticeDirective
+struct Region{E,F<:Function,N} <: LatticeDirective
     region::F
     seed::SVector{E, Float64}
     excludeaxes::NTuple{N,Int}
     maxsteps::Int
 end
 
-FillRegion(name::Symbol, args...; kw...) = regionpresets[name](args...; kw...)
+Region(name::Symbol, args...; kw...) = regionpresets[name](args...; kw...)
 
-FillRegion{E}(region::F;
+Region{E}(region::F;
     seed::Union{AbstractVector,Tuple} = zero(SVector{E,Float64}),
     excludeaxes::NTuple{N,Int} = (), maxsteps = typemax(Int)) where {E,F,N} =
-        FillRegion{E,F,N}(region, SVector(seed), excludeaxes, maxsteps)
+        Region{E,F,N}(region, SVector(seed), excludeaxes, maxsteps)
 
 ################################################################################
 ##   Precision LatticeDirective
@@ -318,7 +318,7 @@ Lattice{Float64,3,2} : 2D lattice in 3D space with Float64 sites
     Sublattice names : (:C, :D)
     Unique Links : 0
 
-julia> Lattice(:honeycomb, LinkRule(1/√3), FillRegion(:circle, 100))
+julia> Lattice(:honeycomb, LinkRule(1/√3), Region(:circle, 100))
 Lattice{Float64,2,0} : 0D lattice in 2D space with Float64 sites
     Bravais vectors : ()
     Number of sites : 72562
@@ -358,7 +358,7 @@ seedtype(::Type{Lattice{T,E,L,EL}}, ::Sublat{T2,E2}) where {T,E,L,EL,T2,E2} = La
 seedtype(::Type{S}, ::Bravais{T2,E,L,EL}) where {T,S<:Lattice{T},T2,E,L,EL} = Lattice{T,E,L,EL}
 seedtype(::Type{Lattice{T,E,L,EL}}, ::Dim{E2}) where {T,E,L,EL,E2} = Lattice{T,E2,L,E2*L}
 seedtype(::Type{Lattice{T,E,L,EL}}, ::Precision{T2}) where {T,E,L,EL,T2} = Lattice{T2,E,L,EL}
-seedtype(::Type{S}, ::FillRegion, ts...) where {S<:Lattice} = S
+seedtype(::Type{S}, ::Region, ts...) where {S<:Lattice} = S
 seedtype(::Type{L}, opt) where {L<:Lattice} = L
 
 #######################################################################
@@ -438,7 +438,7 @@ function _lattice!(lat::Lattice{T,E,L}, l::LatticeConstant) where {T,E,L}
     return lat
 end
 
-function _lattice!(lat::Lattice{T,E}, fr::FillRegion{E}) where {T,E}
+function _lattice!(lat::Lattice{T,E}, fr::Region{E}) where {T,E}
     fill_region(lat, fr)
 end
 
@@ -719,9 +719,9 @@ function _mergedsublats(lat::Lattice{T,E}, oldsublatlist) where {T,E}
     newsublats = Sublat{T,E}[]
     for oldss in oldsublatlist
         if isempty(oldss)
-            push!(newsublats, Sublat{T,E}(missing))
+            push!(newsublats, Sublat{T,E}())
         else
-            newsublat = Sublat{T,E}(lat.sublats[oldss[1]].name)
+            newsublat = Sublat{T,E}(; name = lat.sublats[oldss[1]].name)
             push!(newsublats, newsublat)
             for olds in oldss
                 append!(newsublat.sites, lat.sublats[olds].sites)
@@ -856,7 +856,7 @@ end
 # fill_region() : fill a region with a lattice
 ################################################################################
 
-function fill_region(lat::Lattice{T,E,L}, fr::FillRegion{E,F,N}) where {T,E,L,F,N} #N is number of excludeaxes
+function fill_region(lat::Lattice{T,E,L}, fr::Region{E,F,N}) where {T,E,L,F,N} #N is number of excludeaxes
     L == 0 && error("Non-periodic lattice cannot be used for region fill")
     fillaxesbool = [!any(i .== fr.excludeaxes) for i=1:L]
     filldims = L - N
