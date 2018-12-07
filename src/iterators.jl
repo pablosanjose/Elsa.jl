@@ -179,6 +179,8 @@ function Base.length(ni::NeighborIterator{<:Links})
     end
     return l
 end
+Base.size(ni::NeighborIterator) = (length(ni),)
+
 numneighbors(ni::NeighborIterator, nlink) = length(nzrange(slink(ni, nlink).rdr, ni.src))
 
 slink(ni::NeighborIterator{<:Links}, nilink) = iszero(nilink) ? ni.l.intralink.slinks[ni.s2, ni.s1] : ni.l.interlinks[nilink].slinks[ni.s2, ni.s1]
