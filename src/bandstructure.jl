@@ -94,6 +94,18 @@ function hypertriangular(s::SMatrix{L,L2,T}) where {L,L2,T}
 end
 hypertriangular(s::SMatrix{L,L}) where L = s
 
+function cartesianlattice(ranges::Vararg{<:AbstractArray,N}) where {N}
+    partitions = length.(ranges)
+    T = promote_type(map(eltype, ranges)...)
+    lat = simple_discretization(Lattice(Bravais(SMatrix{N,N,T}(I))), partitions)
+    sortedranges = map(sort, ranges)
+    sites = lat.sublats[1].sites
+    for (i, site) in enumerate(sites)
+        sites[i] = SVector{N,T}(getindex.(sortedranges, Tuple(round.(Int, SVector(partitions) .* site) .+ 1)))
+    end
+    return lat
+end
+
 #######################################################################
 # BandSampling
 #######################################################################
@@ -258,14 +270,12 @@ Bandstructure(sys::System{T,E,L}, brillouin::Brillouin{T,L}; kw...) where {T,E,L
                   velocity = (kn, axis) -> velocity!(sys, kn = kn, axis = axis), kw...)
 Bandstructure(hfunc::Function, lat::Lattice{T,E}; kw...) where {T,E} =
     Bandstructure(hfunc, hamiltoniandim(hfunc(zero(SVector{E,T}))), lat; kw...)
-Bandstructure(hfunc::Function, points::AbstractVector{<:SVector}; kw...) =
-    Bandstructure(hfunc, Lattice(Sublat(points)); kw...)
-Bandstructure(hfunc::Function, points::AbstractVector{<:Number}; kw...) =
-    Bandstructure(hfunc, Lattice(Sublat(SVector.(points))); kw...)
-
+Bandstructure(hfunc::Function, ranges::AbstractVector...; kw...) =
+    Bandstructure(hfunc, cartesianlattice(ranges...); kw...)
 
 
 function Bandstructure(hfunc::Function, hdim, lat::Lattice; velocity = missing, linkthreshold = 0.5, kw...)
+    isunlinked(lat) && throw(ErrorException("The band sampling lattice is not linked"))
     bandsampling = BandSampling(hfunc, hdim, lat, velocity; kw...)
     bandslat = bandslattice(lat, bandsampling, linkthreshold)
     states = reshape(bandsampling.states, bandsampling.statelength, :)
@@ -273,8 +283,8 @@ function Bandstructure(hfunc::Function, hdim, lat::Lattice; velocity = missing, 
     return Bandstructure(bandsmesh, states, bandsampling.nenergies, bandsampling.npoints)
 end
 
-function bandslattice(lat::Lattice{T,L}, bandsampling, linkthreshold) where {T,L}
-    bands = Lattice(Sublat{T,L+1}(), Bravais(SMatrix{L+1,L,T}(I)))
+function bandslattice(lat::Lattice{T,E,L}, bandsampling, linkthreshold) where {T,E,L}
+    bands = Lattice(Sublat{T,E+1}(), Bravais(SMatrix{E+1,L,T}(I)))
     addnodes!(bands, bandsampling)
     for samplingilink in allilinks(lat)
         addilink!(bands.links, samplingilink, bandsampling, linkthreshold, bands)
