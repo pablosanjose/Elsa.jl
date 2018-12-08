@@ -17,9 +17,6 @@ Sublat{Int64,2}(:A, SArray{Tuple{2},Int64,1,2}[[0, 0], [1, 1], [1, -1]])
 
 julia> Sublat(Float32, (0, 0), (1, 1), (1, -1), name = :A)
 Sublat{Float32,2}(:A, StaticArrays.SArray{Tuple{2},Float32,1,2}[[0.0, 0.0], [1.0, 1.0], [1.0, -1.0]])
-
-julia> Sublat(Elsa.cartesian(1:3, [-1,1]), name = :cartesian)
-Sublat{Int64,2}(:cartesian, StaticArrays.SArray{Tuple{2},Int64,1,2}[[1, -1], [2, -1], [3, -1], [1, 1], [2, 1], [3, 1]])
 ```
 """
 struct Sublat{T,E} <: LatticeDirective
@@ -342,6 +339,11 @@ mutable struct Lattice{T,E,L,EL}
     links::Links{T,E,L}
 end
 Lattice(sublats::Vector{Sublat{T,E}}, bravais::Bravais{T,E,L}) where {T,E,L} = Lattice(sublats, bravais, dummylinks(sublats, bravais))
+function Lattice{T,E,L,EL}() where {T,E,L,EL}
+    sublats = Sublat{T,E}[]
+    bravais = Bravais(SMatrix{E,L,T,EL}(I))
+    Lattice{T,E,L,EL}(sublats, bravais, dummylinks(sublats, bravais))
+end
 # Lattice(bravais::Bravais{T,E,L}) where {T,E,L} = Lattice([Sublat(zero(SVector{E,T}))], bravais)
 
 Lattice(name::Symbol) = Lattice(Preset(name))
@@ -351,8 +353,8 @@ Lattice(preset::Preset, opts...) = lattice!(Lattice(preset), opts...)
 Lattice(opts::LatticeDirective...) = lattice!(seedlattice(Lattice{Float64,0,0,0}, opts...), opts...)
 
 # Vararg here is necessary in v0.7-alpha (instead of ...) to make these type-unstable recursions fast
-seedlattice(::Type{S}, opts::Vararg{<:LatticeDirective,N}) where {S, N} = _seedlattice(seedtype(S, opts...))
-_seedlattice(::Type{Lattice{T,E,L,EL}}) where {T,E,L,EL} = Lattice(Sublat{T,E}[], Bravais(SMatrix{E,L,T,EL}(I)))
+seedlattice(::Type{S}, opts::Vararg{<:LatticeDirective,N}) where {S, N} = seedtype(S, opts...) #_seedlattice(seedtype(S, opts...))
+_seedlattice(::Type{Lattice{T,E,L,EL}}) where {T,E,L,EL} = Lattice{T,E,L,EL}()
 seedtype(::Type{T}, t, ts::Vararg{<:Any, N}) where {T,N} = seedtype(seedtype(T, t), ts...)
 seedtype(::Type{Lattice{T,E,L,EL}}, ::Sublat{T2,E2}) where {T,E,L,EL,T2,E2} = Lattice{T,E2,L,E2*L}
 seedtype(::Type{S}, ::Bravais{T2,E,L,EL}) where {T,S<:Lattice{T},T2,E,L,EL} = Lattice{T,E,L,EL}
@@ -382,10 +384,10 @@ Lattice{Float64,2,2} : 2D lattice in 2D space with Float64 sites
 """
 lattice!(lat::Lattice, o1::LatticeDirective, opts...) = lattice!(_lattice!(lat, o1), opts...)
 
-lattice!(lat::Lattice) = adjust_slinks_to_sublats!(lat)
+lattice!(lat::Lattice) = adjust_slink_size_to_sublats!(lat)
 
 # Ensure the size of Slink matrices in lat.links matches the number of sublats. Do it only at the end.
-function adjust_slinks_to_sublats!(lat::Lattice)
+function adjust_slink_size_to_sublats!(lat::Lattice)
     ns = nsublats(lat)
     lat.links.intralink = resizeilink(lat.links.intralink, lat)
     for (n, ilink) in enumerate(lat.links.interlinks)
@@ -500,7 +502,7 @@ function boundingboxlat(lat::Lattice{T,E}) where {T,E}
     bmin = zero(MVector{E, T})
     bmax = zero(MVector{E, T})
     foreach(sl -> foreach(s -> _boundingboxlat!(bmin, bmax, s), sl.sites), lat.sublats)
-    return (bmin, bmax)
+    return (SVector(bmin), SVector(bmax))
 end
 @inline function _boundingboxlat!(bmin, bmax, site)
     bmin .= min.(bmin, site)
@@ -824,6 +826,28 @@ function siteclusters(lat::Lattice, sublat::Int, onlyintra)
     end
     return clusters
 end
+
+#######################################################################
+# updatelinks! : rewrite links to coincide with sites
+#######################################################################
+
+function updatelinks!(lat::Lattice{T,E,L}) where {T,E,L}
+    br = bravaismatrix(lat)
+    for ilink in allilinks(lat.links)
+        dist = br * ilink.ndist
+        for cs in CartesianIndices(ilink.slinks)
+            (s2, s1) = Tuple(cs)
+            slat1, slat2 = lat.sublats[s1], lat.sublats[s2]
+            slink = ilink.slinks[cs]
+            for (row, col, _, ptr) in enumerate_sparse(slink.rdr)
+                newrdr = _rdr(slat1.sites[col], slat2.sites[row])
+                slink.rdr.nzval[ptr] = newrdr
+            end
+        end
+    end
+    return lat
+end
+
 
 ################################################################################
 ## expand_unitcell

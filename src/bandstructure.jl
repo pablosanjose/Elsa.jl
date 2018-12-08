@@ -53,7 +53,7 @@ function uniform_discretization(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,
     A = qr(bravaismatrix(lat)).R
     Gt = qr(transpose(inv(A))).R
     Gt = Gt / Gt[1,1]
-    Tr = hypertriangular(lat)
+    Tr = hypertriangularbravais(lat)
     S = round.(Int, inv(Tr) * Gt * M)
     iS = inv(S)
     D = iS * inv(Tr)
@@ -64,7 +64,7 @@ function uniform_discretization(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,
     return meshlat
 end
 
-# Transformation D takes hypertriangular to minisquare (phi-space delta): D * Tr = M^{-1}
+# Transformation D takes hypertriangularbravais to minisquare (phi-space delta): D * Tr = M^{-1}
 # However, Tr has to be chosen to match bravais angles of G' as much as possible: Trsigned
 # Build+link Trsigned, transform, Supercell(M)
 function simple_discretization(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,Int}) where {T,E,L}
@@ -72,10 +72,10 @@ function simple_discretization(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,I
     A = qr(bravaismatrix(lat)).R
     Gt = qr(transpose(inv(A))).R
     Gt = Gt / Gt[1,1]
-    Tr = hypertriangular(lat)
-    Trsigned = SMatrix{L,0,T}()
+    Tr = hypertriangularbravais(lat)
+    Trsigned = zero(MMatrix{L,L,T})
     for i in 1:L
-        Trsigned = hcat(Trsigned, Tr[:,i] * sign_positivezero(Gt[1,i]))
+        Trsigned[1:L, i] .= Tr[1:L, i] * sign_positivezero(Gt[1,i])
     end
     D = inv(Trsigned * M)
     meshlat = Lattice(Sublat(zero(SVector{L,T})), Bravais(Trsigned), LinkRule(1))
@@ -84,27 +84,65 @@ function simple_discretization(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,I
     return meshlat
 end
 
-hypertriangular(lat::Lattice{T,E,L}) where {T,E,L} = hypertriangular(SMatrix{L,1,T}(I))
-function hypertriangular(s::SMatrix{L,L2,T}) where {L,L2,T}
+# Completes the L2 vectors into an L-dimensional basis s with new vectors at 60 degree angles
+hypertriangularbravais(lat::Lattice{T,E,L}) where {T,E,L} = hypertriangularbravais(SMatrix{L,1,T}(I))
+function hypertriangularbravais(s::SMatrix{L,L2,T}) where {L,L2,T}
     v1 = s[:,L2]
     factor = T(1/(L2+1))
     v2 = modifyat(v1, L2, v1[L2]*factor)
     v2 = modifyat(v2, L2 + 1, v1[L2]*sqrt(1 - factor^2))
-    return hypertriangular(hcat(s, v2))
+    return hypertriangularbravais(hcat(s, v2))
 end
-hypertriangular(s::SMatrix{L,L}) where L = s
+hypertriangularbravais(s::SMatrix{L,L}) where L = s
+
+# function cartesianlattice(ranges::Vararg{<:AbstractArray,N}) where {N}
+#     partitions = length.(ranges)
+#     T = promote_type(map(eltype, ranges)...)
+#     lat = simple_discretization(Lattice(Bravais(SMatrix{N,N,T}(I))), partitions)
+#     size(lat.links.intralink.slinks) == (1, 1) ||
+#         throw(DimensionMismatch("Unexpected slink dimensions $(lat.links.intralink.slinks) != (1,1) in cartesianlattice"))
+#     sites = lat.sublats[1].sites
+#     for (i, site) in enumerate(sites)
+#         t = Tuple(round.(Int, SVector(partitions) .* site) .+ 1)
+#         sites[i] = SVector{N,T}(getindex.(ranges, t))
+#     end
+#     boundedlat = Lattice(lat.sublats[1])
+#     boundedlat.links.intralink = lat.links.intralink
+#     updatelinks!(boundedlat)
+#     return boundedlat
+# end
 
 function cartesianlattice(ranges::Vararg{<:AbstractArray,N}) where {N}
     partitions = length.(ranges)
-    T = promote_type(map(eltype, ranges)...)
-    lat = simple_discretization(Lattice(Bravais(SMatrix{N,N,T}(I))), partitions)
-    sortedranges = map(sort, ranges)
+    T = promote_type(Float16, map(eltype, ranges)...)
+    brmat = hypertriangularbravais(SMatrix{N,1,T}(I))
+    lat = Lattice(Sublat(zero(SVector{N,T})), Bravais(brmat), LinkRule(1), Supercell(partitions...))
+    invbrmat = inv(brmat)
+    transform!(lat, r -> invbrmat * r)
     sites = lat.sublats[1].sites
     for (i, site) in enumerate(sites)
-        sites[i] = SVector{N,T}(getindex.(sortedranges, Tuple(round.(Int, SVector(partitions) .* site) .+ 1)))
+        sites[i] = SVector{N,T}(getindex.(ranges, Tuple(round.(Int, site) .+ 1)))
     end
-    return lat
+    boundedlat = Lattice(lat.sublats[1])
+    boundedlat.links.intralink = lat.links.intralink
+    updatelinks!(boundedlat)
+    return boundedlat
 end
+
+function cartesianlattice2(ranges::Vararg{<:AbstractArray,N}) where {N}
+    partitions = ntuple(i -> length(ranges[i]), Val(N))
+    @show partitions
+    T = promote_type(Float16, map(eltype, ranges)...)
+    brmat = hypertriangularbravais(SMatrix{N,1,T}(I))
+    # lat = lattice!(Lattice(Sublat(zero(SVector{N,T})), Bravais(brmat), LinkRule(1.5)), Supercell(partitions...))
+    lat = Lattice(Sublat(zero(SVector{N,T})), Bravais(brmat), LinkRule(1.5), Supercell(partitions...))
+    # invbrmat = inv(brmat)
+    # boundedlat = Lattice(lat.sublats[1])
+    # boundedlat.links.intralink = lat.links.intralink
+    # transform!(boundedlat, r -> SVector{N,T}(_getrangesindex(ranges, round.(Int, invbrmat * r) + 1)))
+    # boundedlat
+end
+_getrangesindex(ranges, inds::SVector{N}) where N = ntuple(i -> ranges[i][inds[i]], Val(N))
 
 #######################################################################
 # BandSampling
