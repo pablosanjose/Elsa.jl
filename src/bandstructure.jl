@@ -101,10 +101,8 @@ function cartesianlattice(ranges::Vararg{<:AbstractArray,N}) where {N}
     brmat = hypertriangularbravais(SMatrix{N,1,T}(I))
     lat = Lattice(Sublat(zero(SVector{N,T})), Bravais(brmat), LinkRule(1.5), Supercell(partitions...))
     invbrmat = inv(brmat)
-    # transform!(lat, r -> invbrmat * r)
     sites = lat.sublats[1].sites
     for (i, site) in enumerate(sites)
-        # sites[i] = SVector{N,T}(getindex.(ranges, Tuple(round.(Int, invbrmat * site) .+ 1)))
         sites[i] = SVector{N,T}(_getrangesindex(ranges, invbrmat * site + 1))
     end
     boundedlat = Lattice(lat.sublats[1])
@@ -112,19 +110,6 @@ function cartesianlattice(ranges::Vararg{<:AbstractArray,N}) where {N}
     updatelinks!(boundedlat)
     return boundedlat
 end
-
-# function cartesianlattice2(ranges::Vararg{<:AbstractArray,N}) where {N}
-#     partitions = ntuple(i -> length(ranges[i]), Val(N))
-#     T = promote_type(Float16, map(eltype, ranges)...)
-#     brmat = hypertriangularbravais(SMatrix{N,1,T}(I))
-#     lat = Lattice(Sublat(zero(SVector{N,T})), Bravais(brmat), LinkRule(1.5), Supercell(partitions...))
-#     invbrmat = inv(brmat)
-#     boundedlat = Lattice(lat.sublats[1])
-#     boundedlat.links.intralink = lat.links.intralink
-#     transform!(boundedlat, r -> SVector{N,T}(_getrangesindex(ranges, round.(Int, invbrmat * r) + 1)))
-#     boundedlat
-# end
-# # _getrangesindex(ranges, inds::SVector{N}) where N = ntuple(i -> ranges[i][inds[i]], Val(N))
 _getrangesindex(ranges, inds::SVector{N}) where N = ntuple(i -> ranges[i][round(Int, inds[i])], Val(N))
 
 function cartesianlattice(ranges::Vararg{<:AbstractArray,N}) where {N}
