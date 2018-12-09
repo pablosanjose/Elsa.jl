@@ -10,12 +10,6 @@ using Elsa: nsites, nlinks
 @test Bravais([1.,2.], @SVector [3,3]) isa Bravais{Float64,2,2,4}
 @test Bravais(@SMatrix [1. 2.; 3 3]) isa Bravais{Float64,2,2,4}
 
-@test Bravais(Float32) isa Bravais{Float32,0,0,0}
-@test Bravais(Float32, (1,2),(3,3)) isa Bravais{Float32,2,2,4}
-@test Bravais(Float32, [1.,2.],[3.,3]) isa Bravais{Float32,2,2,4}
-@test Bravais(Float32, [1.,2.], @SVector [3,3]) isa Bravais{Float32,2,2,4}
-@test Bravais(Float32, @SMatrix [1. 2.; 3 3]) isa Bravais{Float32,2,2,4}
-
 @test Bravais(Float32[1.,2.], @SVector [3f0,3f0]) isa Bravais{Float32,2,2,4}
 
 @test Sublat() isa Sublat{Float64,0}
@@ -29,19 +23,10 @@ using Elsa: nsites, nlinks
 @test Sublat((3,4.), [3,3]) isa Sublat{Float64,2}
 @test Sublat(@SVector[3f0,3f0]) isa Sublat{Float32,2}
 
-@test Sublat(Float32, ) isa Sublat{Float32,0}
-@test Sublat(Float32, (3,3)) isa Sublat{Float32,2}
-@test Sublat(Float32, (3,3.)) isa Sublat{Float32,2}
-@test Sublat(Float32, [3,3.]) isa Sublat{Float32,2}
-@test Sublat(Float32, @SVector[3,3]) isa Sublat{Float32,2}
-@test Sublat(Float32, @SVector[3.,3]) isa Sublat{Float32,2}
-@test Sublat(Float32, @SVector[3.,3], (3,3)) isa Sublat{Float32,2}
-@test Sublat(Float32, [3,4.], [3,3]) isa Sublat{Float32,2}
-@test Sublat(Float32, (3,4.), [3,3]) isa Sublat{Float32,2}
-@test Sublat(Float64, @SVector[3f0,3f0]) isa Sublat{Float64,2}
+@test Sublat(Elsa.cartesian([3,4.], [3,3], 1:3)) isa Sublat{Float64,3}
 
-@test Sublat(:A, @SVector[3f0,3f0], (3,4)) isa Sublat{Float32,2}
-@test Sublat(Float64, :A, (3f0,3)) isa Sublat{Float64,2}
+@test Sublat(@SVector[3f0,3f0], (3,4), name = :A) isa Sublat{Float32,2}
+@test Sublat((3f0,3.0), name = :A) isa Sublat{Float64,2}
 
 @test Lattice(:honeycomb, Dim(3), Precision(Float32)) isa Lattice{Float32,3,2}
 @test Elsa.nsites(Lattice(:honeycomb, Region(:square, 300))) == 207946

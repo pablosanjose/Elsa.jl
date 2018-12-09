@@ -180,6 +180,8 @@ function Base.length(ni::NeighborIterator{<:Links})
     end
     return l
 end
+Base.size(ni::NeighborIterator) = (length(ni),)
+
 numneighbors(ni::NeighborIterator, nlink) = length(nzrange(slink(ni, nlink).rdr, ni.src))
 
 slink(ni::NeighborIterator{<:Links}, nilink) = iszero(nilink) ? ni.l.intralink.slinks[ni.s2, ni.s1] : ni.l.interlinks[nilink].slinks[ni.s2, ni.s1]
@@ -267,3 +269,27 @@ function SparseArrays.sparse(s::SparseMatrixBuilder)
     end
     return SparseMatrixCSC(s.m, s.n, s.colptr, s.rowval, s.nzval)
 end
+
+#######################################################################
+# SparseMatrixReader
+#######################################################################
+
+struct SparseMatrixReader{T,TI}
+    matrix::SparseMatrixCSC{T,TI}
+end
+
+Base.IteratorSize(::SparseMatrixReader) = Base.HasLength()
+Base.IteratorEltype(::SparseMatrixReader) = Base.HasEltype()
+Base.eltype(::SparseMatrixReader{T,TI}) where {T,TI} = Tuple{TI,TI,T}
+Base.length(s::SparseMatrixReader) = nnz(s.matrix)
+
+function iterate(s::SparseMatrixReader, state = (1, 1))
+    (ptr, col) = state
+    ptr > length(s) && return nothing
+    @inbounds while ptr > s.matrix.colptr[col + 1] - 1
+         col += 1
+    end
+    return (s.matrix.rowval[ptr], col, s.matrix.nzval[ptr], ptr), (ptr + 1, col)
+end
+
+enumerate_sparse(s::SparseMatrixCSC) = SparseMatrixReader(s)

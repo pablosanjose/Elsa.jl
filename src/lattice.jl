@@ -2,7 +2,7 @@
 # Sublattice (Sublat) : a group of identical sites (e.g. same orbitals)
 #######################################################################
 """
-    Sublat([name::Symbol = missing, ]sites...)
+    Sublat(sites...; name::Symbol = missing)
 
 Create a `Sublat{T,E} <: LatticeDirective` that adds a sublattice, of
 name `name`, with sites at positions `sites` in `E` dimensional space.
@@ -12,23 +12,21 @@ For higher efficiency write `sites` as `Tuple`s or `SVector`s.
 
 # Examples
 ```jldoctest
-julia> Sublat(:A, (0, 0), (1, 1), (1, -1))
+julia> Sublat((0, 0), (1, 1), (1, -1), name = :A)
 Sublat{Int64,2}(:A, SArray{Tuple{2},Int64,1,2}[[0, 0], [1, 1], [1, -1]])
 
-julia> Sublat(Float32, :A, (0, 0), (1, 1), (1, -1))
+julia> Sublat(Float32, (0, 0), (1, 1), (1, -1), name = :A)
 Sublat{Float32,2}(:A, StaticArrays.SArray{Tuple{2},Float32,1,2}[[0.0, 0.0], [1.0, 1.0], [1.0, -1.0]])
 ```
 """
 struct Sublat{T,E} <: LatticeDirective
-    name::Union{Symbol,Missing}
+    name::Symbol
     sites::Vector{SVector{E,T}}
 end
 
-Sublat(vs...) = Sublat(missing, toSVectors(vs...))
-Sublat(name::Symbol, vs::(<:Union{Tuple, AbstractVector{<:Number}})...) = Sublat(name, toSVectors(vs...))
-Sublat(::Type{T}, vs...) where {T} = Sublat(missing, toSVectors(T, vs...))
-Sublat(::Type{T}, name::Symbol, vs...) where {T} = Sublat(name, toSVectors(T, vs...))
-Sublat{T,E}(name = missing) where {T,E} = Sublat(name, SVector{E,T}[])
+Sublat(sites::Vector{<:SVector}; name = :missing) = Sublat(name, sites)
+Sublat(vs::Union{Tuple, AbstractVector{<:Number}}...; kw...) = Sublat(toSVectors(vs...); kw...)
+Sublat{T,E}(;kw...) where {T,E} = Sublat(SVector{E,T}[]; kw...)
 
 nsites(s::Sublat) = length(s.sites)
 # dim(s::Sublat{T,E}) where {T,E} = E
@@ -68,7 +66,6 @@ struct Bravais{T,E,L,EL} <: LatticeDirective
 end
 
 Bravais(vs...) = Bravais(toSMatrix(vs...))
-Bravais(::Type{T}, vs...) where {T} = Bravais(toSMatrix(T, vs...))
 
 transform(b::Bravais{T,E,0,0}, f::F) where {T,E,F<:Function} = b
 function transform(b::Bravais{T,E,L,EL}, f::F) where {T,E,L,EL,F<:Function}
@@ -352,6 +349,11 @@ mutable struct Lattice{T,E,L,EL}
     links::Links{T,E,L}
 end
 Lattice(sublats::Vector{Sublat{T,E}}, bravais::Bravais{T,E,L}) where {T,E,L} = Lattice(sublats, bravais, dummylinks(sublats, bravais))
+function Lattice{T,E,L,EL}() where {T,E,L,EL}
+    sublats = Sublat{T,E}[]
+    bravais = Bravais(SMatrix{E,L,T,EL}(I))
+    Lattice{T,E,L,EL}(sublats, bravais, dummylinks(sublats, bravais))
+end
 # Lattice(bravais::Bravais{T,E,L}) where {T,E,L} = Lattice([Sublat(zero(SVector{E,T}))], bravais)
 
 Lattice(name::Symbol) = Lattice(Preset(name))
@@ -360,10 +362,9 @@ Lattice(preset::Preset) = latticepresets[preset.name](; preset.kwargs...)
 Lattice(preset::Preset, opts...) = lattice!(Lattice(preset), opts...)
 Lattice(opts::LatticeDirective...) = lattice!(seedlattice(Lattice{Float64,0,0,0}, opts...), opts...)
 
-# Vararg here is necessary in v0.7-alpha (instead of ...) to make these type-unstable recursions fast
-seedlattice(::Type{S}, opts::Vararg{<:LatticeDirective,N}) where {S, N} = _seedlattice(seedtype(S, opts...))
-_seedlattice(::Type{Lattice{T,E,L,EL}}) where {T,E,L,EL} = Lattice(Sublat{T,E}[], Bravais(SMatrix{E,L,T,EL}(I)))
-seedtype(::Type{T}, t, ts::Vararg{<:Any, N}) where {T,N} = seedtype(seedtype(T, t), ts...)
+seedlattice(::Type{S}, opts...) where {S} = _seedlattice(seedtype(S, reverse(opts)...))
+_seedlattice(::Type{Lattice{T,E,L,EL}}) where {T,E,L,EL} = Lattice{T,E,L,EL}()
+seedtype(::Type{T}, t, ts...) where {T,N} = (seedtype(seedtype(T, ts...), t))
 seedtype(::Type{Lattice{T,E,L,EL}}, ::Sublat{T2,E2}) where {T,E,L,EL,T2,E2} = Lattice{T,E2,L,E2*L}
 seedtype(::Type{S}, ::Bravais{T2,E,L,EL}) where {T,S<:Lattice{T},T2,E,L,EL} = Lattice{T,E,L,EL}
 seedtype(::Type{Lattice{T,E,L,EL}}, ::Dim{E2}) where {T,E,L,EL,E2} = Lattice{T,E2,L,E2*L}
@@ -392,10 +393,10 @@ Lattice{Float64,2,2} : 2D lattice in 2D space with Float64 sites
 """
 lattice!(lat::Lattice, o1::LatticeDirective, opts...) = lattice!(_lattice!(lat, o1), opts...)
 
-lattice!(lat::Lattice) = adjust_slinks_to_sublats!(lat)
+lattice!(lat::Lattice) = adjust_slink_size_to_sublats!(lat)
 
 # Ensure the size of Slink matrices in lat.links matches the number of sublats. Do it only at the end.
-function adjust_slinks_to_sublats!(lat::Lattice)
+function adjust_slink_size_to_sublats!(lat::Lattice)
     ns = nsublats(lat)
     lat.links.intralink = resizeilink(lat.links.intralink, lat)
     for (n, ilink) in enumerate(lat.links.interlinks)
@@ -510,7 +511,7 @@ function boundingboxlat(lat::Lattice{T,E}) where {T,E}
     bmin = zero(MVector{E, T})
     bmax = zero(MVector{E, T})
     foreach(sl -> foreach(s -> _boundingboxlat!(bmin, bmax, s), sl.sites), lat.sublats)
-    return (bmin, bmax)
+    return (SVector(bmin), SVector(bmax))
 end
 @inline function _boundingboxlat!(bmin, bmax, site)
     bmin .= min.(bmin, site)
@@ -729,9 +730,9 @@ function _mergedsublats(lat::Lattice{T,E}, oldsublatlist) where {T,E}
     newsublats = Sublat{T,E}[]
     for oldss in oldsublatlist
         if isempty(oldss)
-            push!(newsublats, Sublat{T,E}(missing))
+            push!(newsublats, Sublat{T,E}())
         else
-            newsublat = Sublat{T,E}(lat.sublats[oldss[1]].name)
+            newsublat = Sublat{T,E}(; name = lat.sublats[oldss[1]].name)
             push!(newsublats, newsublat)
             for olds in oldss
                 append!(newsublat.sites, lat.sublats[olds].sites)
@@ -834,6 +835,28 @@ function siteclusters(lat::Lattice, sublat::Int, onlyintra)
     end
     return clusters
 end
+
+#######################################################################
+# updatelinks! : rewrite links to coincide with sites
+#######################################################################
+
+function updatelinks!(lat::Lattice{T,E,L}) where {T,E,L}
+    br = bravaismatrix(lat)
+    for ilink in allilinks(lat.links)
+        dist = br * ilink.ndist
+        for cs in CartesianIndices(ilink.slinks)
+            (s2, s1) = Tuple(cs)
+            slat1, slat2 = lat.sublats[s1], lat.sublats[s2]
+            slink = ilink.slinks[cs]
+            for (row, col, _, ptr) in enumerate_sparse(slink.rdr)
+                newrdr = _rdr(slat1.sites[col], slat2.sites[row])
+                slink.rdr.nzval[ptr] = newrdr
+            end
+        end
+    end
+    return lat
+end
+
 
 ################################################################################
 ## expand_unitcell

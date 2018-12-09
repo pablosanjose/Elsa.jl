@@ -21,6 +21,8 @@ toSVectors(::Type{T}) where {T} = SVector{0,T}[]
 toSVectors(::Type{T}, vs::Vararg{<:Any,N}) where {T,N} = [toSVector.(T, vs)...]
 toSVectors(vs...) = [promote(toSVector.(vs)...)...]
 
+cartesian(ranges::Vararg{AbstractVector{<:Number}, N}) where {N} = vec(SVector{N}.(Iterators.product(ranges...)))
+
 padright(sv::StaticVector{E,T}, x::T, ::Val{E}) where {E,T} = sv
 padright(sv::StaticVector{E,T}, x::T2, ::Val{E2}) where {E,T,E2,T2} =
     SVector{E2, T2}(ntuple(i -> i > E ? x : T2(sv[i]), Val(E2)))
