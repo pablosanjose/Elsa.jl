@@ -112,28 +112,6 @@ function cartesianlattice(ranges::Vararg{<:AbstractArray,N}) where {N}
 end
 _getrangesindex(ranges, inds::SVector{N}) where N = ntuple(i -> ranges[i][round(Int, inds[i])], Val(N))
 
-function cartesianlattice(ranges::Vararg{<:AbstractArray,N}) where {N}
-    partitions = length.(ranges)
-    T = promote_type(map(eltype, ranges)...)
-    lat = simple_discretization(Lattice(Bravais(SMatrix{N,N,T}(I))), partitions)
-    sites = lat.sublats[1].sites
-    for (i, site) in enumerate(sites)
-        sites[i] = SVector{N,T}(getindex.(ranges, Tuple(round.(Int, SVector(partitions) .* site) .+ 1)))
-    end
-    return lat
-end
-
-function cartesianlattice(ranges::Vararg{<:AbstractArray,N}) where {N}
-    partitions = length.(ranges)
-    T = promote_type(map(eltype, ranges)...)
-    lat = simple_discretization(Lattice(Bravais(SMatrix{N,N,T}(I))), partitions)
-    sites = lat.sublats[1].sites
-    for (i, site) in enumerate(sites)
-        sites[i] = SVector{N,T}(getindex.(ranges, Tuple(round.(Int, SVector(partitions) .* site) .+ 1)))
-    end
-    return lat
-end
-
 #######################################################################
 # BandSampling
 #######################################################################
