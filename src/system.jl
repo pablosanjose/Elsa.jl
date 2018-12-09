@@ -69,6 +69,7 @@ function hamiltoniandim(lat, model)
     return dim
 end
 hamiltoniandim(sys::System) = size(sys.hbloch.matrix, 1)
+hamiltoniandim(h::AbstractMatrix) = size(h, 1)
 
 sparse!(I, J, V, dimh, workspace::SparseWorkspace) =
     sparse!(I, J, V, dimh, dimh, +,
@@ -151,7 +152,7 @@ end
 
 function hamiltonian!(sys::System{T,E,L}; k = zero(SVector{E,T}), kn = blochphases(k, sys), intracell::Bool = false) where {T,E,L}
 	length(kn) == L || throw(DimensionMismatch("The dimension of the normalized Bloch phases `kn` should match the lattice dimension $L"))
-	insertblochphases!(sys.hbloch, kn, intracell)
+	insertblochphases!(sys.hbloch, SVector{L,T}(kn), intracell)
     updateoperatormatrix!(sys.hbloch)
     return sys.hbloch.matrix
 end
@@ -161,7 +162,7 @@ hamiltonian(sys; kw...) = copy(hamiltonian!(sys; kw...))
 function velocity!(sys::System{T,E,L}; k = zero(SVector{E,T}), kn = blochphases(k, sys), axis::Int = 1) where {T,E,L}
 	0 <= axis <= max(L, 1) || throw(DimensionMismatch("Keyword `axis` should be between 0 and $L, the lattice dimension"))
 	length(kn) == L || throw(DimensionMismatch("The dimension of the normalized Bloch phases `kn` should match the lattice dimension $L"))
-	insertblochphases!(sys.vbloch, kn, axis)
+	insertblochphases!(sys.vbloch, SVector{L,T}(kn), axis)
 	updateoperatormatrix!(sys.vbloch)
 	return sys.vbloch.matrix
 end
