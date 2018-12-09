@@ -352,10 +352,9 @@ Lattice(preset::Preset) = latticepresets[preset.name](; preset.kwargs...)
 Lattice(preset::Preset, opts...) = lattice!(Lattice(preset), opts...)
 Lattice(opts::LatticeDirective...) = lattice!(seedlattice(Lattice{Float64,0,0,0}, opts...), opts...)
 
-# Vararg here is necessary in v0.7-alpha (instead of ...) to make these type-unstable recursions fast
-seedlattice(::Type{S}, opts::Vararg{<:LatticeDirective,N}) where {S, N} = seedtype(S, opts...) #_seedlattice(seedtype(S, opts...))
+seedlattice(::Type{S}, opts...) where {S} = _seedlattice(seedtype(S, reverse(opts)...))
 _seedlattice(::Type{Lattice{T,E,L,EL}}) where {T,E,L,EL} = Lattice{T,E,L,EL}()
-seedtype(::Type{T}, t, ts::Vararg{<:Any, N}) where {T,N} = seedtype(seedtype(T, t), ts...)
+seedtype(::Type{T}, t, ts...) where {T,N} = (seedtype(seedtype(T, ts...), t))
 seedtype(::Type{Lattice{T,E,L,EL}}, ::Sublat{T2,E2}) where {T,E,L,EL,T2,E2} = Lattice{T,E2,L,E2*L}
 seedtype(::Type{S}, ::Bravais{T2,E,L,EL}) where {T,S<:Lattice{T},T2,E,L,EL} = Lattice{T,E,L,EL}
 seedtype(::Type{Lattice{T,E,L,EL}}, ::Dim{E2}) where {T,E,L,EL,E2} = Lattice{T,E2,L,E2*L}
