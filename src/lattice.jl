@@ -167,16 +167,6 @@ Region{E}(region::F;
         Region{E,F,N}(region, SVector(seed), excludeaxes, maxsteps)
 
 ################################################################################
-# RegionIterator
-################################################################################
-
-struct RegionIterator{F,E,L}
-    region::Region{F,N}
-    iter::BoxIterator{N}
-    collect
-end
-
-################################################################################
 #  Precision LatticeDirective
 ################################################################################
 """
@@ -837,6 +827,31 @@ function siteclusters(lat::Lattice, sublat::Int, onlyintra)
 end
 
 #######################################################################
+# productlattice : cartesian product of various lattices/ranges
+#######################################################################
+
+function productlattice(ranges::Vararg{<:AbstractArray,N}) where {N}
+    partitions = length.(ranges)
+    T = promote_type(Float16, map(eltype, ranges)...)
+    brmat = hypertriangularbravais(SMatrix{N,1,T}(I))
+    lat = Lattice(Sublat(zero(SVector{N,T})), Bravais(brmat), LinkRule(1.5), Supercell(partitions...))
+    invbrmat = inv(brmat)
+    sites = lat.sublats[1].sites
+    for (i, site) in enumerate(sites)
+        sites[i] = SVector{N,T}(_getrangesindex(ranges, invbrmat * site + 1))
+    end
+    boundedlat = Lattice(lat.sublats[1])
+    boundedlat.links.intralink = lat.links.intralink
+    updatelinks!(boundedlat)
+    return boundedlat
+end
+
+_getrangesindex(ranges, inds::SVector{N}) where N = ntuple(i -> ranges[i][round(Int, inds[i])], Val(N))
+
+function productlattice(lats::Lattice...)
+#end
+
+#######################################################################
 # updatelinks! : rewrite links to coincide with sites
 #######################################################################
 
@@ -856,7 +871,6 @@ function updatelinks!(lat::Lattice{T,E,L}) where {T,E,L}
     end
     return lat
 end
-
 
 ################################################################################
 ## expand_unitcell

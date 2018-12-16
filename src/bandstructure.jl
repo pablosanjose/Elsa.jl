@@ -95,23 +95,6 @@ function hypertriangularbravais(s::SMatrix{L,L2,T}) where {L,L2,T}
 end
 hypertriangularbravais(s::SMatrix{L,L}) where L = s
 
-function cartesianlattice(ranges::Vararg{<:AbstractArray,N}) where {N}
-    partitions = length.(ranges)
-    T = promote_type(Float16, map(eltype, ranges)...)
-    brmat = hypertriangularbravais(SMatrix{N,1,T}(I))
-    lat = Lattice(Sublat(zero(SVector{N,T})), Bravais(brmat), LinkRule(1.5), Supercell(partitions...))
-    invbrmat = inv(brmat)
-    sites = lat.sublats[1].sites
-    for (i, site) in enumerate(sites)
-        sites[i] = SVector{N,T}(_getrangesindex(ranges, invbrmat * site + 1))
-    end
-    boundedlat = Lattice(lat.sublats[1])
-    boundedlat.links.intralink = lat.links.intralink
-    updatelinks!(boundedlat)
-    return boundedlat
-end
-_getrangesindex(ranges, inds::SVector{N}) where N = ntuple(i -> ranges[i][round(Int, inds[i])], Val(N))
-
 #######################################################################
 # BandSampling
 #######################################################################
@@ -277,7 +260,7 @@ Bandstructure(sys::System{T,E,L}, brillouin::Brillouin{T,L}; kw...) where {T,E,L
 Bandstructure(hfunc::Function, lat::Lattice{T,E}; kw...) where {T,E} =
     Bandstructure(hfunc, hamiltoniandim(hfunc(zero(SVector{E,T}))), lat; kw...)
 Bandstructure(hfunc::Function, ranges::AbstractVector...; kw...) =
-    Bandstructure(hfunc, cartesianlattice(ranges...); kw...)
+    Bandstructure(hfunc, productlattice(ranges...); kw...)
 
 
 function Bandstructure(hfunc::Function, hdim, lat::Lattice; velocity = missing, linkthreshold = 0.5, kw...)
