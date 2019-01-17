@@ -2,6 +2,8 @@
 
 A work-in-progress package for building discrete lattices and implementing arbitrary tight-binding models on them. This aims to be a successor of [MathQ](http://www.icmm.csic.es/sanjose/MathQ/MathQ.html), with a better design, better extensibility and superior functionality and performance.
 
+**Documentation** : [Get started](https://github.com/pablosanjose/Elsa.jl/blob/master/docs/src/index.md)
+
 This work has been partly funded by the Spanish Ministry of Economy and Competitiveness under Grant No. FIS2015-65706-P
 
 [![Build Status](https://travis-ci.org/pablosanjose/Elsa.jl.svg?branch=master)](https://travis-ci.org/pablosanjose/Elsa.jl)

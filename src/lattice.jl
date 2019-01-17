@@ -427,7 +427,7 @@ function _lattice!(lat::Lattice{T,E,L}, l::LatticeConstant) where {T,E,L}
         throw(DimensionMismatch("Cannot redefine the LatticeConstant of a non-periodic lattice"))
     else
         if ismissing(l.axis) || !(1 <= l.axis <= L)
-            axisnorm = maximum(norm(bravaismatrix(lat)[:,i]) for i in size(lbravaismatrix(lat), 2))
+            axisnorm = maximum(norm(bravaismatrix(lat)[:,i]) for i in size(bravaismatrix(lat), 2))
         else
             axisnorm = norm(bravaismatrix(lat)[:, l.axis])
         end

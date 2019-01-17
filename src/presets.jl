@@ -22,7 +22,7 @@ latticepresets = Dict(
     :graphene => () ->
         Lattice(Sublat((0.0, -0.5/sqrt(3.0)); name = :A),
         Sublat((0.0, 0.5/sqrt(3.0)); name = :B), Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3))),
-        LinkRule(1/√3)),
+        LinkRule(1/√3), LatticeConstant(0.246)),
     :cubic => () ->
         Lattice(Sublat((0., 0., 0.)), Bravais((1., 0., 0.), (0., 1., 0.), (0., 0., 1.))),
     :fcc => () ->
