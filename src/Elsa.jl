@@ -9,7 +9,7 @@ import SparseArrays: sparse!
 export LatticeDirective, Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
        Dim, Region, LinkRule, TreeLinking, SimpleLinking, Precision
 export System, Model, Onsite, Hopping, Brillouin, Bandstructure
-export transform, transform!, lattice!, combine, wrap, mergesublats, hamiltonian!, velocity!
+export transform, transform!, lattice!, combine, wrap, mergesublats, hamiltonian, velocity, hamiltonian!, velocity!
 export @SMatrix, @SVector, SMatrix, SVector
 
 abstract type LatticeDirective end
