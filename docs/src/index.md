@@ -98,7 +98,4 @@ julia> sys = System(lat, Model(Hopping(1), Onsite(r -> 0.2*(rand() - 0.5), 2)))
 
 We can obtain the Hamiltonian of the closed system as `hamiltonian(sys)`.
 
-For an unbounded lattice (dimension `L !=0 `) we specify Bloch momenta as `hamiltonian(sys, k = (kx, ky))` or Bloch phases `ϕᵢ=k⋅aᵢ` as `hamiltonian(sys, k = (ϕ1, ϕ2))`
-
-
-
+For an unbounded lattice (dimension `L !=0 `) we specify Bloch momenta as `hamiltonian(sys, k = (kx, ky))` or Bloch phases `ϕᵢ=k⋅aᵢ` as `hamiltonian(sys, k = (ϕ1, ϕ2))`.
