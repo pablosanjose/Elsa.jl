@@ -99,7 +99,16 @@ The optional `seed` specifies at which point in space to begin filling the regio
 
 We want a single orbital per site. Let us define the hopping between each linked site as `1`, and make the onsite energy a random Anderson disorder between `-0.1` and `0.1`
 ```julia
+julia> lat = Lattice(:graphene, Region(:circle, 50));
+
 julia> sys = System(lat, Model(Hopping(1), Onsite(r -> 0.2*(rand() - 0.5))))
+System{Float64,2,0} : 0D system in 2D space with Float64 sites.
+    Bravais vectors : ()
+    Number of sites : 299706
+    Sublattice names : (:A, :B)
+    Unique Links : 448745
+    Model with sublattice site dimensions () (default 1)
+    Bloch operator of dimensions (299706, 299706) with 1197196 elements
 ```
 If we want more orbitals we could enter a matrix, as in `Onsite([1 2; 2 3])` or even specify different onsite/hoppings for different `Sublat`s. For example this adds disorder only to sublattice 2
 ```julia
