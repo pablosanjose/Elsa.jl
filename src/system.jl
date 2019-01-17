@@ -15,6 +15,10 @@ function System(l::Lattice, m::Model)
 	return System(l, m, hop, vop)
 end
 
+System(name::Symbol) = System(Preset(name))
+System(preset::Preset) = haskey(systempresets, preset.name) ? systempresets[preset.name](; preset.kwargs...) : 
+    System(Lattice(preset), Model(Onsite(0), Hopping(1)))
+
 #######################################################################
 # Display
 #######################################################################

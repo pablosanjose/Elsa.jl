@@ -66,7 +66,6 @@ regionpresets = Dict(
     :cuboid => (sides = (10.0, 15.0, 20.0), ; kw...) -> Region{3}(_region_cuboid(sides); kw...)
     )
 
-
 function _region_ellipse(radii)
     return r -> (r[1]/radii[1])^2 + (r[2]/radii[2])^2 <= 1 + extended_eps()
 end
@@ -87,8 +86,10 @@ function _region_cuboid(sides)
 end
 
 #######################################################################
-# Model presets
+# System and Model presets
 #######################################################################
+
+systempresets = Dict()
 
 modelpresets = Dict(
     :kinetic2D => ((; mass = 1, a0 = 1) -> Model(
