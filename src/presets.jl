@@ -30,7 +30,7 @@ latticepresets = Dict(
     :bcc => () ->
         Lattice(Sublat((0., 0., 0.)), Bravais((1., 0., 0.), (0., 1., 0.), (0.5, 0.5, 0.5))),
     :honeycomb_bilayer =>
-        function (;twistindex = 1, twistindices = (twistindex, 0), interlayerdistance = 1.0, linkrangeintralayer = 1/sqrt(3))
+        function (;twistindex = 1, twistindices = (twistindex, 1), interlayerdistance = 1.0, linkrangeintralayer = 1/sqrt(3))
             (m, r) = twistindices
             θ = acos((3m^2 + 3m*r +r^2/2)/(3m^2 + 3m*r + r^2))
             sAbot = Sublat((0.0, -0.5/sqrt(3.0), - interlayerdistance / 2); name = :Ab)
