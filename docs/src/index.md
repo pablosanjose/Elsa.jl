@@ -100,7 +100,7 @@ Lattice{Float64,2,2} : 2D lattice in 2D space with Float64 sites
     Total links      : 5
     Coordination     : 3.0
 ```
-In this case we did not define `a0`, but rather assumed it to be 1. We added a final directive `LatticeConstant(0.246)` whose role is to rescale the lattice uniformly (including its Bravais vectors) so that it has the specified lattice constant. In this example we see an important property of the Elsa.jl API for bulding lattices: the order of directives matters. If we switch the last two directives for example we get
+In this case we did not define `a0`, but rather assumed it to be 1. We then added a final directive `LatticeConstant(0.246)` whose effect is to rescale the lattice uniformly (including its Bravais vectors) so that it has the specified lattice constant. In this example we see an important property of the Elsa.jl API for bulding lattices: the order of directives matters. If we switch the last two directives for example we get
 ```julia
 julia> Lattice(Sublat((0.0, -0.5/sqrt(3.0)); name = :A), 
                       Sublat((0.0,  0.5/sqrt(3.0)); name = :B), 
