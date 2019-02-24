@@ -3,40 +3,45 @@
 # to instantiate types and convert between instances. (For parametric types, unless overridden, 
 # you get an implicit internal constructor without parameters, so no need to define that externally)
 
-convert(::Type{T}, l::T) where T<:Lattice = l
-convert(::Type{T}, l::Lattice) where T<:Lattice = T(l)
+convert(::Type{T}, l::T) where T<:Bravais = l
+convert(::Type{T}, l::Bravais) where T<:Bravais = T(l)
 
-convert(::Type{T}, l::T) where T<:LatticeDirective = l
-convert(::Type{T}, l::LatticeDirective) where T<:LatticeDirective = T(l)
+convert(::Type{T}, l::T) where T<:Sublat = l
+convert(::Type{T}, l::Sublat) where T<:Sublat = T(l)
 
-convert(::Type{T}, l::T) where T<:Links = l
-convert(::Type{T}, l::Links) where T<:Links = T(l)
-convert(::Type{T}, l::T) where T<:Ilink = l
-convert(::Type{T}, l::Ilink) where T<:Ilink = T(l)
-convert(::Type{T}, l::T) where T<:Slink = l
-convert(::Type{T}, l::Slink) where T<:Slink = T(l)
+convert(::Type{T}, l::T) where T<:System = l
+convert(::Type{T}, l::System) where T<:System = T(l)
+
+convert(::Type{T}, l::T) where T<:Operator = l
+convert(::Type{T}, l::Operator) where T<:Operator = T(l)
+
+convert(::Type{T}, l::T) where T<:Block = l
+convert(::Type{T}, l::Block) where T<:Block = T(l)
+
+convert(::Type{T}, l::T) where T<:Model = l
+convert(::Type{T}, l::Model) where T<:Model = T(l)
 
 # Constructors for conversion
 
 Sublat{T,E}(s::Sublat) where {T,E} = 
-    Sublat(s.name, [padright(site, zero(T), Val(E)) for site in s.sites])
+    Sublat([padright(site, zero(T), Val(E)) for site in s.sites], s.norbitals, s.name)
 
-Bravais{T,E,L,EL}(b::Bravais) where {T,E,L,EL} = 
-    Bravais(padrightbottom(b.matrix, SMatrix{E,L,T,EL}))
+Base.promote_rule(::Type{Sublat{T1,E1}}, ::Type{Sublat{T2,E2}}) where {T1,T2,E1,E2} = 
+    Sublat{promote_type(T1, T2), max(E1, E2)}
 
-function Slink{T,E}(s::Slink) where {T,E}
-    nzval = Tuple{SVector{E,T}, SVector{E,T}}[(padright(r, zero(T), Val(E)), padright(dr, zero(T), Val(E))) for (r, dr) in s.rdr.nzval]
-    Slink(SparseMatrixCSC(s.rdr.m, s.rdr.n, s.rdr.colptr, s.rdr.rowval, nzval))
-end
+Bravais{E,L}(b::Bravais) where {T,E,L} = 
+    Bravais(padrightbottom(b.matrix, SMatrix{E,L,Float64}))
 
-Links{T,E,L}(l::Links) where {T,E,L} = 
-    Links{T,E,L}(l.intralink, l.interlinks)
+System{Tv,T,E,L}(s::System) where {Tv,T,E,L} = 
+    System(convert(Vector{Sublat{T,E}}, s.sublats), s.sublatsdata, Bravais{E,L}(s.bravais), Operator{Tv,L}(s.hamiltonian))
 
-Ilink{T,E,L}(i::Ilink) where {T,E,L} =
-    Ilink(padright(i.ndist, zero(Int), Val(L)), convert(Matrix{Slink{T,E}}, i.slinks))
+Operator{Tv,L}(o::Operator) where {Tv,L} = 
+    Operator{Tv,L}(o.matrix, o.intra, o.inters, o.boundary)
 
-Lattice{T,E,L,EL}(l::Lattice) where {T,E,L,EL} = 
-    Lattice{T,E,L,EL}(l.sublats, l.bravais, l.links)
+Block{Tv,L}(b::Block) where {Tv,L} = 
+    Block{Tv,L}(b.ndist, b.matrix, b.sublatsdata, b.nlinks)
 
-LinkRule{S}(lr::LinkRule{AutomaticRangeLinking}) where S<:SimpleLinking = LinkRule(SimpleLinking(lr.alg.range), lr.sublats, lr.mincells, lr.maxsteps)
-LinkRule{T}(lr::LinkRule{AutomaticRangeLinking}) where T<:TreeLinking = LinkRule(TreeLinking(lr.alg.range), lr.sublats, lr.mincells, lr.maxsteps)
+Model{Tv}(m::Model) where {Tv} = Model{Tv}(m.terms...)
+promote_model(model::Model, sys::System{Tv}, systems...) where {Tv} = promote_model(Tv, model, systems...)
+promote_model(::Type{Tv}, model::Model, sys::System{Tv2}, systems...) where {Tv,Tv2} = promote_model(promote_type(Tv, Tv2), model, systems...)
+promote_model(::Type{Tv}, model::Model) where {Tv} = convert(Model{Tv}, model)

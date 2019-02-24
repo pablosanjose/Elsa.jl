@@ -6,27 +6,27 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
 import Base: convert, iterate, ==
 import SparseArrays: sparse!
 
-export LatticeDirective, Preset, Lattice, Sublat, Bravais, Supercell, LatticeConstant,
-       Dim, Region, LinkRule, TreeLinking, SimpleLinking, Precision
-export System, Model, Onsite, Hopping, Brillouin, Bandstructure
-export transform, transform!, lattice!, combine, wrap, mergesublats, hamiltonian, velocity, hamiltonian!, velocity!
+export Preset, Sublat, Bravais, systempresets, grow, combine, modifysublats!, transform, transform!
+export System, Model, Region, hopping, onsite, hamiltonian
+#export apply!, transform, transform!, lattice!, combine, wrap, combinesublats, hamiltonian, velocity, hamiltonian!, velocity!
 export @SMatrix, @SVector, SMatrix, SVector
 
-abstract type LatticeDirective end
-abstract type LatticePresets end
-abstract type ModelTerm end
+# const NameType = String
+# const nametype = string
+const NameType = Symbol
+const nametype = Symbol
 
-include("tools.jl")
 include("presets.jl")
-include("links.jl")
-include("iterators.jl")
 include("lattice.jl")
+include("operators.jl")
+include("iterators.jl")
 include("model.jl")
-include("blochoperator.jl")
 include("system.jl")
-include("mesh.jl")
-include("bandstructure.jl")
+include("system_methods.jl")
+# include("mesh.jl")
+# include("bandstructure.jl")
 include("convert.jl")
+include("tools.jl")
 
 # include("plot.jl")
 # @require Makie="ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a" include("plot.jl")
