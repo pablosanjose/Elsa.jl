@@ -23,25 +23,25 @@ convert(::Type{T}, l::Model) where T<:Model = T(l)
 
 # Constructors for conversion
 
-Sublat{T,E}(s::Sublat) where {T,E} = 
-    Sublat([padright(site, zero(T), Val(E)) for site in s.sites], s.norbitals, s.name)
+Sublat{E,T}(s::Sublat) where {E,T} = 
+    Sublat([padright(site, zero(T), Val(E)) for site in s.sites], s.name)
 
-Base.promote_rule(::Type{Sublat{T1,E1}}, ::Type{Sublat{T2,E2}}) where {T1,T2,E1,E2} = 
-    Sublat{promote_type(T1, T2), max(E1, E2)}
+Base.promote_rule(::Type{Sublat{E1,T1}}, ::Type{Sublat{E2,T2}}) where {E1,E2,T1,T2} = 
+    Sublat{max(E1, E2), promote_type(T1, T2)}
 
-Bravais{E,L}(b::Bravais) where {T,E,L} = 
+Bravais{E,L}(b::Bravais) where {E,L} = 
     Bravais(padrightbottom(b.matrix, SMatrix{E,L,Float64}))
 
-System{Tv,T,E,L}(s::System) where {Tv,T,E,L} = 
-    System(convert(Vector{Sublat{T,E}}, s.sublats), s.sublatsdata, Bravais{E,L}(s.bravais), Operator{Tv,L}(s.hamiltonian))
+System{E,L,T,Tv}(s::System) where {E,L,T,Tv} = 
+    System(convert(Lattice{E,L,T,Tv}, s.lattice), Operator{Tv,L}(s.hamiltonian))
 
 Operator{Tv,L}(o::Operator) where {Tv,L} = 
     Operator{Tv,L}(o.matrix, o.intra, o.inters, o.boundary)
 
 Block{Tv,L}(b::Block) where {Tv,L} = 
-    Block{Tv,L}(b.ndist, b.matrix, b.sublatsdata, b.nlinks)
+    Block{Tv,L}(b.ndist, b.matrix, b.sysinfo, b.nlinks)
 
 Model{Tv}(m::Model) where {Tv} = Model{Tv}(m.terms...)
-promote_model(model::Model, sys::System{Tv}, systems...) where {Tv} = promote_model(Tv, model, systems...)
-promote_model(::Type{Tv}, model::Model, sys::System{Tv2}, systems...) where {Tv,Tv2} = promote_model(promote_type(Tv, Tv2), model, systems...)
+promote_model(model::Model, sys::System{E,L,T,Tv}, systems...) where {E,L,T,Tv} = promote_model(Tv, model, systems...)
+promote_model(::Type{Tv}, model::Model, sys::System{E,L,T,Tv2}, systems...) where {Tv,E,L,T,Tv2} = promote_model(promote_type(Tv, Tv2), model, systems...)
 promote_model(::Type{Tv}, model::Model) where {Tv} = convert(Model{Tv}, model)

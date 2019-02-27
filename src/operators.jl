@@ -1,15 +1,108 @@
 #######################################################################
+# SystemInfo
+#######################################################################
+struct SystemInfo{Tv,S}
+    sampledterms::S
+    namesdict::Dict{NameType,Int}
+    names::Vector{NameType}
+    nsites::Vector{Int}
+    norbitals::Vector{Int}
+    dims::Vector{Int}
+    offsets::Vector{Int}    
+end
+SystemInfo{Tv}(terms::S, args...) where {Tv,S} = SystemInfo{Tv,S}(terms, args...)
+
+function SystemInfo(lat::Lattice{E,L,T}, model::Model{Tv}, prevsamples...) where {E,L,T,Tv}
+    ns = length(lat.sublats)
+    nsites = Vector{Int}(undef, ns)
+    namesdict = Dict{NameType,Int}()
+    names = Vector{NameType}(undef, ns)
+    zeropos = zero(SVector{E,T})
+    for (i, sublat) in enumerate(lat.sublats)
+        nsites[i] = length(sublat.sites)
+        namesdict[sublat.name] = i
+        names[i] = sublat.name
+    end
+    sampledterms = getsamples(namesdict, zeropos, model.terms...)
+    allterms = (prevsamples..., sampledterms...)
+    norbitals = zeros(Int, ns)
+    _fillorbitals!(norbitals, allterms...)
+    dims = zeros(Int, ns)
+    offsets = zeros(Int, ns + 1)
+    for i in eachindex(lat.sublats)
+        dims[i] = norbitals[i] * nsites[i]
+        offsets[i + 1] = offsets[i] + dims[i]
+    end
+    return SystemInfo{Tv}(allterms, namesdict, names, nsites, norbitals, dims, offsets)
+end
+getsamples(namesdict, zeropos) = ()
+getsamples(namesdict, zeropos, term, terms...) = 
+    (_getsamples(namesdict, zeropos, term), getsamples(namesdict, zeropos, terms...)...)
+_getsamples(namesdict, zeropos, term) = 
+    (term, term(zeropos, zeropos), _getsublats(namesdict, term.sublats))
+
+_getsublats(namesdict, s::Missing) = s
+_getsublats(namesdict, s::NTuple{N,Any}) where {N} = 
+    ntuple(i -> (sublatindex(namesdict, first(s[i])), 
+                 sublatindex(namesdict, last(s[i]))), Val(N))
+
+_fillorbitals!(norbitals) = nothing
+function _fillorbitals!(norbitals, sample::Tuple, samples...) 
+    _fillorbitals!(norbitals, sample...) 
+    _fillorbitals!(norbitals, samples...)
+end
+function _fillorbitals!(norbitals, term, ::SMatrix{N,M}, ::Missing) where {N,M} 
+    N == M ? fill!(norbitals, N) : throw(DimensionMismatch("Inconsitent model orbital dimensions"))
+    return nothing
+end
+_fillorbitals!(norbitals, term, sm::SMatrix, ss::NTuple{N,Tuple{Int,Int}}) where {N} = 
+    foreach(s -> _fillorbitals!(norbitals, sm, s), ss)
+_fillorbitals!(norbitals, ::SMatrix{N,M}, (s1, s2)::Tuple{Int,Int}) where {N,M} = 
+    (_fillorbitals!(norbitals, Val(N), s1); _fillorbitals!(norbitals, Val(M), s2))
+function _fillorbitals!(norbitals, ::Val{N}, s) where {N}
+    0 < s <= length(norbitals) || return nothing
+    if norbitals[s] == 0
+        norbitals[s] = N
+    elseif norbitals[s] != N 
+        throw(DimensionMismatch("Inconsitent model orbital dimensions"))
+    end
+    return nothing
+end
+
+sublatindex(s::SystemInfo, name) = sublatindex(s.namesdict, name)
+sublatindex(d::Dict, name::NameType) = d[name]
+sublatindex(s::Dict, i::Integer) = Int(i)
+# Base.keys(s::SystemInfo) = keys(s.nsites)
+
+function tosite(row, sysinfo)
+    s = findsublat(row, sysinfo.offsets)
+    offset = sysinfo.offsets[s]
+    norbs = sysinfo.norbitals[s]
+    delta = row - offset
+    return div(delta, norbs), rem(delta, norbs), s
+end
+
+torow(siteindex, s, sysinfo) = 
+    sysinfo.offsets[s] + (siteindex - 1) * sysinfo.norbitals[s] + 1
+
+function findsublat(row, offsets)
+    for n in eachindex(offsets)
+        offsets[n] >= row && return n - 1
+    end
+    return 0
+end
+
+#######################################################################
 # Operator
 #######################################################################
-struct Block{Tv,L}
+mutable struct Block{Tv,L}
     ndist::SVector{L,Int}
     matrix::SparseMatrixCSC{Tv,Int}
-    sublatsdata::SublatsData   # alias of parent System's
-    nlinks::Ref{Int}
+    nlinks::Int
 end
-function Block(ndist, matrix, sublatsdata)
-    b = Block(ndist, matrix, sublatsdata, Ref(0))
-    isempty(b) || updatenlinks!(b)
+function Block(ndist, matrix, sysinfo::SystemInfo)
+    b = Block(ndist, matrix, 0)
+    isempty(matrix) || updatenlinks!(b, sysinfo)
     return b
 end
 Base.isempty(b::Block) = isempty(b.matrix)
@@ -26,38 +119,37 @@ struct Operator{Tv,L}
 end
 
 function Operator{Tv,L}(n::Int) where {Tv,L} 
-    sublatsdata = SublatsData()
     return Operator(
         spzeros(n,n), 
-        Block{Tv,L}(zero(SVector{L,Int}), n, sublatsdata),  
+        Block{Tv,L}(zero(SVector{L,Int}), n),  
         Block{Tv,L}[],
         Tuple{Int,Int}[])
 end
 
-function Base.show(io::IO, op::Operator{Tv,L}) where {Tv,L}
-    print(io, "Operator{$Tv,$L}: Bloch operator of dimensions $(size(op.matrix)) with $(nnz(op.matrix)) elements in main matrix")
+function Base.show(io::IO, op::Operator{L,Tv}) where {L,Tv}
+    print(io, "Operator{$L,$Tv}: Bloch operator of dimensions $(size(op.matrix)) with $(nnz(op.matrix)) elements in main matrix")
 end
 
 #######################################################################
 # Operator API
 #######################################################################
 
-# nlinksunique(o::Operator) = nlinks(o.intra)÷2 + sum(nlinks, o.inters)
 nlinks(o::Operator) = nlinks(o.intra) + (isempty(o.inters) ? 0 : sum(nlinks, o.inters))
-nlinks(b::Block) = b.nlinks[]
-nsublats(b::Block) = nsublats(b.sublatsdata)
+nlinks(b::Block) = b.nlinks
+nsublats(b::Block) = nsublats(b.sysinfo)
 
-function updatenlinks!(b::Block) 
+function updatenlinks!(b::Block, sysinfo) 
     n = 0
     zeron = iszero(b.ndist)
-    for (_, (target, source), (row, col), _) in BlockIterator(b)
+    for (_, (target, source), (row, col), _) in BlockIterator(b, sysinfo)
         (!zeron || row != col) && (n += 1)
     end
-    b.nlinks[] = n
-    return b
+    b.nlinks = n
+    return nothing
 end
 
-insertblochphases!(o::Operator{Tv}, kn) where {Tv<:AbstractFloat} = throw(DomainError(T, "Cannot apply Bloch phases to a real Hamiltonian."))
+insertblochphases!(o::Operator{Tv}, kn) where {Tv<:AbstractFloat} = 
+    throw(DomainError(Tv, "Cannot apply Bloch phases to a real Hamiltonian."))
 function insertblochphases!(op::Operator{Tv}, kn) where {Tv}
     rows = rowvals(op.matrix)
     vals = nonzeros(op.matrix)
