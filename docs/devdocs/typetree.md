@@ -5,8 +5,8 @@ The `Lattice` type contains site positions of type `T` defined in `E`-dimensiona
 ```julia
 struct Lattice{T,E,L,EL}
     name::String
-    bravais::Bravais{T, E, L, EL}
-        matrix::SMatrix{E, L, T, EL}
+    bravais::Bravais{E, L, EL}
+        matrix::SMatrix{E, L,Float64, EL}
     sublats::Vector{Sublat{T,E}}
         name::String
         sites::Vector{Svector{E,T}}
@@ -22,10 +22,10 @@ struct Lattice{T,E,L,EL}
 ```
 
 
-The `System` type bundles a `Lattice`, a `Model` and a `BlochOperator` computed from the former two.
+The `System` type bundles a `Lattice`, a `Model` and a `Operator` computed from the former two.
 
 ```julia
-struct System{T,E,L,EL,A}
+struct System{E,L,T,Tv,EL,A}
     lattice::Lattice{T,E,L,EL}
     model::Model{OS<:Tuple, HS<:Tuple, O, H}
         onsites::OS         # Tuple of onsites
@@ -36,7 +36,7 @@ struct System{T,E,L,EL,A}
         defonsite::O        # default onsite, specified with Onsite(o) instead of Onsite(n, o)
         defhopping::H       # default hopping, specified with Hopping(h) instead of Hopping((n,m), h)
         defdim::Int         # site dimension of default onsite/hopping
-    h::BlochOperator{T,L}
+    h::Operator{T,L}
         I::Vector{Int}              # row indices, including intercell elements
         J::Vector{Int}              # column indices, including intercell elements
         V::Vector{T}                # matrix elements, including intercell elements with zero momentum
@@ -44,6 +44,6 @@ struct System{T,E,L,EL,A}
         Vn::Vector{Vector{T}}       # intercell matrix elements, to be copied to V with specific Bloch phases
         ndist::Vector{SVector{L, Int}}  # integer distance of different cells
         worskspace::SparseWorkspace{T}  # scratch matrices to be reused when updating h
-        h::SparseMatrixCSC{Complex{T},Int}  # Preallocated BlochOperator sparse matrix h
+        h::SparseMatrixCSC{Complex{T},Int}  # Preallocated Operator sparse matrix h
 end
 ```

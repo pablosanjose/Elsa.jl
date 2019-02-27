@@ -127,11 +127,11 @@ struct BandSampling{T<:Real,L}
 end
 
 function BandSampling(hfunc::Function, dimh, lat::Lattice{T,E,L}, vfunc; levels = missing, degtol = sqrt(eps()), randomshift = missing, kw...) where {T,E,L}
-    shift = ismissing(randomshift) ? zero(SVector{E,T}) : randomshift * rand(SVector{E,T})
+    shift = randomshift === missing ? zero(SVector{E,T}) : randomshift * rand(SVector{E,T})
     points = lat.sublats[1].sites
     npoints = length(points)
 
-    nenergies = ismissing(levels) ? dimh : 2
+    nenergies = levels === missing ? dimh : 2
     statelength = dimh
 
     preallocH = Matrix{Complex{T}}(undef, (dimh, dimh))
@@ -156,7 +156,7 @@ function BandSampling(hfunc::Function, dimh, lat::Lattice{T,E,L}, vfunc; levels 
 end
 
 function spectrum(h::SparseMatrixCSC, preallocH; levels = 2, method = missing, kw...)
-    if method === :exact || ismissing(method) && (size(h, 1) < 129 || levels/size(h,1) > 0.2)
+    if method === :exact || method === missing && (size(h, 1) < 129 || levels/size(h,1) > 0.2)
         s = spectrum_dense(h, preallocH; levels = levels, kw...)
     elseif method === :arnoldi
         s = spectrum_arpack(h; levels = levels, kw...)
@@ -253,40 +253,40 @@ function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}
 end
 
 #######################################################################
-# Bandstructure
+# Spectrum
 #######################################################################
 
-struct Bandstructure{T,N,L,NL}  # E = N = L + 1 (nodes are [Blochphases..., energy])
+struct Spectrum{T,N,L,NL}  # E = N = L + 1 (nodes are [Blochphases..., energy])
     bands::Mesh{T,N,L,N,NL}
     states::Matrix{Complex{T}}
     nenergies::Int
     npoints::Int
 end
 
-Base.show(io::IO, bs::Bandstructure{T,N,L}) where {T,N,L} =
-    print(io, "Bandstructure{$T,$N,$L} of type $T for $L-dimensional lattice
+Base.show(io::IO, bs::Spectrum{T,N,L}) where {T,N,L} =
+    print(io, "Spectrum{$T,$N,$L}: type $T for $L-dimensional lattice
     Number of k-points    : $(bs.npoints)
     Number of eigenvalues : $(bs.nenergies)
     Size of state vectors : $(size(bs.states, 1))")
 
-Bandstructure(sys::System; uniform = false, partitions = 5, kw...) =
-    Bandstructure(sys, Brillouin(sys.lattice; uniform = uniform, partitions = partitions); kw...)
-Bandstructure(sys::System{T,E,L}, brillouin::Brillouin{T,L}; kw...) where {T,E,L} =
-    Bandstructure(kn -> hamiltonian!(sys, kn = kn), hamiltoniandim(sys), brillouin.lattice;
+Spectrum(sys::System; uniform = false, partitions = 5, kw...) =
+    Spectrum(sys, Brillouin(sys.lattice; uniform = uniform, partitions = partitions); kw...)
+Spectrum(sys::System{E,L}, brillouin::Brillouin{T,L}; kw...) where {E,L} =
+    Spectrum(kn -> hamiltonian!(sys, kn = kn), hamiltoniandim(sys), brillouin.lattice;
                   velocity = (kn, axis) -> velocity!(sys, kn = kn, axis = axis), kw...)
-Bandstructure(hfunc::Function, lat::Lattice{T,E}; kw...) where {T,E} =
-    Bandstructure(hfunc, hamiltoniandim(hfunc(zero(SVector{E,T}))), lat; kw...)
-Bandstructure(hfunc::Function, ranges::AbstractVector...; kw...) =
-    Bandstructure(hfunc, cartesianlattice(ranges...); kw...)
+Spectrum(hfunc::Function, lat::Lattice{T,E}; kw...) where {T,E} =
+    Spectrum(hfunc, hamiltoniandim(hfunc(zero(SVector{E,T}))), lat; kw...)
+Spectrum(hfunc::Function, ranges::AbstractVector...; kw...) =
+    Spectrum(hfunc, cartesianlattice(ranges...); kw...)
 
 
-function Bandstructure(hfunc::Function, hdim, lat::Lattice; velocity = missing, linkthreshold = 0.5, kw...)
+function Spectrum(hfunc::Function, hdim, lat::Lattice; velocity = missing, linkthreshold = 0.5, kw...)
     isunlinked(lat) && throw(ErrorException("The band sampling lattice is not linked"))
     bandsampling = BandSampling(hfunc, hdim, lat, velocity; kw...)
     bandslat = bandslattice(lat, bandsampling, linkthreshold)
     states = reshape(bandsampling.states, bandsampling.statelength, :)
     bandsmesh = Mesh(bandslat)
-    return Bandstructure(bandsmesh, states, bandsampling.nenergies, bandsampling.npoints)
+    return Spectrum(bandsmesh, states, bandsampling.nenergies, bandsampling.npoints)
 end
 
 function bandslattice(lat::Lattice{T,E,L}, bandsampling, linkthreshold) where {T,E,L}

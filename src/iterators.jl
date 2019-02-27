@@ -1,24 +1,23 @@
 #######################################################################
 # BoxIterator
 #######################################################################
-
 struct BoxRegister{N}
-    cellinds::Vector{Tuple{NTuple{N,Int}, Int}}
+    cellinds::Vector{Tuple{SVector{N,Int}, Int}}
 end
 
 BoxRegister{N}() where N = BoxRegister(Tuple{NTuple{N,Int}, Int}[])
 
 """
-    BoxIterator(seed::NTuple{N,Int}; maxiterations = missing, nregisters = 0)
+    BoxIterator(seed::SVector{N,Int}; maxiterations = missing, nregisters = 0)
 
-Cartesian iterator `iter` over N-tuples of integers (`cell`s) that starts at `seed` and
-grows outwards in the form of a box of increasing sides (not necesarily equal) until it
-encompasses a certain N-dimensional region. The field `iter.monitor::Bool` is used by
-the user at each iteration to signal whether the current `cell` is inside the region.
-The option `nregisters = n` creates `n` `BoxRegister`s that store `(cell, index)`
+Cartesian iterator `iter` over `SVector{N,Int}`s (`cell`s) that starts at `seed` and
+grows outwards in the form of a box of increasing sides (not necesarily equal) until 
+it encompasses a certain N-dimensional region. To signal that a cell is in the desired 
+region the user calls `acceptcell!(iter, cell)`.  The option `nregisters = n` creates `n` 
+`BoxRegister`s that store `(cell, index)`
 """
 struct BoxIterator{N}
-    seed::NTuple{N,Int}
+    seed::SVector{N,Int}
     maxiter::Union{Int, Missing}
     dimdir::MVector{2,Int}
     nmoves::MVector{N,Bool}
@@ -30,12 +29,12 @@ end
 
 Base.IteratorSize(::BoxIterator) = Base.SizeUnknown()
 Base.IteratorEltype(::BoxIterator) = Base.HasEltype()
-Base.eltype(::BoxIterator{N}) where {N} = NTuple{N,Int}
-boundingboxiter(b::BoxIterator) = (b.npos, b.ppos)
+Base.eltype(::BoxIterator{N}) where {N} = SVector{N,Int}
+boundingboxiter(b::BoxIterator) = (Tuple(b.npos), Tuple(b.ppos))
 
-function BoxIterator(seed::NTuple{N}; maxiterations::Union{Int,Missing} = missing, nregisters::Int = 0) where {N}
+function BoxIterator(seed::SVector{N}; maxiterations::Union{Int,Missing} = missing, nregisters::Int = 0) where {N}
     BoxIterator(seed, maxiterations, MVector(1, 2),
-        ones(MVector{N,Bool}), ones(MVector{N,Bool}), MVector(seed), MVector(seed),
+        ones(MVector{N,Bool}), ones(MVector{N,Bool}), MVector{N,Int}(seed), MVector{N,Int}(seed),
         nregisters > 0 ? [BoxRegister{N}() for i in 1:nregisters] : BoxRegister{N}[])
 end
 
@@ -57,6 +56,9 @@ struct BoxIteratorState{N}
     iteration::Int
 end
 
+Base.iterate(b::BoxIterator{0}) = (SVector{0,Int}(), nothing)
+Base.iterate(b::BoxIterator{0}, state) = nothing
+
 function Base.iterate(b::BoxIterator{N}) where {N}
     range = CartesianIndices(ntuple(i -> b.seed[i]:b.seed[i], Val(N)))
     itrange = iterate(range)
@@ -64,7 +66,7 @@ function Base.iterate(b::BoxIterator{N}) where {N}
         return nothing
     else
         (cell, rangestate) = itrange
-        return (cell.I, BoxIteratorState(range, rangestate, 1))
+        return (SVector(cell.I), BoxIteratorState(range, rangestate, 1))
     end
 end
 
@@ -83,11 +85,11 @@ function Base.iterate(b::BoxIterator{N}, s::BoxIteratorState{N}) where {N}
             itrange = iterate(newrange)
             # itrange === nothing && return nothing
             (cell, rangestate) = itrange
-            return (cell.I, BoxIteratorState(newrange, rangestate, s.iteration + 1))
+            return (SVector(cell.I), BoxIteratorState(newrange, rangestate, s.iteration + 1))
         end
     else
         (cell, rangestate) = itrange
-        return (cell.I, BoxIteratorState(s.range, rangestate, s.iteration + 1))
+        return (SVector(cell.I), BoxIteratorState(s.range, rangestate, s.iteration + 1))
     end
 end
 
@@ -152,67 +154,13 @@ function acceptcell!(b::BoxIterator{N}, cell) where {N}
     end
     return nothing
 end
+# Fallback for non-BoxIterators
+acceptcell!(b, cell) = nothing 
 
 function registersite!(iter, cell, sublat, idx)
     push!(iter.registers[sublat].cellinds, (cell, idx))
     return nothing
 end
-
-#######################################################################
-# NeighborIterator
-#######################################################################
-
-mutable struct NeighborIterator{L}
-    l::L
-    src::Int
-    s1::Int
-    s2::Int
-end
-Base.IteratorSize(::NeighborIterator) = Base.HasLength()
-Base.IteratorEltype(::NeighborIterator) = Base.HasEltype()
-Base.eltype(::NeighborIterator) = Int
-Base.length(ni::NeighborIterator{<:Ilink}) = numneighbors(ni, 0)
-function Base.length(ni::NeighborIterator{<:Links})
-    l = numneighbors(ni, 0)
-    for nilink in 1:ninterlinks(ni.l)
-        l += numneighbors(ni, nilink)
-    end
-    return l
-end
-Base.size(ni::NeighborIterator) = (length(ni),)
-
-numneighbors(ni::NeighborIterator, nlink) = length(nzrange(slink(ni, nlink).rdr, ni.src))
-
-slink(ni::NeighborIterator{<:Links}, nilink) = iszero(nilink) ? ni.l.intralink.slinks[ni.s2, ni.s1] : ni.l.interlinks[nilink].slinks[ni.s2, ni.s1]
-slink(ni::NeighborIterator{<:Ilink}, nilink) = ni.l.slinks[ni.s2, ni.s1]
-maxilinkindex(ni::NeighborIterator{<:Links}) = ninterlinks(ni.l)
-maxilinkindex(ni::NeighborIterator{<:Ilink}) = 0
-
-function iterate(ni::NeighborIterator{<:Links}, state = (0, 1))
-    (nilink, ptr) = state
-    nilink > maxilinkindex(ni) && return nothing
-    s = slink(ni, nilink)
-    range = nzrange(s.rdr, ni.src)
-    ptr > length(range) && return iterate(ni, (nilink + 1, 1))
-    targets = rowvals(s.rdr)
-    return (targets[range[ptr]], (nilink, ptr + 1))
-end
-function iterate(ni::NeighborIterator{<:Ilink}, state = (0, 1, slink(ni, 0)))
-    (nilink, ptr, s) = state
-    range = nzrange(s.rdr, ni.src)
-    targets = rowvals(s.rdr)
-    ptr > length(range) ? nothing : @inbounds (targets[range[ptr]], (nilink, ptr + 1, s))
-end
-
-NeighborIterator(l::Links, src, sublats, onlyintra::Val{true}) =  NeighborIterator(l.intralink, src, sublats)
-NeighborIterator(l::Links, src, sublats, onlyintra::Val{false}) =  NeighborIterator(l, src, sublats)
-NeighborIterator(l, src, (s1,s2)::Tuple{Int,Int}) = NeighborIterator(l, src, s1, s2)
-
-neighbors!(ni::NeighborIterator, src) = (ni.src = src; return ni)
-neighbors(p...) = NeighborIterator(p...)
-
-neighbors_rdr(s::Slink, src) = ((rowvals(s.rdr)[j], nonzeros(s.rdr)[j]) for j in nzrange(s.rdr, src))
-neighbors_rdr(s::Slink) = zip(s.rdr.rowval, s.rdr.nzval)
 
 #######################################################################
 # SparseMatrixBuilder
@@ -228,23 +176,44 @@ mutable struct SparseMatrixBuilder{T}
     rowvalcounter::Int
 end
 
-function SparseMatrixBuilder(::Type{T}, m, n, coordinationhint = 1) where T
+function SparseMatrixBuilder{Tv}(m, n, coordinationguess = 0) where Tv
     colptr = Vector{Int}(undef, n + 1)
     colptr[1] = 1
-    rowval = Int[]; sizehint!(rowval, round(Int, 0.5 * coordinationhint * n))
-    nzval = T[];    sizehint!(nzval,  round(Int, 0.5 * coordinationhint * n))
-    # The 0.5 is due to storing undirected links only
+    rowval = Int[]
+    nzval = Tv[]
+    if !iszero(coordinationguess)
+        sizehint!(rowval, 2 * coordinationguess * m)
+        sizehint!(nzval, 2 * coordinationguess * m)
+    end
     return SparseMatrixBuilder(m, n, colptr, rowval, nzval, 1, 1)
 end
+SparseArrays.nzrange(S::SparseMatrixBuilder, col::Integer) = 
+    S.colptr[col]:(S.colptr[col+1]-1)
+SparseArrays.rowvals(S::SparseMatrixBuilder) = S.rowval
+SparseArrays.nonzeros(S::SparseMatrixBuilder) = S.nzval
+Base.size(S::SparseMatrixBuilder) = (S.n, S.m)
+Base.size(S::SparseMatrixBuilder, k) = size(S)[k]
 
-function pushtocolumn!(s::SparseMatrixBuilder, row, x, skipdupcheck = true)
+function pushtocolumn!(s::SparseMatrixBuilder, row::Int, x, skipdupcheck::Bool = true)
     if skipdupcheck || !isintail(row, s.rowval, s.colptr[s.colcounter])
         push!(s.rowval, row)
         push!(s.nzval, x)
         s.rowvalcounter += 1
     end
-    return x
+    return s
 end
+
+# pushtocolumn!(s::SparseMatrixBuilder, rows::AbstractArray, xs::AbstractArray) = 
+#     pushtocolumn!(s, rows, xs, eachindex(rows))
+# function pushtocolumn!(s::SparseMatrixBuilder, rows::AbstractArray, xs::AbstractArray, range)
+#     n = length(range)
+#     Base._growend!(s.rowval, n)
+#     copyto!(s.rowval, length(s.rowval)-n+1, rows, first(range), n)
+#     Base._growend!(s.nzval, n)
+#     copyto!(s.nzval, length(s.nzval)-n+1, xs, first(range), n)
+#     s.rowvalcounter += n
+#     return s
+# end
 
 function isintail(element, container, start::Int)
     for i in start:length(container)
@@ -257,6 +226,13 @@ function finalisecolumn!(s::SparseMatrixBuilder)
     s.colcounter > s.n && throw(DimensionMismatch("Pushed too many columns to matrix"))
     s.colcounter += 1
     s.colptr[s.colcounter] = s.rowvalcounter
+    return nothing
+end
+
+function finalisecolumn!(s::SparseMatrixBuilder, ncols)
+    for _ in 1:ncols
+        finalisecolumn!(s)
+    end
     return nothing
 end
 
@@ -273,13 +249,13 @@ end
 # SparseMatrixReader
 #######################################################################
 
-struct SparseMatrixReader{T,TI}
-    matrix::SparseMatrixCSC{T,TI}
+struct SparseMatrixReader{Tv,Ti}
+    matrix::SparseMatrixCSC{Tv,Ti}
 end
 
 Base.IteratorSize(::SparseMatrixReader) = Base.HasLength()
 Base.IteratorEltype(::SparseMatrixReader) = Base.HasEltype()
-Base.eltype(::SparseMatrixReader{T,TI}) where {T,TI} = Tuple{TI,TI,T}
+Base.eltype(::SparseMatrixReader{Tv,Ti}) where {Tv,Ti} = Tuple{Ti,Ti,Tv}
 Base.length(s::SparseMatrixReader) = nnz(s.matrix)
 
 function iterate(s::SparseMatrixReader, state = (1, 1))
@@ -292,3 +268,58 @@ function iterate(s::SparseMatrixReader, state = (1, 1))
 end
 
 enumerate_sparse(s::SparseMatrixCSC) = SparseMatrixReader(s)
+
+#######################################################################
+# BlockIterator
+#######################################################################
+struct BlockIterator{B<:Block,S<:SystemInfo}
+    block::B
+    sysinfo::S
+end
+
+# returns ((s1, s2), (target, source), (row, col), boxsize, ptr), one per box (site pair), 
+# where boxsize is (N,M) for orbitals in site pair
+function Base.iterate(blockiter::BlockIterator, state = (1, nextcolumn(blockiter)))
+    block = blockiter.block
+    sysinfo = blockiter.sysinfo
+    (ptr, col) = state
+    if col === 0 || !checkbounds(Bool, rowvals(block.matrix), ptr)
+        return nothing
+    else
+        row = rowvals(block.matrix)[ptr]
+        s1 = findsublat(row, sysinfo.offsets)
+        s2 = findsublat(col, sysinfo.offsets)
+        (iszero(s1) || iszero(s2)) && throw(
+            ErrorException("Unexpected row/col ($row, $col) out of offset range"))
+        (n, m) = sysinfo.norbitals[s1], sysinfo.norbitals[s2]
+        rangecol = nzrange(block.matrix, col)
+        newptr = ptr + n
+        if newptr > maximum(rangecol) 
+            newcol = nextcolumn(blockiter, col)
+            newptr += length(rangecol) * (m - 1)
+        else
+            newcol = col
+        end
+        targetsite = 1 + (row - 1 - sysinfo.offsets[s1]) ÷ n
+        sourcesite = 1 + (col - 1 - sysinfo.offsets[s2]) ÷ m
+        return ((s1, s2), (targetsite, sourcesite), (row, col), (n, m), ptr), 
+               (newptr, newcol)
+    end
+end
+nextcolumn(blockiter) = 
+    isempty(nzrange(blockiter.block.matrix, 1)) ? nextcolumn(blockiter, 1) : 1
+function nextcolumn(blockiter, col)
+    c = col
+    while true
+        s = findsublat(c, blockiter.sysinfo.offsets)
+        iszero(s) && break
+        c += blockiter.sysinfo.norbitals[s]
+        c > size(blockiter.block.matrix, 2) && break
+        isempty(nzrange(blockiter.block.matrix, c)) || return c
+    end
+    return 0
+end
+Base.IteratorSize(::BlockIterator) = Base.SizeUnknown()
+Base.IteratorEltype(::BlockIterator) = Base.HasEltype()
+Base.eltype(::BlockIterator) = 
+    Tuple{Tuple{Int,Int},Tuple{Int,Int},Tuple{Int,Int},Tuple{Int,Int},Int}

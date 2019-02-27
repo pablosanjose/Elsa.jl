@@ -1,20 +1,20 @@
 ### Introduction
 
-Green functions will be built from generic `Bandstructure`s or from `System`s. In the latter case, if the system is 1D, we can resort to traditional generalised eigenvalue methods. Also, iterative matrix-free methods could be invoked. But in the case of getting a `Bandstructure` we drop to the much more powerful interpolated methods. This issue describes some design ideas for the latter.
+Green functions will be built from generic `Spectrum`s or from `System`s. In the latter case, if the system is 1D, we can resort to traditional generalised eigenvalue methods. Also, iterative matrix-free methods could be invoked. But in the case of getting a `Spectrum` we drop to the much more powerful interpolated methods. This issue describes some design ideas for the latter.
 
-A `Bandstructure` is essentially a `Mesh` and a `state` at each mesh node. The `N`-dimensional nodes `(parameters..., energy)` are part of a `Lattice`, that together with a collection of `Elements` (`N`-simplices of nodes) form the `Mesh`. The `parameters` are typically Bloch momenta (periodic), but can be any other system parameter (periodic or otherwise) that are used for interpolation of energies and states.
+A `Spectrum` is essentially a `Mesh` and a `state` at each mesh node. The `N`-dimensional nodes `(parameters..., energy)` are part of a `Lattice`, that together with a collection of `Elements` (`N`-simplices of nodes) form the `Mesh`. The `parameters` are typically Bloch momenta (periodic), but can be any other system parameter (periodic or otherwise) that are used for interpolation of energies and states.
 ```julia
 struct Mesh{T,E,L,N,EL}
     lattice::Lattice{T,E,L,EL}
     elements::Elements{N}
 end
-struct Bandstructure{T,N,L,NL}
+struct Spectrum{T,N,L,NL}
     bands::Mesh{T,N,L,N,NL}
     states::Matrix{Complex{T}}
 end
 ```
 
-To evaluate the Green function at a given energy we employ the analytic formulae for the integral of the resolvent in linear simplices. Now, the integral is performed *only* on the Bloch momenta, so we need a way to enconde which of the `N` dimensions of `lattice` elements we have to integrate over. One way is to have that be part of the `Bandstructure`, but it's perhaps more flexible to pass that as a parameter to `GreenFunction(bands, blochdims = (1,2,3))`, where `blochdims` are the dimension to integrate over.
+To evaluate the Green function at a given energy we employ the analytic formulae for the integral of the resolvent in linear simplices. Now, the integral is performed *only* on the Bloch momenta, so we need a way to enconde which of the `N` dimensions of `lattice` elements we have to integrate over. One way is to have that be part of the `Spectrum`, but it's perhaps more flexible to pass that as a parameter to `GreenFunction(bands, blochdims = (1,2,3))`, where `blochdims` are the dimension to integrate over.
 
 Should we make GreenFunction a type with some precomputation, and then compute its value at different energies and values of non-intergrated dimensions? What valuable precomputation can be performed?
 
