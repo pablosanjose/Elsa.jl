@@ -4,7 +4,7 @@
 """
     System(sublats::Sublat... [, br::Bravais[, model::Model]]; dim::Val, postype, hamtype)
 
-Build a `System{Tv,T,E,L}` of `L` dimensions in `E`-dimensional embedding
+Build a `System{E,L,T,Tv}` of `L` dimensions in `E`-dimensional embedding
 space and composed of `T`-typed sites and `Tv`-typed Hamiltonian. See
 `Sublat`, `Bravais` and `Model` for syntax.  To indicate a specific embedding 
 dimension `E`, use keyword `dim = Val(E)`. Similarly override types `T` and `Tv` 
@@ -23,11 +23,11 @@ but replacing its Hamiltonian with a new `model`.
 
 # Examples
 ```jldoctest
-julia> System(Sublat((1,0), (0,1); name = "C", norbitals = 2), 
-              Sublat((0.5,0.5); name = "D"), 
+julia> System(Sublat((1,0), (0,1); name = :C, norbitals = 2), 
+              Sublat((0.5,0.5); name = :D), 
               Bravais((1,0), (0,2)),
-              Model(hopping((r,dr) -> @SMatrix[0.1; dr[1]], sublats = (:C, :D), range = 1)))
-System{Complex{Float64},Float64,2,2} : 2D system in 2D space
+              Model(Hopping((r,dr) -> @SMatrix[0.1; dr[1]], sublats = (:C, :D), range = 1)))
+System{2,2,Float64,Complex{Float64}} : 2D system in 2D space
   Bravais vectors     : ((1.0, 0.0), (0.0, 2.0))
   Sublattice names    : (:C, :D)
   Sublattice orbitals : (2, 1)
@@ -35,9 +35,9 @@ System{Complex{Float64},Float64,2,2} : 2D system in 2D space
   Total hoppings      : 8 [Complex{Float64}]
   Coordination        : 2.6666666666666665
 
-julia> System(:honeycomb, Model(hopping(@SMatrix[1 2; 0 1], sublats = (1,2))), 
+julia> System(:honeycomb, Model(Hopping(@SMatrix[1 2; 0 1], sublats = (1,2))), 
               dim = Val(3), htype = Float32, norbitals = 2)
-System{Float32,Float64,3,2} : 2D system in 3D space
+System{3,2,Float64,Float32} : 2D system in 3D space
   Bravais vectors     : ((0.5, 0.866025, 0.0), (-0.5, 0.866025, 0.0))
   Sublattice names    : (:A, :B)
   Sublattice orbitals : (2, 2)
@@ -48,81 +48,86 @@ System{Float32,Float64,3,2} : 2D system in 3D space
 julia> Tuple(keys(Elsa.systempresets))
 (:bcc, :cubic, :honeycomb, :linear, :graphene_bilayer, :square, :triangular)
 ```
+
+# See also:
+
+    `Model`, `Onsite`, `Hopping`, `grow`, `transform`, `combine`
 """
-mutable struct System{Tv,T,E,L,EL,S<:Operator{Tv,L}}
-    sublats::Vector{Sublat{T,E}}
-    sublatsdata::SublatsData
-    bravais::Bravais{E,L,EL}
-    hamiltonian::S
+struct System{E,L,T,Tv,S<:SystemInfo,EL}
+    lattice::Lattice{E,L,T,EL}
+    hamiltonian::Operator{Tv,L}
+    sysinfo::S
 end
 
-System(s1::Sublat, s2...; kw...) = ((ss, args) = collectfirst(s1, s2...); System([promote(ss...)...], args...; kw...))
-System(sublats::Vector{Sublat{T,E}}, model::Model; kw...) where {T,E} = System(sublats, Bravais{E}(), model; kw...)
+System(s1::Sublat, s2...; kw...) = System(_collectlattice((s1,), s2...)...; kw...)
+_collectlattice(ss::Tuple, s1::Sublat, s2...) = _collectlattice((ss..., s1), s2...)
+_collectlattice(ss::Tuple, b::Bravais, m::Model = Model()) = ((b, ss...), m)
+_collectlattice(ss::Tuple, m::Model = Model()) = (ss, m)
+System(latparts::Tuple, m::Model; kw...) = System(Lattice(latparts...; kw...), m; kw...)
 
-function System(sublats::Vector{Sublat{T,E}}, bravais::Bravais{E,L} = Bravais{E}(), model::Model{Tv} = Model(); 
-                dim::Val{E2} = Val(E), ptype::Type{T2} = T, htype::Type{Tv2} = Tv, kw...) where {Tv,T,E,L,Tv2,T2,E2}
-    sdata = SublatsData(sublats)
-    return convert(System{Tv2,T2,E2,L}, System(sublats, sdata, bravais, 
-                   Operator{Tv2}(sublats, sdata, bravais, model)))
+function System(lat::Lattice{E,L,T}, model::Model{Tv} = Model(); 
+                htype::Type{Tv2} = Tv, kw...) where {E,L,T,Tv,Tv2}
+    actualmodel = convert(Model{Tv2}, model)
+    sysinfo = SystemInfo(lat, actualmodel)
+    return System(lat, Operator(lat, sysinfo), sysinfo)
 end
 
 System(name::NameType; kw...) = systempresets[name](; kw...)
 System(name::NameType, model::Model; kw...) = combine(System(name; kw...), model)
 
-System(sys::System{Tv}, model::Model; kw...) where {Tv} = 
-    System(sys.sublats, sys.bravais, convert(Model{Tv}, model); kw...)
+System(sys::System{E,L,T,Tv}, model::Model; kw...) where {E,L,T,Tv} = System(sys.lattice, convert(Model{Tv}, model); kw...)
 
-Base.show(io::IO, sys::System{Tv,T,E,L}) where {Tv,T,E,L} = print(io, 
-"System{$Tv,$T,$E,$L} : $(L)D system in $(E)D space
+Base.show(io::IO, sys::System{E,L,T,Tv}) where {E,L,T,Tv} = print(io, 
+"System{$E,$L,$T,$Tv} : $(L)D system in $(E)D space
   Bravais vectors     : $(vectorsastuples(sys))
   Sublattice names    : $((sublatnames(sys)... ,))
   Sublattice orbitals : $((norbitals(sys)... ,))
   Total sites         : $(nsites(sys)) [$T]
   Total hoppings      : $(nlinks(sys)) [$Tv]
-  Coordination        : $(coordination(sys))")  
+  Coordination        : $(coordination(sys))")
 
 #######################################################################
 # System internal API
 #######################################################################
 
-vectorsastuples(sys::System) = vectorsastuples(sys.bravais.matrix)
-vectorsastuples(br::Bravais) =  vectorsastuples(br.matrix)
+vectorsastuples(sys::System) = vectorsastuples(sys.lattice.bravais.matrix)
 vectorsastuples(mat::SMatrix{E,L}) where {E,L} = ntuple(l -> round.((mat[:,l]... ,), digits = 6), Val(L))
 
-nsublats(sys::System) = length(sys.sublats)
+nsublats(sys::System) = length(sys.lattice.sublats)
 
-sublatname(sys::System, s) = sys.sublatsdata.names[s]
-sublatnames(sys::System) = sys.sublatsdata.names
-sublatindex(sys::System, s) = sublatindex(sys.sublatsdata, s)
+sublatindex(sys::System, s) = sublatindex(sys.sysinfo.namesdict, s)
+sublatname(sys::System, s) = sys.sysinfo.names[s]
+sublatnames(sys::System) = _parsename.(sys.sysinfo.names)
+_parsename(name::Symbol) = (sname = String(name); first(sname) == '_' ? Base.parse(Int, sname[2:end]) : name)
 
-norbitals(sys::System) = sys.sublatsdata.norbitals
+norbitals(sys::System) = sys.sysinfo.norbitals
 dim(s::System) = isempty(s.sublats) ? 0 : sum(dim, s.sublats)
 
-nsites(sys::System) = sum(sys.sublatsdata.nsites)
+nsites(sys::System) = sum(sys.sysinfo.nsites)
 
 nlinks(sys::System) = nlinks(sys.hamiltonian)
 isunlinked(sys::System) = nlinks(sys) == 0
 coordination(sys::System) = nlinks(sys.hamiltonian)/nsites(sys)
 
-bravaismatrix(sys::System) = bravaismatrix(sys.bravais)
+bravaismatrix(sys::System) = bravaismatrix(sys.lattice.bravais)
 bravaismatrix(br::Bravais) = br.matrix
 
-function uniquelinks(block::Block{Tv}, sys::System{Tv,T,E}) where {Tv,T,E}
-    rdrs = [Tuple{SVector{E,T}, SVector{E,T}}[] for i in 1:nsublats(block), j in 1:nsublats(block)]
+function uniquelinks(block::Block{Tv}, sys::System{E,L,T}) where {Tv,T,E,L}
+    rdrs = [Tuple{SVector{E,T}, SVector{E,T}}[] for i in 1:nsublats(sys), j in 1:nsublats(sys)]
     bravais = bravaismatrix(sys)
-    for (i, ((s1, s2), (target, source), (row, col), _)) in enumerate(BlockIterator(block))
+    for (i, ((s1, s2), (target, source), (row, col), _)) in enumerate(BlockIterator(block, sys.sysinfo))
         if row > col || !iszero(block.ndist)
-            rdr = _rdr(sys.sublats[s2].sites[source], sys.sublats[s1].sites[target] + bravais * block.ndist)
+            rdr = _rdr(sys.lattice.sublats[s2].sites[source], sys.lattice.sublats[s1].sites[target] + bravais * block.ndist)
             push!(rdrs[s1, s2], rdr)
         end
     end
     return rdrs
 end
 
-function boundingbox(sys::System{Tv,T,E}) where {Tv,T,E}
-    bmin = zero(MVector{E, T})
-    bmax = zero(MVector{E, T})
-    foreach(sl -> foreach(s -> _boundingbox!(bmin, bmax, s), sl.sites), sys.sublats)
+function boundingbox(sys::System{E,L,T}) where {E,L,T}
+    bmin = zero(MVector{E,T})
+    bmax = zero(MVector{E,T})
+    foreach(sl -> foreach(s -> _boundingbox!(bmin, bmax, s), sl.sites), sys.lattice.sublats)
     return (SVector(bmin), SVector(bmax))
 end
 
@@ -136,38 +141,23 @@ end
 # System external API
 #######################################################################
 """
-    modifysublats!(system; names, norbitals)
-
-Change the names and/or number of orbitals of a system's sublattices
-
-# Examples
-```jldoctest
-julia> modifysublats!(System(:honeycomb), names = (:P1, :P2), norbitals = (3, 1))
-System{Complex{Float64},Float64,2,2} : 2D system in 2D space
-  Bravais vectors     : ((0.5, 0.866025), (-0.5, 0.866025))
-  Sublattice names    : (:P1, :P2)
-  Sublattice orbitals : (3, 1)
-  Total sites         : 2 [Float64]
-  Total hoppings      : 0 [Complex{Float64}]
-  Coordination        : 0.0
-```
-"""
-modifysublats!
-
-"""
     transform!(system::System, f::Function; sublats)
 
 Change `system` in-place by moving positions `r` of sites in sublattices specified 
 by `sublats` (all by default) to `f(r)`. Bravais vectors are also updated, but the 
 system Hamiltonian is unchanged.
 
+    system |> transform(f::Function; kw...)
+
+Functional syntax, equivalent to `transform(system, f; kw...)`
+
 # Examples
 ```jldoctest
 julia> transform!(System(:honeycomb, dim = Val(3)), r -> 2r + SVector(0,0,1))
-System{Complex{Float64},Float64,3,2} : 2D system in 3D space
+System{3,2,Float64,Complex{Float64}} : 2D system in 3D space
   Bravais vectors     : ((1.0, 1.732051, 0.0), (-1.0, 1.732051, 0.0))
   Sublattice names    : (:A, :B)
-  Sublattice orbitals : (1, 1)
+  Sublattice orbitals : (0, 0)
   Total sites         : 2 [Float64]
   Total hoppings      : 0 [Complex{Float64}]
   Coordination        : 0.0
@@ -190,13 +180,18 @@ transform
 Combine sublattices of a set of systems (giving them new names if needed) and optionally 
 apply a new `model` that describes their coupling.
 
+    system |> combine(model)
+
+Functional syntax, equivalent to `combine(system, model)`, which adds `model` to an existing
+system.
+
 # Examples
 ```jldoctest
-julia> combine(System(:honeycomb), System(:honeycomb), Model(hopping(1, sublats = (:A, :B4))))
-System{Complex{Float64},Float64,2,2} : 2D system in 2D space
+julia> combine(System(:honeycomb), System(:honeycomb), Model(Hopping(1, sublats = (:A, 4))))
+System{2,2,Float64,Complex{Float64}} : 2D system in 2D space
   Bravais vectors     : ((0.5, 0.866025), (-0.5, 0.866025))
-  Sublattice names    : (:A, :B, :A3, :B4)
-  Sublattice orbitals : (1, 1, 1, 1)
+  Sublattice names    : (:A, :B, 3, 4)
+  Sublattice orbitals : (1, 0, 0, 1)
   Total sites         : 4 [Float64]
   Total hoppings      : 6 [Complex{Float64}]
   Coordination        : 1.5
@@ -216,17 +211,25 @@ a single `NTuple{L,Int}` (`supercell` diagonal), or a tuple of  `NTuple{L,Int}`s
 columns). Note that if the new system dimension `L2` is smaller than the original, a bounded 
 `region` function should be provided to determine the extension of the remaining dimensions.
 
+    system |> grow(region = f, supercell = s)
+
+Functional syntax, equivalent to `grow(system; region = f, supercell = s)
+
 # Examples
 ```jldoctest
-julia> grow(System(:triangular, Model(hopping(1))), supercell = (3, -3), region = r-> 0 < r[2] < 12)
-System{Complex{Float64},Float64,2,2} : 2D system in 2D space
+julia> grow(System(:triangular, Model(Hopping(1))), supercell = (3, -3), region = r-> 0 < r[2] < 12)
+System{2,2,Float64,Complex{Float64}} : 2D system in 2D space
   Bravais vectors     : ((1.5, 2.598076), (1.5, -2.598076))
-  Sublattice names    : (:S1,)
+  Sublattice names    : (1,)
   Sublattice orbitals : (1,)
   Total sites         : 3 [Float64]
   Total hoppings      : 6 [Complex{Float64}]
   Coordination        : 2.0
 ```
+
+# See also
+
+    'Region`
 """
 grow
 
@@ -241,7 +244,7 @@ systems, the Bloch Hamiltonian is simply the Hamiltonian of the system.
 
 # Examples
 ```jldoctest
-julia> hamiltonian(System(:honeycomb, Model(hopping(1))), momentum = (0,1))
+julia> hamiltonian(System(:honeycomb, Model(Hopping(1))), momentum = (0,1))
 2×2 SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
   [1, 1]  =  2.59144+0.0im
   [2, 1]  =  2.29572-1.52352im

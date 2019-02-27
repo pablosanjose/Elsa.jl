@@ -25,7 +25,7 @@ struct Lattice{T,E,L,EL}
 The `System` type bundles a `Lattice`, a `Model` and a `Operator` computed from the former two.
 
 ```julia
-struct System{T,E,L,EL,A}
+struct System{E,L,T,Tv,EL,A}
     lattice::Lattice{T,E,L,EL}
     model::Model{OS<:Tuple, HS<:Tuple, O, H}
         onsites::OS         # Tuple of onsites

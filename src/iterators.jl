@@ -187,7 +187,8 @@ function SparseMatrixBuilder{Tv}(m, n, coordinationguess = 0) where Tv
     end
     return SparseMatrixBuilder(m, n, colptr, rowval, nzval, 1, 1)
 end
-SparseArrays.nzrange(S::SparseMatrixBuilder, col::Integer) = S.colptr[col]:(S.colptr[col+1]-1)
+SparseArrays.nzrange(S::SparseMatrixBuilder, col::Integer) = 
+    S.colptr[col]:(S.colptr[col+1]-1)
 SparseArrays.rowvals(S::SparseMatrixBuilder) = S.rowval
 SparseArrays.nonzeros(S::SparseMatrixBuilder) = S.nzval
 Base.size(S::SparseMatrixBuilder) = (S.n, S.m)
@@ -271,48 +272,54 @@ enumerate_sparse(s::SparseMatrixCSC) = SparseMatrixReader(s)
 #######################################################################
 # BlockIterator
 #######################################################################
-struct BlockIterator{B<:Block}
+struct BlockIterator{B<:Block,S<:SystemInfo}
     block::B
+    sysinfo::S
 end
 
 # returns ((s1, s2), (target, source), (row, col), boxsize, ptr), one per box (site pair), 
 # where boxsize is (N,M) for orbitals in site pair
-function Base.iterate(blockiter::BlockIterator, state = (1, nextcolumn(blockiter.block)))
+function Base.iterate(blockiter::BlockIterator, state = (1, nextcolumn(blockiter)))
     block = blockiter.block
+    sysinfo = blockiter.sysinfo
     (ptr, col) = state
     if col === 0 || !checkbounds(Bool, rowvals(block.matrix), ptr)
         return nothing
     else
         row = rowvals(block.matrix)[ptr]
-        s1 = findsublat(row, block.sublatsdata.offsets)
-        s2 = findsublat(col, block.sublatsdata.offsets)
-        (iszero(s1) || iszero(s2)) && throw(ErrorException("Unexpected row/col ($row, $col) out of offset range"))
-        (n, m) = block.sublatsdata.norbitals[s1], block.sublatsdata.norbitals[s2]
+        s1 = findsublat(row, sysinfo.offsets)
+        s2 = findsublat(col, sysinfo.offsets)
+        (iszero(s1) || iszero(s2)) && throw(
+            ErrorException("Unexpected row/col ($row, $col) out of offset range"))
+        (n, m) = sysinfo.norbitals[s1], sysinfo.norbitals[s2]
         rangecol = nzrange(block.matrix, col)
         newptr = ptr + n
         if newptr > maximum(rangecol) 
-            newcol = nextcolumn(block, col)
+            newcol = nextcolumn(blockiter, col)
             newptr += length(rangecol) * (m - 1)
         else
             newcol = col
         end
-        targetsite = 1 + (row - 1 - block.sublatsdata.offsets[s1]) ÷ n
-        sourcesite = 1 + (col - 1 - block.sublatsdata.offsets[s2]) ÷ m
-        return ((s1, s2), (targetsite, sourcesite), (row, col), (n, m), ptr), (newptr, newcol)
+        targetsite = 1 + (row - 1 - sysinfo.offsets[s1]) ÷ n
+        sourcesite = 1 + (col - 1 - sysinfo.offsets[s2]) ÷ m
+        return ((s1, s2), (targetsite, sourcesite), (row, col), (n, m), ptr), 
+               (newptr, newcol)
     end
 end
-nextcolumn(block) = isempty(nzrange(block.matrix, 1)) ? nextcolumn(block, 1) : 1
-function nextcolumn(block, col)
+nextcolumn(blockiter) = 
+    isempty(nzrange(blockiter.block.matrix, 1)) ? nextcolumn(blockiter, 1) : 1
+function nextcolumn(blockiter, col)
     c = col
     while true
-        s = findsublat(c, block.sublatsdata.offsets)
+        s = findsublat(c, blockiter.sysinfo.offsets)
         iszero(s) && break
-        c += block.sublatsdata.norbitals[s]
-        c > size(block.matrix, 2) && break
-        isempty(nzrange(block.matrix, c)) || return c
+        c += blockiter.sysinfo.norbitals[s]
+        c > size(blockiter.block.matrix, 2) && break
+        isempty(nzrange(blockiter.block.matrix, c)) || return c
     end
     return 0
 end
 Base.IteratorSize(::BlockIterator) = Base.SizeUnknown()
 Base.IteratorEltype(::BlockIterator) = Base.HasEltype()
-Base.eltype(::BlockIterator) = Tuple{Tuple{Int,Int},Tuple{Int,Int},Tuple{Int,Int},Tuple{Int,Int},Int}
+Base.eltype(::BlockIterator) = 
+    Tuple{Tuple{Int,Int},Tuple{Int,Int},Tuple{Int,Int},Tuple{Int,Int},Int}

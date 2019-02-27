@@ -6,9 +6,9 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
 import Base: convert, iterate, ==
 import SparseArrays: sparse!
 
-export Preset, Sublat, Bravais, systempresets, grow, combine, modifysublats!, transform, transform!
-export System, Model, Region, hopping, onsite, hamiltonian
-#export apply!, transform, transform!, lattice!, combine, wrap, combinesublats, hamiltonian, velocity, hamiltonian!, velocity!
+export Sublat, Bravais, Lattice, System, systempresets, Model, Hopping, Onsite,  Region,
+       grow, combine, transform, transform!, hamiltonian
+
 export @SMatrix, @SVector, SMatrix, SVector
 
 # const NameType = String
@@ -17,11 +17,11 @@ const NameType = Symbol
 const nametype = Symbol
 
 include("presets.jl")
+include("model.jl")
 include("lattice.jl")
 include("operators.jl")
-include("iterators.jl")
-include("model.jl")
 include("system.jl")
+include("iterators.jl")
 include("system_methods.jl")
 # include("mesh.jl")
 # include("bandstructure.jl")

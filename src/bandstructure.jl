@@ -271,7 +271,7 @@ Base.show(io::IO, bs::Spectrum{T,N,L}) where {T,N,L} =
 
 Spectrum(sys::System; uniform = false, partitions = 5, kw...) =
     Spectrum(sys, Brillouin(sys.lattice; uniform = uniform, partitions = partitions); kw...)
-Spectrum(sys::System{T,E,L}, brillouin::Brillouin{T,L}; kw...) where {T,E,L} =
+Spectrum(sys::System{E,L}, brillouin::Brillouin{T,L}; kw...) where {E,L} =
     Spectrum(kn -> hamiltonian!(sys, kn = kn), hamiltoniandim(sys), brillouin.lattice;
                   velocity = (kn, axis) -> velocity!(sys, kn = kn, axis = axis), kw...)
 Spectrum(hfunc::Function, lat::Lattice{T,E}; kw...) where {T,E} =
