@@ -7,7 +7,8 @@ import Base: convert, iterate, ==
 import SparseArrays: sparse!
 
 export Sublat, Bravais, Lattice, System, systempresets, Model, Hopping, Onsite,  Region,
-       grow, combine, transform, transform!, hamiltonian
+       grow, combine, transform, transform!, hamiltonian,
+       sitepositions, neighbors, bravaismatrix
 
 export @SMatrix, @SVector, SMatrix, SVector
 

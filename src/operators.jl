@@ -69,11 +69,6 @@ function _fillorbitals!(norbitals, ::Val{N}, s) where {N}
     return nothing
 end
 
-sublatindex(s::SystemInfo, name) = sublatindex(s.namesdict, name)
-sublatindex(d::Dict, name::NameType) = d[name]
-sublatindex(s::Dict, i::Integer) = Int(i)
-# Base.keys(s::SystemInfo) = keys(s.nsites)
-
 function tosite(row, sysinfo)
     s = findsublat(row, sysinfo.offsets)
     offset = sysinfo.offsets[s]
@@ -82,8 +77,8 @@ function tosite(row, sysinfo)
     return div(delta, norbs), rem(delta, norbs), s
 end
 
-torow(siteindex, s, sysinfo) = 
-    sysinfo.offsets[s] + (siteindex - 1) * sysinfo.norbitals[s] + 1
+torow(siteindex, sublat, sysinfo) = 
+    sysinfo.offsets[sublat] + (siteindex - 1) * sysinfo.norbitals[sublat] + 1
 
 function findsublat(row, offsets)
     for n in eachindex(offsets)

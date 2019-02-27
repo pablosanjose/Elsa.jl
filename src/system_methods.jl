@@ -418,7 +418,7 @@ _wrappedndist(ndist, s, invs) = (nn = _newndist(ndist, invs); (nn, ndist - s * n
 
 
 function _growhamiltonian(sys::System{E,L,T,Tv}, supercell::SMatrix{L,L2}, sitemaps, newsysinfo) where {E,L,T,Tv,L2}
-    blocks = sort!(append!([sys.hamiltonian.intra], sys.hamiltonian.inters), by = block -> block.ndist)
+    blocks = sort!(append!([sys.hamiltonian.intra], sys.hamiltonian.inters), by = block -> reverse(block.ndist))
     dimh = sum(s -> sys.sysinfo.norbitals[s] * maximum(sitemaps[s]), eachindex(sys.lattice.sublats))
     invsupercell = pinvint(supercell)
     opbuilder = OperatorBuilder{Tv,L2}(dimh)

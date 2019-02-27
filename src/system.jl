@@ -86,6 +86,9 @@ Base.show(io::IO, sys::System{E,L,T,Tv}) where {E,L,T,Tv} = print(io,
   Total hoppings      : $(nlinks(sys)) [$Tv]
   Coordination        : $(coordination(sys))")
 
+# Treat System as scalar
+Broadcast.broadcastable(sys::System) = Ref(sys)
+
 #######################################################################
 # System internal API
 #######################################################################
@@ -96,6 +99,10 @@ vectorsastuples(mat::SMatrix{E,L}) where {E,L} = ntuple(l -> round.((mat[:,l]...
 nsublats(sys::System) = length(sys.lattice.sublats)
 
 sublatindex(sys::System, s) = sublatindex(sys.sysinfo.namesdict, s)
+sublatindex(s::SystemInfo, name) = sublatindex(s.namesdict, name)
+sublatindex(d::Dict, name::NameType) = d[name]
+sublatindex(s::Dict, i::Integer) = Int(i)
+
 sublatname(sys::System, s) = sys.sysinfo.names[s]
 sublatnames(sys::System) = _parsename.(sys.sysinfo.names)
 _parsename(name::Symbol) = (sname = String(name); first(sname) == '_' ? Base.parse(Int, sname[2:end]) : name)
@@ -108,9 +115,6 @@ nsites(sys::System) = sum(sys.sysinfo.nsites)
 nlinks(sys::System) = nlinks(sys.hamiltonian)
 isunlinked(sys::System) = nlinks(sys) == 0
 coordination(sys::System) = nlinks(sys.hamiltonian)/nsites(sys)
-
-bravaismatrix(sys::System) = bravaismatrix(sys.lattice.bravais)
-bravaismatrix(br::Bravais) = br.matrix
 
 function uniquelinks(block::Block{Tv}, sys::System{E,L,T}) where {Tv,T,E,L}
     rdrs = [Tuple{SVector{E,T}, SVector{E,T}}[] for i in 1:nsublats(sys), j in 1:nsublats(sys)]
@@ -236,7 +240,7 @@ grow
 """
     hamiltonian(system; k, kphi)
 
-Returns the Bloch Hamiltonian of an `L`-dimensional `system` in `E`-dimensional space at 
+Return the Bloch Hamiltonian of an `L`-dimensional `system` in `E`-dimensional space at 
 a given `E`-dimensional Bloch momentum `k`, or alternatively `L`-dimensional normalised 
 Bloch phases `kphi = k*B/2π`, where `B` is the system's Bravais matrix.
 By default the Hamiltonian at zero momentum (Gamma point) is returned. For `0`-dimensional 
@@ -253,6 +257,76 @@ julia> hamiltonian(System(:honeycomb, Model(Hopping(1))), momentum = (0,1))
 ```
 """
 hamiltonian
+
+"""
+    bravaismatrix(system)
+
+Return the Bravais matrix of a system. Its columns are the Bravais vectors.
+"""
+bravaismatrix(sys::System) = sys.lattice.bravais.matrix
+bravaismatrix(lat::Lattice) = lat.bravais.matrix
+bravaismatrix(br::Bravais) = br.matrix
+
+"""
+    sitepositions(system[, sublat::Union{Integer, $NameType}[, siteindex::Int]])
+    sitepositions(system, (sublat, siteindex))
+
+Return a vector with all the site positions of `system`, or only those in `sublat` 
+or with a given `siteindex`, if specified.
+"""
+sitepositions(sys::System, s, i) = sys.lattice.sublats[sublatindex(sys, s)].sites[i]
+sitepositions(sys::System, (s, i)::Tuple) = sitepositions(sys, s, i)
+sitepositions(sys::System, s::Union{NameType,Integer}) = sys.lattice.sublats[sublatindex(sys, s)].sites
+sitepositions(sys::System) = [sl.sites for sl in sys.lattice.sublats]
+
+"""
+    neighbors(system, sublat, siteindex; targetsublat = missing)
+    neighbors(system, (sublat, siteindex); targetsublat = missing)
+
+Return a vector with `(targetsublat, targetsiteindex)` of all the neighbors of input site 
+(with `sublatindex` in sublattice `sublat`). A non-missing `targetsublat` restricts the search
+to a specific sublat.
+
+# Examples
+```jldoctest
+julia> sys = System(:honeycomb, Model(Hopping(1))) |> grow(region = Region(:square, 2))
+System{2,0,Float64,Complex{Float64}} : 0D system in 2D space
+  Bravais vectors     : ()
+  Sublattice names    : (:A, :B)
+  Sublattice orbitals : (1, 1)
+  Total sites         : 10 [Float64]
+  Total hoppings      : 50 [Complex{Float64}]
+  Coordination        : 5.0
+
+julia> neighbors(sys, 1, 4)
+4-element Array{Tuple{Int64,Int64},1}:
+ (1, 2)
+ (1, 5)
+ (2, 3)
+ (2, 5)
+
+julia> neighbors(sys, 1, 4, targetsublat = :A)
+2-element Array{Tuple{Int64,Int64},1}:
+ (1, 2)
+ (1, 5)
+
+```
+"""
+neighbors(sys, (sublat, siteindex)::Tuple; kw...) = neighbors(sys, sublat, siteindex; kw...)
+function neighbors(sys, sublat, siteindex; targetsublat = missing)
+    h = sys.hamiltonian.matrix
+    rows = rowvals(h)
+    source = torow(siteindex, sublat, sys.sysinfo)
+    targets = Tuple{Int,Int}[]
+    tsublatindex = targetsublat === missing ? 0 : sublatindex(sys, targetsublat)
+    for ptr in nzrange(h, source)
+        target, offset, tsublat = tosite(rows[ptr], sys.sysinfo)
+        offset == 0 && (targetsublat === missing || tsublatindex === tsublat) && 
+            (tsublat != sublat || target != source) && push!(targets, (tsublat, target))
+    end
+    return sort!(targets)
+end
+
 
 #######################################################################
 # LazySystem
