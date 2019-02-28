@@ -250,7 +250,10 @@ end
 
 function finalisecolumn!(s::SparseMatrixBuilder, sortcol::Bool = false)
     s.colcounter > s.n && throw(DimensionMismatch("Pushed too many columns to matrix"))
-    !sortcol && partialsort!(s.cosorter, s.colptr[s.colcounter]:s.rowvalcounter)
+    if sortcol
+        s.cosorter.offset = s.colptr[s.colcounter] - 1
+        sort!(s.cosorter)
+    end
     s.colcounter += 1
     s.colptr[s.colcounter] = s.rowvalcounter
     return nothing

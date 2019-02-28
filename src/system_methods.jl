@@ -443,7 +443,8 @@ function _growhamiltonian(sys::System{E,L,T,Tv}, supercell::SMatrix{L,L2}, sitem
                     newblock = get_or_add_blockbuilder(opbuilder, newndist, colsdone)
                     for ptr in ptrs
                         site, orb, s1 = tosite(rows[ptr], sys.sysinfo)
-                        checkbounds(Bool, sitemaps[s1], site, Tuple(wrappedndist)...) || continue
+                        checkbounds(Bool, sitemaps[s1], site, Tuple(wrappedndist)...) || 
+                            continue
                         newsitedest = sitemaps[s1][site, Tuple(wrappedndist)...]
                         iszero(newsitedest) && continue
                         row = torow(newsitedest, s1, newsysinfo) + orb
@@ -451,7 +452,7 @@ function _growhamiltonian(sys::System{E,L,T,Tv}, supercell::SMatrix{L,L2}, sitem
                     end
                 end
                 colsdone += 1
-                finalisecolumn!(opbuilder.intra.matrixbuilder, false) # sorts column
+                finalisecolumn!(opbuilder.intra.matrixbuilder, true) # true = sorts column
                 foreach(block -> finalisecolumn!(block.matrixbuilder), opbuilder.inters)
             end
         end
