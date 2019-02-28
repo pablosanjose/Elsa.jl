@@ -451,7 +451,7 @@ function _growhamiltonian(sys::System{E,L,T,Tv}, supercell::SMatrix{L,L2}, sitem
                     end
                 end
                 colsdone += 1
-                finalisecolumn!(opbuilder.intra.matrixbuilder)
+                finalisecolumn!(opbuilder.intra.matrixbuilder, false) # sorts column
                 foreach(block -> finalisecolumn!(block.matrixbuilder), opbuilder.inters)
             end
         end

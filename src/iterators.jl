@@ -163,9 +163,34 @@ function registersite!(iter, cell, sublat, idx)
 end
 
 #######################################################################
+# CoSort
+#######################################################################
+struct CoSortTup{T,Tv}
+    x::T
+    y::Tv
+end
+
+mutable struct CoSort{T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} <: AbstractVector{CoSortTup{T,Tv}}
+    sortvector::S
+    covector::C
+    offset::Int
+    function CoSort{T,Tv,S,C}(sortvector, covector, offset) where {T,Tv,S,C}
+        length(covector) >= length(sortvector) ? new(sortvector, covector, offset) :
+            throw(DimensionMismatch("Coarray length should exceed sorting array"))
+    end
+end
+CoSort(sortvector::S, covector::C) where {T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} = 
+    CoSort{T,Tv,S,C}(sortvector, covector, 0)
+
+Base.size(c::CoSort) = (size(c.sortvector, 1) - c.offset,)
+Base.getindex(c::CoSort, i) = CoSortTup(getindex(c.sortvector, i + c.offset), getindex(c.covector, i + c.offset))
+Base.setindex!(c::CoSort, t::CoSortTup, i) = (setindex!(c.sortvector, t.x, i + c.offset); setindex!(c.covector, t.y, i + c.offset); c) 
+Base.isless(a::CoSortTup, b::CoSortTup) = isless(a.x, b.x)
+Base.Sort.defalg(v::C) where {T<:Union{Number, Missing}, C<:CoSort{T}} = Base.DEFAULT_UNSTABLE
+
+#######################################################################
 # SparseMatrixBuilder
 #######################################################################
-
 mutable struct SparseMatrixBuilder{T}
     m::Int
     n::Int
@@ -174,6 +199,7 @@ mutable struct SparseMatrixBuilder{T}
     nzval::Vector{T}
     colcounter::Int
     rowvalcounter::Int
+    cosorter::CoSort{Int,T,Vector{Int},Vector{T}}
 end
 
 function SparseMatrixBuilder{Tv}(m, n, coordinationguess = 0) where Tv
@@ -185,7 +211,7 @@ function SparseMatrixBuilder{Tv}(m, n, coordinationguess = 0) where Tv
         sizehint!(rowval, 2 * coordinationguess * m)
         sizehint!(nzval, 2 * coordinationguess * m)
     end
-    return SparseMatrixBuilder(m, n, colptr, rowval, nzval, 1, 1)
+    return SparseMatrixBuilder(m, n, colptr, rowval, nzval, 1, 1, CoSort(rowval, nzval))
 end
 SparseArrays.nzrange(S::SparseMatrixBuilder, col::Integer) = 
     S.colptr[col]:(S.colptr[col+1]-1)
@@ -222,14 +248,15 @@ function isintail(element, container, start::Int)
     return false
 end
 
-function finalisecolumn!(s::SparseMatrixBuilder)
+function finalisecolumn!(s::SparseMatrixBuilder, sortcol::Bool = false)
     s.colcounter > s.n && throw(DimensionMismatch("Pushed too many columns to matrix"))
+    !sortcol && partialsort!(s.cosorter, s.colptr[s.colcounter]:s.rowvalcounter)
     s.colcounter += 1
     s.colptr[s.colcounter] = s.rowvalcounter
     return nothing
 end
 
-function finalisecolumn!(s::SparseMatrixBuilder, ncols)
+function finalisecolumn!(s::SparseMatrixBuilder, ncols::Int)
     for _ in 1:ncols
         finalisecolumn!(s)
     end
