@@ -4,7 +4,7 @@ A work-in-progress package for building discrete lattices and implementing arbit
 
 **Documentation** : [Get started](https://github.com/pablosanjose/Elsa.jl/blob/master/docs/src/index.md)
 
-This work has been partly funded by the Spanish Ministry of Economy and Competitiveness under Grant No. FIS2015-65706-P
+This work has been partly funded by the Spanish Ministry of Economy and Competitiveness under Grant No. FIS2015-65706-P, and the CSIC Intramural Project 201760I086
 
 [![Build Status](https://travis-ci.org/pablosanjose/Elsa.jl.svg?branch=master)](https://travis-ci.org/pablosanjose/Elsa.jl)
 
