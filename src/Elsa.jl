@@ -1,7 +1,7 @@
 module Elsa
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      Arpack, ProgressMeter
+      FFTW, Arpack, ProgressMeter
 
 import Base: convert, iterate, ==
 import SparseArrays: sparse!
@@ -24,6 +24,7 @@ include("operators.jl")
 include("system.jl")
 include("iterators.jl")
 include("system_methods.jl")
+include("KPM.jl")
 # include("mesh.jl")
 # include("bandstructure.jl")
 include("convert.jl")
