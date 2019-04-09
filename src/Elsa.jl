@@ -1,7 +1,7 @@
 module Elsa
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      FFTW, Arpack, ProgressMeter
+      FFTW, Arpack, ArnoldiMethod, ProgressMeter
 
 import Base: convert, iterate, ==
 import SparseArrays: sparse!
@@ -9,6 +9,7 @@ import SparseArrays: sparse!
 export Sublat, Bravais, Lattice, System, systempresets, Model, Hopping, Onsite,  Region,
        grow, combine, transform, transform!, hamiltonian,
        sitepositions, neighbors, bravaismatrix
+export MomentaKPM, dosKPM
 
 export @SMatrix, @SVector, SMatrix, SVector
 

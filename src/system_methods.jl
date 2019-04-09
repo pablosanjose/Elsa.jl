@@ -17,7 +17,7 @@ transform(f::Function; kw...) = sys -> transform(sys, f; kw...)
 #######################################################################
 # System's Hamiltonian
 #######################################################################
-function hamiltonian(sys::System{E,L,T}; k = zero(SVector{E,T}), kphi = blochphases(k, sys)) where {E,L,T}
+function hamiltonian(sys::System{E,L,T}; k = zero(SVector{E,T}), kphi = blochphases(k, sys), kw...) where {E,L,T}
 	length(kphi) == L || throw(DimensionMismatch("The dimension of the normalized Bloch phases `kphi` should match the lattice dimension $L"))
     L == 0 || insertblochphases!(sys.hamiltonian, SVector{L,T}(kphi))
     return sys.hamiltonian.matrix
