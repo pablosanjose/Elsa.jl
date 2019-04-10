@@ -22,10 +22,12 @@ struct MomentaKPM{T}
     bandbracket::Tuple{T,T}
 end
 
-MomentaKPM(h::AbstractMatrix; ket = missing, kw...) = _momentaKPM(h, ket; kw...)
+# CAUTION: We assume h is Hermitian here, and pass Adjoint(h) to improve mul! performance
+MomentaKPM(h::AbstractMatrix; ket = missing, kw...) = _momentaKPM(h', ket; kw...)
 MomentaKPM(sys::System; kw...) = MomentaKPM(hamiltonian(sys, kw...); kw...)
 
-function _momentaKPM(h::AbstractMatrix{Tv}, ket::AbstractVector{T}; order = 10, bandrange = missing, kw...) where {T,Tv}
+function _momentaKPM(h::AbstractMatrix{Tv}, ket::AbstractVector{T}; 
+                     order = 10, bandrange = missing, kw...) where {T,Tv}
     μlist = zeros(real(promote_type(T, Tv)), order + 1)
     bandbracket = _bandbracket(h, bandrange)
     ket0 = normalize(ket)
@@ -33,7 +35,8 @@ function _momentaKPM(h::AbstractMatrix{Tv}, ket::AbstractVector{T}; order = 10, 
     return MomentaKPM(jackson!(μlist), bandbracket)
 end
 
-function _momentaKPM(h::AbstractMatrix{Tv}, ket::Missing; randomkets = 1, order = 10, bandrange = missing, kw...) where {Tv}
+function _momentaKPM(h::AbstractMatrix{Tv}, ket::Missing; 
+                     randomkets = 1, order = 10, bandrange = missing, kw...) where {Tv}
     v = Vector{Tv}(undef, size(h, 2))
     μlist = zeros(real(Tv), order + 1)
     bandbracket = _bandbracket(h, bandrange) 

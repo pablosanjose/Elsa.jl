@@ -200,6 +200,12 @@ version = "2.3.0"
 [[Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
 
+[[MKLSparse]]
+deps = ["LinearAlgebra", "SparseArrays", "Test"]
+git-tree-sha1 = "112f1271a9d835ad5949047462be44d1832160ae"
+uuid = "0c723cd3-b8cd-5d40-b370-ba682dde9aae"
+version = "1.0.0"
+
 [[MappedArrays]]
 deps = ["Test"]
 git-tree-sha1 = "923441c5ac942b60bd3a842d5377d96646bcbf46"
