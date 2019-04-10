@@ -142,5 +142,6 @@ function dosKPM(momenta::MomentaKPM{T}; resolution = 2, kw...) where {T}
     FFTW.r2r!(doslist, FFTW.REDFT01, 1)  # DCT-III in FFTW
     xk = [cos(π * (k + 0.5) / numpoints) for k in 0:numpoints - 1]
     @. doslist = center + halfwidth * doslist / (π * sqrt(1.0 - xk^2))
+    @. xk = center + halfwidth * xk
     return xk, doslist
 end
