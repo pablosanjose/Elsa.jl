@@ -22,8 +22,8 @@ struct MomentaKPM{T}
     bandbracket::Tuple{T,T}
 end
 
-# CAUTION: We assume h is Hermitian here, and pass Adjoint(h) to improve mul! performance
-MomentaKPM(h::AbstractMatrix; ket = missing, kw...) = _momentaKPM(h', ket; kw...)
+# CAUTION: We pass transpose(h) to improve mul! performance. Should not affect <k|Tn(H)|k>
+MomentaKPM(h::AbstractMatrix; ket = missing, kw...) = _momentaKPM(transpose(h), ket; kw...)
 MomentaKPM(sys::System; kw...) = MomentaKPM(hamiltonian(sys, kw...); kw...)
 
 function _momentaKPM(h::AbstractMatrix{Tv}, ket::AbstractVector{T}; 
