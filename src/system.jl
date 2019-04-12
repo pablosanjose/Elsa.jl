@@ -204,11 +204,11 @@ System{2,2,Float64,Complex{Float64}} : 2D system in 2D space
 combine
 
 """
-    grow(system::System{Tv,T,E,L}; supercell = SMatrix{L,0,Int}(), region = r -> true)
+    grow(system::System{Tv,T,E,L}; supercell = SMatrix{L,L2,Int}(), region = r -> true)
 
-Transform `system` into another system with a different supercell, so that the new
-Bravais matrix is `br2 = br * supercell`, and only sites with `region(r) == true` in the
-unit cell are included. 
+Transform an `L`-dimensional `system` into another `L2`-dimensional system with a different 
+supercell, so that the new Bravais matrix is `br2 = br * supercell`, and only sites with 
+`region(r) == true` in the unit cell are included. 
 
 `supercell` can be given as an integer matrix, a single integer `s` (`supercell = s * I`),
 a single `NTuple{L,Int}` (`supercell` diagonal), or a tuple of  `NTuple{L,Int}`s (`supercell` 
