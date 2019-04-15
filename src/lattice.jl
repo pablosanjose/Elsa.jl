@@ -48,16 +48,15 @@ julia> Bravais((1, 2), (3, 4))
 Bravais{Int64,2,2,4}([1 3; 2 4])
 ```
 """
-struct Bravais{E,L,EL}
-    matrix::SMatrix{E,L,Float64,EL}
+struct Bravais{E,L,T,EL}
+    matrix::SMatrix{E,L,T,EL}
 end
 
 Bravais{E}() where {E} = Bravais(SMatrix{E,0,Float64,0}())
-Bravais(vs::Union{Tuple, AbstractVector}...) = Bravais(toSMatrix(Float64, vs...))
-Bravais(s::SMatrix{N,M}) where {N,M} = Bravais(convert(SMatrix{N,M,Float64}, s))
+Bravais(vs::Union{Tuple, AbstractVector}...) = Bravais(toSMatrix(vs...))
 
-transform(b::Bravais{E,0,0}, f::F) where {E,F <: Function} = b
-function transform(b::Bravais{E,L,EL}, f::F) where {E,L,EL,F<:Function}
+transform(b::Bravais{E,0}, f::F) where {E,F <: Function} = b
+function transform(b::Bravais{E,L}, f::F) where {E,L,F<:Function}
     svecs = let z = zero(SVector{E,Float64})
         ntuple(i -> f(b.matrix[:, i]) - f(z), Val(L))
     end
@@ -70,7 +69,7 @@ end
 #######################################################################
 mutable struct Lattice{E,L,T,EL}  # Lattice transform needs to change bravais
     sublats::Vector{Sublat{E,T}}
-    bravais::Bravais{E,L,EL}
+    bravais::Bravais{E,L,T,EL}
 end
 Lattice(sublats::Sublat{E}...; kw...) where {E} = Lattice(Bravais{E}(), sublats...; kw...)
 Lattice(bravais::Bravais, sublats::Sublat...; kw...) = 
@@ -80,7 +79,7 @@ function _lattice(
         sublats::Union{NTuple{N,Sublat{E,T}},Vector{Sublat{E,T}}}; 
         dim::Val{E2} = Val(E), ptype::Type{T2} = T, kw...) where {N,T,E,L,T2,E2}
     actualsublats = convert(Vector{Sublat{E2,T2}}, collect(sublats))
-    actualbravais = convert(Bravais{E2,L}, bravais)
+    actualbravais = convert(Bravais{E2,L,T2}, bravais)
     names = NameType[:_]
     for (i, sublat) in enumerate(actualsublats)
         if sublat.name in names

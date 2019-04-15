@@ -29,8 +29,8 @@ Sublat{E,T}(s::Sublat) where {E,T} =
 Base.promote_rule(::Type{Sublat{E1,T1}}, ::Type{Sublat{E2,T2}}) where {E1,E2,T1,T2} = 
     Sublat{max(E1, E2), promote_type(T1, T2)}
 
-Bravais{E,L}(b::Bravais) where {E,L} = 
-    Bravais(padrightbottom(b.matrix, SMatrix{E,L,Float64}))
+Bravais{E,L,T}(b::Bravais) where {E,L,T} = 
+    Bravais(padrightbottom(b.matrix, SMatrix{E,L,T}))
 
 System{E,L,T,Tv}(s::System) where {E,L,T,Tv} = 
     System(convert(Lattice{E,L,T,Tv}, s.lattice), Operator{Tv,L}(s.hamiltonian))

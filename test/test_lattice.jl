@@ -4,9 +4,9 @@ using Test
 using Elsa
 using Elsa: nsites, nlinks
 
-@test Bravais() isa Bravais{0,0,0}
-@test Bravais((1,2),(3,3)) isa Bravais{2,2,4}
-@test Bravais(@SMatrix[1. 2.; 3 3]) isa Bravais{2,2,4}
+@test Bravais() isa Bravais{0,0,Float64,0}
+@test Bravais((1,2),(3,3)) isa Bravais{2,2,Int,4}
+@test Bravais(@SMatrix[1. 2.; 3 3]) isa Bravais{2,2,Float64,4}
 
 @test Sublat((3, 3)) isa Sublat{2,Int64}
 @test Sublat((3, 3.)) isa Sublat{2,Float64}
