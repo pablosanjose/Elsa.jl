@@ -5,10 +5,9 @@
     Sublat(sites...; name::$(NameType))
     Sublat(sites::Vector{<:SVector}; name::$(NameType))
 
-Create a `Sublat{E,T}` that adds a sublattice, of
-name `name`, with sites at positions `sites` in `E` dimensional space, 
-each of which hosts `norbitals` different orbitals. Sites can be entered as tuples
-or `SVectors`.
+Create a `Sublat{E,T}` that adds a sublattice, of name `name`, with sites at positions 
+`sites` in `E` dimensional space, each of which hosts `norbitals` different orbitals. Sites 
+can be entered as tuples or `SVectors`.
 
 # Examples
 ```jldoctest
@@ -26,7 +25,7 @@ Sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) =
 Sublat{E,T}(;kw...) where {E,T} = Sublat(SVector{E,T}[]; kw...)
 
 Base.show(io::IO, s::Sublat{E,T}) where {E,T} = print(io, 
-"Sublat{$T,$E}: sublattice `:$(s.name)` of $(length(s.sites)) $T-typed sites in $E-dimensional embedding space")
+"Sublat{$E,$T}: sublattice `:$(s.name)` of $(length(s.sites)) $T-typed sites in $E-dimensional embedding space")
 
 transform!(s::S, f::F) where {S <: Sublat,F <: Function} = (s.sites .= f.(s.sites); s)
 
@@ -67,17 +66,32 @@ end
 #######################################################################
 # Lattice
 #######################################################################
-mutable struct Lattice{E,L,T,EL}  # Lattice transform needs to change bravais
+"""
+    Lattice(bravais::Bravais, sublats::Sublat...; dim::Val{E}, ptype::T)
+
+Create a `Lattice{E,L,T}` with `Bravais` matrix `bravais` and sublattices `sublats` in 
+`E`-dimensional space, converted to a common type `Sublat{E,T}`. `bravais` is converted 
+to match `E` and `T` from `sublats`. To override the embedding  dimension `E`, use keyword 
+`dim = Val(E)`. Similarly, override type `T` with `ptype = T`.
+
+# Examples
+```jldoctest
+julia> Lattice(Bravais((1, 0)), Sublat((0, 0.)); dim = Val(3))
+Lattice{2,1,Float64}: 1-dimensional lattice with 1 Float64-typed sublattice in 2-dimensional 
+embedding space
+```
+"""
+mutable struct Lattice{E,L,T,EL}  # mutable: Lattice transform needs to change bravais
     sublats::Vector{Sublat{E,T}}
     bravais::Bravais{E,L,T,EL}
 end
 Lattice(sublats::Sublat{E}...; kw...) where {E} = Lattice(Bravais{E}(), sublats...; kw...)
 Lattice(bravais::Bravais, sublats::Sublat...; kw...) = 
     _lattice(bravais, promote(sublats...); kw...)
-function _lattice(
-        bravais::Bravais{E,L}, 
+function _lattice( 
+        bravais::Bravais{EB,L},
         sublats::Union{NTuple{N,Sublat{E,T}},Vector{Sublat{E,T}}}; 
-        dim::Val{E2} = Val(E), ptype::Type{T2} = T, kw...) where {N,T,E,L,T2,E2}
+        dim::Val{E2} = Val(E), ptype::Type{T2} = T, kw...) where {N,T,E,L,T2,E2,EB}
     actualsublats = convert(Vector{Sublat{E2,T2}}, collect(sublats))
     actualbravais = convert(Bravais{E2,L,T2}, bravais)
     names = NameType[:_]
@@ -96,3 +110,7 @@ function uniquename(names, name, i)
     newname = Symbol(:_, i)
     return newname in names ? uniquename(names, name, i + 1) : newname
 end
+
+Base.show(io::IO, s::Lattice{E,L,T}) where {E,L,T} = print(io, 
+"Lattice{$E,$L,$T}: $L-dimensional lattice with $(length(s.sublats)) $T-typed $(length(s.sublats) > 1 ? 
+"sublattices" : "sublattice") in $E-dimensional embedding space")

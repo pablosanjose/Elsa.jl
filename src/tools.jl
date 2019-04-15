@@ -54,6 +54,7 @@ collectfirst(s::T, ss...) where {T} = _collectfirst((s,), ss...)
 _collectfirst(ts::NTuple{N,T}, s::T, ss...) where {N,T} = _collectfirst((ts..., s), ss...)
 _collectfirst(ts::Tuple, ss...) = (ts, ss)
 _collectfirst(ts::NTuple{N,System}, s::System, ss...) where {N} = _collectfirst((ts..., s), ss...)
+# collectfirsttolast(ss...) = tuplejoin(reverse(collectfirst(ss...))...)
 
 negSVector(s::SVector{L,<:Number}) where {L} = -s
 negSVector(s::SVector{0,<:Number}) where {L} = s    ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}

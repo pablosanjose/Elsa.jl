@@ -6,9 +6,9 @@
 
 Build a `System{E,L,T,Tv}` of `L` dimensions in `E`-dimensional embedding
 space and composed of `T`-typed sites and `Tv`-typed Hamiltonian. See
-`Sublat`, `Bravais` and `Model` for syntax.  To indicate a specific embedding 
-dimension `E`, use keyword `dim = Val(E)`. Similarly override types `T` and `Tv` 
-with `ptype = T` and `htype = Tv`.
+`Sublat`, `Bravais` and `Model` for syntax.  To override the embedding dimension `E`, use 
+keyword `dim = Val(E)`. Similarly, override types `T` and `Tv` with `ptype = T` and 
+`htype = Tv`.
 
     System(presetname::$(NameType)[, model]; kw...)
 
