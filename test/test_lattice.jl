@@ -18,8 +18,6 @@ using Elsa: nsites, nlinks
 @test Sublat((3, 4.), [3, 3]) isa Sublat{2,Float64}
 @test Sublat(@SVector[3f0, 3f0]) isa Sublat{2,Float32}
 
-# @test Sublat(Elsa.cartesian([3,4.], [3,3], 1:3)) isa Sublat{Float64,3}
-
 @test Sublat(@SVector[3f0, 3f0], (3, 4), name = :A) isa Sublat{2,Float32}
 @test Sublat((3f0, 3.0), name = :A) isa Sublat{2,Float64}
 

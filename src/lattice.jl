@@ -76,9 +76,9 @@ to match `E` and `T` from `sublats`. To override the embedding  dimension `E`, u
 
 # Examples
 ```jldoctest
-julia> Lattice(Bravais((1, 0)), Sublat((0, 0.)); dim = Val(3))
-Lattice{2,1,Float64}: 1-dimensional lattice with 1 Float64-typed sublattice in 2-dimensional 
-embedding space
+julia> Lattice(Bravais((1, 0)), Sublat((0, 0.)), Sublat((0, Float32(1))); dim = Val(3))
+Lattice{3,1,Float64}: 1-dimensional lattice with 2 Float64-typed sublattices in 
+3-dimensional embedding space
 ```
 """
 mutable struct Lattice{E,L,T,EL}  # mutable: Lattice transform needs to change bravais
