@@ -68,7 +68,7 @@ Define a `Onsite<:ModelTerm` that models an onsite energy `o` at sites on specif
  `missing`, all sublattices are included.
 """
 Onsite(o; sublats = missing) = _onsite(o, _normaliseSL(sublats))
-_onsite(o::Number, sublats) = Onsite(o, sublats)
+_onsite(o, sublats) = Onsite(o, sublats)
 _onsite(o::SMatrix{N,N}, sublats) where {N} = Onsite(o, sublats)
 _onsite(o::SMatrix{N,M}, sublats) where {N,M} = throw(
     DimensionMismatch("Onsite energy must be a scalar or a square matrix"))
