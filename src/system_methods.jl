@@ -386,7 +386,9 @@ function _growsublats(sys::System{E,L,T}, supercell, region) where {E,L,T}
     end
     bbox = boundingboxiter(iter)
     ranges = UnitRange.(bbox...)
-    sitemaps = OffsetArray{Int,L+1,Array{Int,L+1}}[zeros(Int, 1:length(sublat.sites), ranges...) for sublat in sys.lattice.sublats]
+    # sitemaps[sublat][oldsiteindex, cell...] is newsiteindex for a given sublat
+    sitemaps = OffsetArray{Int,L+1,Array{Int,L+1}}[zeros(Int, 1:length(sublat.sites), 
+        ranges...) for sublat in sys.lattice.sublats]
     sublats = [Sublat{E,T}(; name = sublat.name) for sublat in sys.lattice.sublats]
     for (s, sublat) in enumerate(sys.lattice.sublats)
         counter = 0
@@ -424,13 +426,13 @@ function _growhamiltonian(sys::System{E,L,T,Tv}, supercell::SMatrix{L,L2}, sitem
     opbuilder = OperatorBuilder{Tv,L2}(dimh)
     colsdone = 0
     for (s2, sublat2) in enumerate(sys.lattice.sublats)
-        cartesians2 = CartesianIndices(sitemaps[s2])
+        cartesian_s2 = CartesianIndices(sitemaps[s2])
         norb2 = sys.sysinfo.norbitals[s2]
         offset2 = sys.sysinfo.offsets[s2]
         for (j, newsitesrc) in enumerate(sitemaps[s2])
             iszero(newsitesrc) && continue  # skip column, source not in region
-            ndistsrc = SVector{L,Int}(Base.tail(Tuple(cartesians2[j])))
-            sitesrc = first(Tuple(cartesians2[j]))
+            ndistsrc = SVector{L,Int}(Base.tail(Tuple(cartesian_s2[j])))
+            sitesrc = first(Tuple(cartesian_s2[j]))
             for orb2 in 1:norb2
                 col = offset2 + (sitesrc - 1) * norb2 + orb2
                 for block in blocks
@@ -446,7 +448,7 @@ function _growhamiltonian(sys::System{E,L,T,Tv}, supercell::SMatrix{L,L2}, sitem
                         checkbounds(Bool, sitemaps[s1], site, Tuple(wrappedndist)...) || continue
                         newsitedest = sitemaps[s1][site, Tuple(wrappedndist)...]
                         iszero(newsitedest) && continue
-                        row = torow(newsitedest, s1, newsysinfo) + orb
+                        row = torow(newsitedest, s1, newsysinfo) + orb - 1
                         pushtocolumn!(newblock.matrixbuilder, row, vals[ptr])
                     end
                 end

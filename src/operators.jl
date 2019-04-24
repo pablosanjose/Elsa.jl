@@ -73,8 +73,10 @@ function tosite(row, sysinfo)
     s = findsublat(row, sysinfo.offsets)
     offset = sysinfo.offsets[s]
     norbs = sysinfo.norbitals[s]
-    delta = row - offset
-    return div(delta, norbs), rem(delta, norbs), s
+    deltaoffset = row - offset - 1
+    site = div(deltaoffset, norbs) + 1
+    orboffset = rem(deltaoffset, norbs) + 1
+    return site, orboffset, s
 end
 
 torow(siteindex, sublat, sysinfo) = 
