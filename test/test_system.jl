@@ -53,6 +53,12 @@ end
     allunique(sys4.sysinfo.names)
 end
 
+@test begin
+    sys1 = System(:honeycomb, Model(Onsite(@SMatrix[1 0; 0 2], sublats = :A), 
+                                    Onsite(@SMatrix[2 0; 0 3], sublats = :B)))
+    sys2 = grow(sys1, region = Region(:circle, 1))
+    sum(sys2.hamiltonian.matrix) == tr(sys2.hamiltonian.matrix) == 24
+end
 
 # @test Elsa.nlinks(wrap(Lattice(:square, LinkRule(√2), Supercell(2)), exceptaxes = (1,))) == 14
 # @test Elsa.nlinks(wrap(Lattice(:square, LinkRule(√2), Supercell(2)), exceptaxes = (2,))) == 14
