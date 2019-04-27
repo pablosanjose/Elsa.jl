@@ -127,6 +127,7 @@ function applyterm!(builder::IJVbuilder{Tv,T,E,L}, (term, sample, sublats)) wher
                     rtarget = builder.lattice.sublats[s1].sites[itarget] + dist
                     r, dr   = _rdr(rsource, rtarget)
                     smatrix = term(r, dr)
+                    iszero(smatrix) && continue
                     rowoffset = builder.sysinfo.offsets[s1] + (itarget - 1) * builder.sysinfo.norbitals[s1]
                     coloffset = builder.sysinfo.offsets[s2] + (jsource - 1) * builder.sysinfo.norbitals[s2]
                     push!(ijv, smatrix, (rowoffset, coloffset))
