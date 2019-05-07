@@ -4,60 +4,62 @@ using Test
 using Elsa, SparseArrays, LinearAlgebra
 using Elsa: nlinks, nsites
 
-@test System(:honeycomb, dim = Val(3), htype = Float64, ptype = Float32) isa System{3,2,Float32,Float64}
-@test nsites(System(:honeycomb) |> grow(region = Region(:square, 300))) == 207946
-@test nsites(System(:square) |> grow(supercell = 31)) == 961
-@test nsites(System(:bcc) |> grow(region = Region(:spheroid, (10,4,4)))) == 1365
+@testset "system" begin
+    @test System(:honeycomb, dim = Val(3), htype = Float64, ptype = Float32) isa System{3,2,Float32,Float64}
+    @test nsites(System(:honeycomb) |> grow(region = Region(:square, 300))) == 207946
+    @test nsites(System(:square) |> grow(supercell = 31)) == 961
+    @test nsites(System(:bcc) |> grow(region = Region(:spheroid, (10,4,4)))) == 1365
 
-@test nlinks(System(:honeycomb, Model(Hopping(1, sublats = (1,2)))) |> grow(region = Region(:square, 30))) == 6094
-@test nlinks(System(:honeycomb, Model(Hopping(1, ndists = (0,1)))) |> grow(region = Region(:square, 30))) == 3960
-@test nlinks(System(:honeycomb, Model(Hopping(1, ndists = ((0,1),)))) |> grow(region = Region(:square, 30))) == 3960
-@test nlinks(System(:honeycomb, Model(Hopping(1, sublats = (1,2), ndists = ((0,1), (0,1))))) |> 
-    grow(region = Region(:square, 30))) == 2040
-@test nlinks(System(:square, Model(Hopping(1, range = 2))) |> grow(supercell = 31)) == 11532
-@test nlinks(System(:bcc, Model(Hopping(1, range = 1))) |> 
-    grow(supercell = ((1, 2, 0),), region = Region(:sphere, 10))) == 10868
-@test nlinks(System(:bcc, Model(Hopping(1, range = 1))) |> 
-    grow(supercell = (10, 20, 30), region = Region(:sphere, 4))) == 326
-@test nlinks(System(:bcc, Model(Hopping(1, range = 1))) |> grow(supercell = (10, 20, 30))) == 84000
+    @test nlinks(System(:honeycomb, Model(Hopping(1, sublats = (1,2)))) |> grow(region = Region(:square, 30))) == 6094
+    @test nlinks(System(:honeycomb, Model(Hopping(1, ndists = (0,1)))) |> grow(region = Region(:square, 30))) == 3960
+    @test nlinks(System(:honeycomb, Model(Hopping(1, ndists = ((0,1),)))) |> grow(region = Region(:square, 30))) == 3960
+    @test nlinks(System(:honeycomb, Model(Hopping(1, sublats = (1,2), ndists = ((0,1), (0,1))))) |> 
+        grow(region = Region(:square, 30))) == 2040
+    @test nlinks(System(:square, Model(Hopping(1, range = 2))) |> grow(supercell = 31)) == 11532
+    @test nlinks(System(:bcc, Model(Hopping(1, range = 1))) |> 
+        grow(supercell = ((1, 2, 0),), region = Region(:sphere, 10))) == 10868
+    @test nlinks(System(:bcc, Model(Hopping(1, range = 1))) |> 
+        grow(supercell = (10, 20, 30), region = Region(:sphere, 4))) == 326
+    @test nlinks(System(:bcc, Model(Hopping(1, range = 1))) |> grow(supercell = (10, 20, 30))) == 84000
 
-@test nsites(System(:graphene_bilayer, twistindex = 31)) == 11908
+    @test nsites(System(:graphene_bilayer, twistindex = 31)) == 11908
 
-@test begin
-    sys1 = System(:honeycomb, Model(Hopping(1, sublats = (1,2))), dim = Val(3)) |> grow(region = Region(:square, 4)) |> 
-        transform(r -> r + SVector(0,0,1)) 
-    sys2 = System(:square, Model(Hopping(1, range = 2)), dim = Val(3)) |> grow(region = Region(:square, 4)) 
-    sys3 = combine(sys1, sys2)
-    (nlinks(sys3) == nlinks(sys1) + nlinks(sys2) == 294) &&
-    (nsites(sys3) == nsites(sys1) + nsites(sys2) == 61)
-end
+    @test begin
+        sys1 = System(:honeycomb, Model(Hopping(1, sublats = (1,2))), dim = Val(3)) |> grow(region = Region(:square, 4)) |> 
+            transform(r -> r + SVector(0,0,1)) 
+        sys2 = System(:square, Model(Hopping(1, range = 2)), dim = Val(3)) |> grow(region = Region(:square, 4)) 
+        sys3 = combine(sys1, sys2)
+        (nlinks(sys3) == nlinks(sys1) + nlinks(sys2) == 294) &&
+        (nsites(sys3) == nsites(sys1) + nsites(sys2) == 61)
+    end
 
-@test begin
-    sys1 = System(:honeycomb, Model(Hopping(1, sublats = (1,2)))) |> grow(region = Region(:circle, 7))
-    sys2 = System(:square, Model(Hopping(1, range = 2))) |> grow(region = Region(:circle, 6))
-    sys3 = combine(sys1, sys2, Model(Hopping(1, range = 1)))
-    nlinks(sys3) == 5494
-end
+    @test begin
+        sys1 = System(:honeycomb, Model(Hopping(1, sublats = (1,2)))) |> grow(region = Region(:circle, 7))
+        sys2 = System(:square, Model(Hopping(1, range = 2))) |> grow(region = Region(:circle, 6))
+        sys3 = combine(sys1, sys2, Model(Hopping(1, range = 1)))
+        nlinks(sys3) == 5494
+    end
 
-@test begin
-    sys1 = System(:honeycomb)
-    sys2 = transform(sys1, r -> 2r)
-    sys2.lattice.sublats[1].sites[1] ≈ 2 * sys1.lattice.sublats[1].sites[1]
-end
+    @test begin
+        sys1 = System(:honeycomb)
+        sys2 = transform(sys1, r -> 2r)
+        sys2.lattice.sublats[1].sites[1] ≈ 2 * sys1.lattice.sublats[1].sites[1]
+    end
 
-@test begin
-    sys1 = System(:honeycomb)
-    sys2 = System(:honeycomb)
-    sys3 = System(:honeycomb)
-    sys4 = combine(sys1, combine(sys2, sys3))
-    allunique(sys4.sysinfo.names)
-end
+    @test begin
+        sys1 = System(:honeycomb)
+        sys2 = System(:honeycomb)
+        sys3 = System(:honeycomb)
+        sys4 = combine(sys1, combine(sys2, sys3))
+        allunique(sys4.sysinfo.names)
+    end
 
-@test begin
-    sys1 = System(:honeycomb, Model(Onsite(@SMatrix[1 0; 0 2], sublats = :A), 
-                                    Onsite(@SMatrix[2 0; 0 3], sublats = :B)))
-    sys2 = grow(sys1, region = Region(:circle, 1))
-    sum(sys2.hamiltonian.matrix) == tr(sys2.hamiltonian.matrix) == 24
+    @test begin
+        sys1 = System(:honeycomb, Model(Onsite(@SMatrix[1 0; 0 2], sublats = :A), 
+                                        Onsite(@SMatrix[2 0; 0 3], sublats = :B)))
+        sys2 = grow(sys1, region = Region(:circle, 1))
+        sum(sys2.hamiltonian.matrix) == tr(sys2.hamiltonian.matrix) == 24
+    end
 end
 
 # @test Elsa.nlinks(wrap(Lattice(:square, LinkRule(√2), Supercell(2)), exceptaxes = (1,))) == 14

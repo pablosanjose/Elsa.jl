@@ -3,21 +3,33 @@ module ModelTest
 using Test
 using Elsa
 
-@test Onsite(1) isa Elsa.Onsite{Int64,Missing}
-# @test Onsite(1, sublats = 1) isa Elsa.Onsite{Int64,Tuple{Tuple{Int64,Int64}}}
-# @test Onsite([1 2; 3 4], 1) isa Elsa.OnsiteConst{Tuple{Int64},2,Int64,4}
-# @test Onsite([1 2; 3 4.0], 1) isa Elsa.OnsiteConst{Tuple{Int64},2,Float64,4}
-# @test Onsite(@SMatrix[1 2; 3 4.0], 1) isa Elsa.OnsiteConst{Tuple{Int64},2,Float64,4}
-@test Onsite(r -> @SMatrix[r[1] 0; 0 r[2]]) isa Elsa.Onsite{<:Function, Missing}
+@testset "model terms" begin
+    for o in (1, @SMatrix[1], @SMatrix[1 2; 3 4.0], r -> 2, r -> @SMatrix[r[1] 0; 0 r[2]]),
+        sl in (missing, 1, (1,), (2,1), (2, :A))
+        @test Onsite(o, sublats = sl) isa Elsa.Onsite{typeof(o)}
+    end
+    @test Onsite(1, sublats = (2, :A)).sublats == ((2, 2), (:A, :A))
+    @test_throws DimensionMismatch Onsite(@SMatrix[1 2;], sublats = (2,:A))
 
-# @test Hopping(@SMatrix[1 2.0; 3 4], (1,1)) isa Elsa.HoppingConst{Tuple{Tuple{Int,Int}},2,2,Float64,4}
-# @test Hopping(@SMatrix[1 2.0; 3 4]) isa Elsa.HoppingConst{Missing,2,2,Float64,4}
+    testhoppings(o, sl, nd, r) = if o isa Function
+        @test Hopping(o, sublats = sl, ndists = nd, range = r) isa Elsa.Hopping{typeof(o)}
+    else
+        @test Hopping(o, sublats = sl, ndists = nd, range = r) isa Elsa.Hopping{<:SMatrix}
+    end
+    
+    for o in (1, @SMatrix[1], @SMatrix[1 2; 3 4.0], @SMatrix[1 2;], r -> 2, 
+              r -> @SMatrix[r[1] 0; 0 r[2]]),
+        sl in (missing, 1, ((1, 1),), ((1, 1), (1, 2))), 
+        nd in (missing, (0, 0), ((0, 1), (2, 2))), 
+        r in (1.1, 2f0)
+        testhoppings(o, sl, nd, r)
+    end
+end
 
-# @test_throws DimensionMismatch Model(Onsite([1 2], 3)) # Non-square onsite matrix!
-# @test_throws MethodError Model(Onsite(@SMatrix[1 2])) # Non-square onsite matrix!
-# @test_throws DimensionMismatch Model(Hopping(@SMatrix[1 2], (1,1)))  # Non-square intra-sublattice hopping matrix!
-# @test_throws DimensionMismatch Model(Hopping([1 2]))  # Non-square intra-sublattice hopping matrix!
-
-# @test isempty(Elsa.nzonsites(Model()))
+@testset "model" begin
+    @test isempty(Model().terms)
+    @test_throws DimensionMismatch System(:honeycomb, Model(Hopping(@SMatrix[1 2], sublats = 2)))
+    @test System(:honeycomb, Model(Hopping(@SMatrix[1 2], sublats = (1, 2)))) isa System
+end
 
 end

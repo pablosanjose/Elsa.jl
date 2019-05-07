@@ -99,7 +99,7 @@ link, or any distance if `missing`.
 """
 Hopping(h; sublats = missing, ndists = missing, range = 1) =
     Hopping(ensureSMatrix(h), _normaliseSLpairs(sublats), _normaliseND(ndists), 
-    range + extended_eps(Float64))
+    Float64(range) + extended_eps(Float64))
 
 _normaliseND(::Missing) = missing
 _normaliseND(n::NTuple{L,Int}) where L = [SVector{L,Int}(n)]

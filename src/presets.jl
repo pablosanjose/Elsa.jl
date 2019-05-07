@@ -84,7 +84,7 @@ regionpresets = Dict(
     )
 
 function _region_ellipse((rx, ry))
-    return r -> (r[1]/rx)^2 + (r[2]/ry)^2 <= 1 + extended_eps()
+    return r -> (r[1]/rx)^2 + (r[2]/ry)^2 <= 1 + extended_eps(Float64)
 end
 
 function _region_rectangle((lx, ly))
