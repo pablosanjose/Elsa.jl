@@ -52,9 +52,10 @@ These are some of the basic types in `Elsa.jl`:
 ## System API
 
 A number of functions are available to easily build complex systems incrementally (see examples below). These are 
-- `grow(system; supercell = ..., region = ...)` to expand the unit cell of a `system` with Bravais vectors `bravais` so that the result has bravais vectors `bravais * supercell` (could be less vectors than the original). `region` is a boolean function of spatial position that specifies if a site at `r` in the unit cell should be included in the result.
+- `grow(system; supercell = ..., region = ...)` to expand the unit cell of a `system` with Bravais vectors `bravais` so that the result has Bravais vectors `bravais * supercell` (could be less vectors than the original). `region` is a boolean function of spatial position that specifies if a site at `r` in the unit cell should be included in the result.
+- `bound(system; except = ())` makes `system` bounded along all its axes, except along those specified by the `except::NTuple{L2,Int}` keyword.
 - `transform!(system, r -> f(r); sublats = ...)` change `system` in-place by moving sites at `r` to `f(r)`. If `sublats` (names or numbers) are specified, the transformation is restricted to those sublattices. Bravais vectors are updated too, but no change to the Hamiltonian is performed. See also `transform` for not-in-place transformations.
-- `combine(systems...[, model])` to combine the sublattices of all `systems` into a single system, giving them new unique names if necessary. The tight-binding structure of each system is preserved. Couplings between subsystems can be added using `model`. Note that `combine` can also be used to add a given `model` to a single existing system.
+- `combine(systems...[, model])` to combine the sublattices of all `systems` into a single system, giving them new unique names if necessary. The tight-binding structure of each system is preserved. Couplings between subsystems can be added using `model`. Note that `combine` can also be used to add a given `model` to a single existing system. 
 - `hamiltonian(system; k, kphi)` gives the Hamiltonian of a closed system (`L == 0`) or the Bloch Hamiltonian of an unbounded system, at wavevector `k`, or alternatively at normalised Bloch phases `kphi = k*B/2π` (`B` is the Bravais matrix). This gives a plain `SparseMatrixCSC`, computed from a more complex object `system.hamiltonian`, of type `Operator`.
 
 One can use a functional for of all the above to chain a number of operations. The two following instructions would then be equivalent

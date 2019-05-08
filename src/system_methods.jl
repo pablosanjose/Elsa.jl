@@ -372,15 +372,15 @@ const TOOMANYITERS = 10^8
 function _growsublats(sys::System{E,L,T}, supercell, region) where {E,L,T}
     bravais = bravaismatrix(sys)
     iter = BoxIterator(zero(SVector{L,Int}))
-    smask = _supercellmask(supercell)
+    hasnoshadow = _hasnoshadow(supercell)
     firstfound = false
     counter = 0
-    for ndist in iter
+    for ndist in iter   # We first compute the bounding box
         found = false
         counter += 1; counter == TOOMANYITERS && @warn "Region fill seems non-covergent, check `region`"
         for sublat in sys.lattice.sublats, site in sublat.sites
             r = bravais * ndist + site
-            found = smask(ndist) && region(r)
+            found = hasnoshadow(ndist) && region(r)
             if found || !firstfound
                 acceptcell!(iter, ndist)
                 firstfound = found
@@ -390,16 +390,18 @@ function _growsublats(sys::System{E,L,T}, supercell, region) where {E,L,T}
     end
     bbox = boundingboxiter(iter)
     ranges = UnitRange.(bbox...)
+
     # sitemaps[sublat][oldsiteindex, cell...] is newsiteindex for a given sublat
     sitemaps = OffsetArray{Int,L+1,Array{Int,L+1}}[zeros(Int, 1:length(sublat.sites), 
         ranges...) for sublat in sys.lattice.sublats]
+    
     sublats = [Sublat{E,T}(; name = sublat.name) for sublat in sys.lattice.sublats]
     for (s, sublat) in enumerate(sys.lattice.sublats)
         counter = 0
         for cell in CartesianIndices(ranges) , (i, site) in enumerate(sublat.sites)
             ndist = SVector{L,Int}(Tuple(cell))
             r = site + bravais * ndist
-            if smask(ndist) && region(r)
+            if hasnoshadow(ndist) && region(r)
                 push!(sublats[s].sites, r)
                 counter += 1
                 sitemaps[s][i, Tuple(cell)...] = counter
@@ -417,7 +419,8 @@ function pinvint(s::SMatrix{N,M}) where {N,M}
     iszero(n) && throw(ErrorException("Supercell is singular"))
     return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
 end
-_supercellmask(supercell) = let invs = pinvint(supercell); ndist -> iszero(_newndist(ndist, invs)); end
+# This is true whenever old ndist is perpendicular to new lattice
+_hasnoshadow(supercell) = let invs = pinvint(supercell); ndist -> iszero(_newndist(ndist, invs)); end
 _newndist(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
 _newndist(oldndist, (pinvs, n)::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
 _wrappedndist(ndist, s, invs) = (nn = _newndist(ndist, invs); (nn, ndist - s * nn))
@@ -485,4 +488,33 @@ function findfirstblock(blocks, ndist)
         blocks[n].ndist == ndist && return n
     end
     return 0
+end
+
+#######################################################################
+# bound
+#######################################################################
+bound(;kw...) = sys -> bound(sys; kw...)
+bound(sys::System{E,L}; except = ()) where {E,L,L2} = 
+    _bound(sys, toSVector(Int, except))
+function _bound(sys::System{E,L,T,Tv}, exceptaxes::SVector{L2,Int}) where {E,L,L2,T,Tv} 
+    sublats = deepcopy(sys.lattice.sublats)
+    bravais = Bravais(sys.lattice.bravais.matrix[:, exceptaxes])
+    lattice = Lattice(sublats, bravais)
+    sysinfo = sys.sysinfo
+    matrix = deepcopy(sys.hamiltonian.matrix)
+    supercell = SMatrix{L,L,Int}(I)[:,exceptaxes]
+    intra =   _projectblock(sys.hamiltonian.intra, supercell)
+    inters = Block{Tv,L2}[_projectblock(inter, supercell) for inter in sys.hamiltonian.inters 
+              if _isselfshadow(inter.ndist, exceptaxes)]
+    boundary = extractboundary(matrix, intra, inters)
+    ham = Operator(matrix, intra, inters, boundary)
+    return System(lattice, ham, sysinfo)         
+end
+
+# This is true if the part of ndist orthogonal to exceptaxes is zero
+_isselfshadow(ndist::SVector{L}, exceptaxes) where {L} = 
+    all(i -> iszero(ndist[i]) || i in exceptaxes, 1:L)
+
+function _projectblock(block, scell) 
+    Block(scell' * block.ndist, copy(block.matrix), block.nlinks)
 end
