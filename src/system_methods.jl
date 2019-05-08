@@ -332,20 +332,22 @@ function Operator(b::OperatorBuilder, sysinfo)
     return Operator(matrix, intra, inters, boundary)
 end
 
-grow(; supercell = missing, region = missing) = sys -> grow(sys, supercell, region)
-grow(sys::System; supercell = missing, region = missing) = grow(sys, supercell, region)
-grow(sys::System{E,L}, ::Missing, region::Function) where {E,L} = grow(sys, SMatrix{L,0,Int}(), region)
-grow(sys::System, supercell::SMatrix, ::Missing) = grow(sys, supercell, r -> true)
-grow(sys::System{E,L}, supercell::Integer, region) where {E,L} = grow(sys, SMatrix{L,L,Int}(supercell*I), region)
+_truefunc(r) = true
+grow(; kw...) = sys -> grow(sys; kw...)
+grow(sys::System{E,L}; supercell = SMatrix{L,0,Int}(), region = _truefunc) where {E,L} = 
+    grow(sys, supercell, region)
+grow(sys::System{E,L}, supercell::Integer, region) where {E,L} = 
+    grow(sys, SMatrix{L,L,Int}(supercell*I), region)
 grow(sys::System{E,L}, supercell::NTuple{L,Integer}, region) where {E,L} = 
     grow(sys, SMatrix{L,L,Int}(Diagonal(SVector{L,Int}(supercell))), region)
 grow(sys::System{E,L}, supercell::NTuple{N,NTuple{L,Integer}}, region) where {E,L,N} = 
     grow(sys, toSMatrix(supercell...), region)
-grow(sys::System, ::Missing, ::Missing) = sys
 
-grow(sys::System, supercell, region) = throw(DimensionMismatch("Possible mismatch between `supercell` and system, or `region` not a function."))
+grow(sys::System, supercell, region) = 
+    throw(DimensionMismatch("Possible mismatch between `supercell` and system, or `region` not a function."))
 
-function grow(sys::System, supercell::SMatrix{N,M,Int}, region::Function) where {N,M}
+function grow(sys::System{E,L}, supercell::SMatrix{L,L2,Int}, region::Function) where {E,L,L2}
+    L2 < L && region == _truefunc && error("Unbounded fill region for $(L-L2) dimensions")
     sublats, sitemaps = _growsublats(sys, supercell, region)
     bravais = _growbravais(sys, supercell)
     sysinfo = _growsysinfo(sys.sysinfo, sublats)
@@ -353,7 +355,8 @@ function grow(sys::System, supercell::SMatrix{N,M,Int}, region::Function) where 
     return System(Lattice(sublats, bravais), hamiltonian, sysinfo)
 end
 
-_growbravais(sys::System{Tv,T,E,L}, supercell) where {Tv,T,E,L} = Bravais(bravaismatrix(sys) * supercell)
+_growbravais(sys::System{Tv,T,E,L}, supercell) where {Tv,T,E,L} = 
+    Bravais(bravaismatrix(sys) * supercell)
 
 function _growsysinfo(oldsysinfo::SystemInfo, sublats)
     sysinfo = deepcopy(oldsysinfo)
