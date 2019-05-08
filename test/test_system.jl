@@ -23,7 +23,9 @@ using Elsa: nlinks, nsites
     @test nlinks(System(:bcc, Model(Hopping(1, range = 1))) |> grow(supercell = (10, 20, 30))) == 84000
 
     @test nsites(System(:graphene_bilayer, twistindex = 31)) == 11908
+end
 
+@testset "system api" begin
     @test begin
         sys1 = System(:honeycomb, Model(Hopping(1, sublats = (1,2))), dim = Val(3)) |> grow(region = Region(:square, 4)) |> 
             transform(r -> r + SVector(0,0,1)) 
@@ -59,6 +61,22 @@ using Elsa: nlinks, nsites
                                         Onsite(@SMatrix[2 0; 0 3], sublats = :B)))
         sys2 = grow(sys1, region = Region(:circle, 1))
         sum(sys2.hamiltonian.matrix) == tr(sys2.hamiltonian.matrix) == 24
+    end
+
+    @test begin
+        sys = System(:bcc, Model(Hopping(1))) |> grow(supercell = 3) |> bound(except = 1)
+        sys isa System{3,1}
+    end
+
+    @test begin
+        sys = System(:cubic, Model(Hopping(1, range = 3))) |> grow(supercell = (3,1,3)) |> 
+              bound(except = (1,3))
+        sys isa System{3,2} && Elsa.nlinks(sys) == 252
+    end
+
+    @test begin
+        sys = System(:honeycomb) |> bound()
+        sys isa System{2,0}
     end
 end
 

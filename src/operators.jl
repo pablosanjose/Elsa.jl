@@ -7,8 +7,8 @@ struct SystemInfo{Tv,S}
     names::Vector{NameType}
     nsites::Vector{Int}
     norbitals::Vector{Int}
-    dims::Vector{Int}
-    offsets::Vector{Int}    
+    dims::Vector{Int}       # Hamiltonian block dimensions for each sublattice
+    offsets::Vector{Int}    # Hamiltonian block offset for each sublattice
 end
 SystemInfo{Tv}(terms::S, args...) where {Tv,S} = SystemInfo{Tv,S}(terms, args...)
 
