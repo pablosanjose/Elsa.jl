@@ -44,22 +44,26 @@ end
 # end
 # hypertriangularbravais(s::SMatrix{L,L}) where L = s
 
-unimesh(vecs::Union{Vector,Tuple}, npoints) = unimesh(hcat(vecs...), npoints)
-function unimesh(vecs::SMatrix{D,D,T}, npoints::NTuple{D,Integer}) where {T,D}
-    nv = prod(npoints)
-    vertices = T[]
+# modifyat(s::SVector{N,T}, i, x) where {N,T} = SVector(ntuple(j -> j == i ? x : s[j], Val(N)))
+
+function marchingmesh(npoints::NTuple{D,Integer}, 
+                      m::SMatrix{D,D,T} = SMatrix{D,D,Float64}(I)) where {D,T<:AbstractFloat}
+    projection = m ./ SVector(npoints)'
+    vertices = SVector{D,T}[]
     edges = Tuple{Int,Int}[]
     elements = Tuple{Int,Vararg{Int,D}}[]
-    crange = CartesianIndices(ntuple(n -> 0:npoints[n]-1, Val(D)))
+    crange = CartesianIndices(ntuple(n -> 1:npoints[n], Val(D)))
     lrange = LinearIndices(crange)
-    uvecs = ntuple(Val(D)) do n
-                CartesianIndex(ntuple(m -> n == m ? 1 : 0, Val(D)))
-            end
+    origin = SVector(Tuple(first(crange)))
+
+    # link vectors for marching tetrahedra in D-dimensions
+    uvecs = [c for c in CartesianIndices(ntuple(_ -> 0:1, Val(D)))][2:end]
+
     for c in crange
-        push!(vertices, SVector(Tuple(c)))
+        push!(vertices, projection * (SVector(Tuple(c)) - origin))
         for uvec in uvecs
             dest = c + uvec
-            first(crange) <= dest <= last(crange) && push!(edges, (lrange[c], lrange[dest]))
+            dest in crange && push!(edges, (lrange[c], lrange[dest]))
         end
     end
     return vertices, edges
