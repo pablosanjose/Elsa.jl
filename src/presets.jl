@@ -17,7 +17,7 @@ systempresets = Dict(
     :cubic => (; kw...) ->
         System(Sublat((0., 0., 0.); kw...), 
                Bravais((1., 0., 0.), (0., 1., 0.), (0., 0., 1.)); kw...),
-    :bcc => (; kw...) ->
+    :fcc => (; kw...) ->
         System(Sublat((0., 0., 0.); kw...), 
                Bravais(@SMatrix([-1. -1. 0.; 1. -1. 0.; 0. 1. -1.])'/sqrt(2.)); kw...),
     :bcc => (; kw...) ->
