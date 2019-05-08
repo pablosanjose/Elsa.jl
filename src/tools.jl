@@ -12,6 +12,9 @@ toSMatrix(s::AbstractMatrix) = SMatrix{size(s,1), size(s,2)}(s)
 toSVectors(vs...) = [promote(toSVector.(vs)...)...]
 toSVector(v::SVector) = v
 toSVector(v::NTuple{N,Number}) where {N} = SVector(v)
+toSVector(x::Number) = SVector{1}(x)
+toSVector(::Type{T}, v) where {T} = T.(toSVector(v))
+toSVector(::Type{T}, ::Tuple{}) where {T} = SVector{0,T}()
 # Dynamic dispatch
 toSVector(v::AbstractVector) = SVector(Tuple(v))
 

@@ -204,7 +204,7 @@ System{2,2,Float64,Complex{Float64}} : 2D system in 2D space
 combine
 
 """
-    grow(system::System{Tv,T,E,L}; supercell = SMatrix{L,0,Int}(), region = r -> true)
+    grow(system::System{E,L}; supercell = SMatrix{L,0,Int}(), region = r -> true)
 
 Transform an `L`-dimensional `system` into another `L2`-dimensional system with a different 
 supercell, so that the new Bravais matrix is `br2 = br * supercell`, and only sites with 
@@ -237,6 +237,39 @@ System{2,2,Float64,Complex{Float64}} : 2D system in 2D space
     'Region`
 """
 grow
+
+"""
+    bound(system::System{E,L,T}; except = ()))
+
+Remove the periodicity of the `system`'s lattice along the specified `axes`, dropping
+Bloch Hamiltonian harmonics accordingly.
+
+    system |> bound(; kw...)
+
+Functional syntax, equivalent to `bound(system; kw...)``
+
+# Examples
+```jldoctest
+julia> bound(System(:cubic), except = (1, 3))
+System{3,2,Float64,Complex{Float64}} : 2D system in 3D space
+  Bravais vectors     : ((1.0, 0.0, 0.0), (0.0, 0.0, 1.0))
+  Sublattice names    : (1,)
+  Sublattice orbitals : (0,)
+  Total sites         : 1 [Float64]
+  Total hoppings      : 0 [Complex{Float64}]
+  Coordination        : 0.0
+
+julia> System(:triangular) |> bound()
+System{2,0,Float64,Complex{Float64}} : 0D system in 2D space
+  Bravais vectors     : ()
+  Sublattice names    : (1,)
+  Sublattice orbitals : (0,)
+  Total sites         : 1 [Float64]
+  Total hoppings      : 0 [Complex{Float64}]
+  Coordination        : 0.0
+```
+"""
+bound
 
 """
     hamiltonian(system; k, kphi)
