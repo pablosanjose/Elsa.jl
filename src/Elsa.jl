@@ -27,7 +27,7 @@ include("iterators.jl")
 include("system_methods.jl")
 include("KPM.jl")
 include("mesh.jl")
-# include("bandstructure.jl")
+include("bandstructure.jl")
 include("convert.jl")
 include("tools.jl")
 
