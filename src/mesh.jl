@@ -2,8 +2,8 @@
 # Mesh
 #######################################################################
 abstract type AbstractMesh end
-struct Mesh{Vitr,GT} <: AbstractMesh
-    verts::Vitr
+struct Mesh{V,GT} <: AbstractMesh
+    verts::V
     adjmat::SparseMatrixCSC{Bool,Int}
     simps::GT
 end
