@@ -8,7 +8,7 @@ import SparseArrays: sparse!
 
 export Sublat, Bravais, Lattice, System, systempresets, Model, Hopping, Onsite,  Region,
        grow, combine, transform, transform!, hamiltonian, bound,
-       sitepositions, neighbors, bravaismatrix
+       sitepositions, neighbors, bravaismatrix, marchingmesh
 export MomentaKPM, dosKPM
 
 export @SMatrix, @SVector, SMatrix, SVector
@@ -26,8 +26,8 @@ include("system.jl")
 include("iterators.jl")
 include("system_methods.jl")
 include("KPM.jl")
-# include("mesh.jl")
-# include("bandstructure.jl")
+include("mesh.jl")
+include("bandstructure.jl")
 include("convert.jl")
 include("tools.jl")
 
