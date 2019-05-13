@@ -4,6 +4,15 @@ using Test
 using Elsa, SparseArrays, LinearAlgebra
 using Elsa: nlinks, nsites
 
+@testset "operators" begin
+    @test begin
+        sys = System(:square, Model(Hopping(@SMatrix[1 2; 2 1]))) |> grow(supercell = 3)
+        h = sys.hamiltonian
+        v = Elsa.boundaryoperator(h)
+        nnz(h.matrix) == 144 && nnz(v.matrix) == 48 && v.inters == h.inters
+    end
+end
+
 @testset "system" begin
     @test System(:honeycomb, dim = Val(3), htype = Float64, ptype = Float32) isa System{3,2,Float32,Float64}
     @test nsites(System(:honeycomb) |> grow(region = Region(:square, 300))) == 207946

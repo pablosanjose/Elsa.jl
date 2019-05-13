@@ -63,6 +63,24 @@ negSVector(s::SVector{0,<:Number}) where {L} = s    ## Work around BUG: -SVector
 
 allorderedpairs(v) = [(i, j) for i in v, j in v if i >= j]
 
+# Like copyto! but with potentially different tensor orders
+function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1}, 
+                    src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
+    isempty(Rdest) && return dest
+    if length(Rdest) != length(Rsrc)
+        throw(ArgumentError("source and destination must have same length (got $(length(Rsrc)) and $(length(Rdest)))"))
+    end
+    checkbounds(dest, first(Rdest))
+    checkbounds(dest, last(Rdest))
+    checkbounds(src, first(Rsrc))
+    checkbounds(src, last(Rsrc))
+    src′ = Base.unalias(dest, src)
+    for (Is, Id) in zip(Rsrc, Rdest)
+        @inbounds dest[Id] = src′[Is]
+    end
+    return dest
+end
+
 ######################################################################
 # Permutations (taken from Combinatorics.jl)
 #######################################################################

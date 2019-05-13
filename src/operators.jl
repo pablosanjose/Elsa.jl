@@ -103,6 +103,8 @@ function Block(ndist, matrix, sysinfo::SystemInfo)
     return b
 end
 Base.isempty(b::Block) = isempty(b.matrix)
+Base.zero(b::Block{Tv,L}) where {Tv,L} = 
+    Block(zero(SVector{L,Int}), spzeros(Tv, size(b.matrix)...), 0)
 
 function Base.show(io::IO, b::Block{Tv,L}) where {Tv,L}
     print(io, "Block{$Tv,$L}: Bloch harmonic $(b.ndist) of dimensions $(size(b.matrix)) with $(nnz(b.matrix)) elements")
@@ -163,6 +165,32 @@ function insertblochphases!(op::Operator{Tv}, kn) where {Tv}
         end
     end
     return op
+end
+
+function boundaryoperator(op::Operator{Tv}) where {Tv}
+    n = length(op.boundary)
+    sb = SparseMatrixBuilder{Tv}(size(op.matrix)...)
+    rows = rowvals(op.matrix)
+    vals = nonzeros(op.matrix)
+    sofar = 1
+    for col in 1:size(op.matrix, 2)
+        colrange = nzrange(op.matrix, col)
+        for bidx in sofar:n
+            ptr = first(op.boundary[bidx])
+            if ptr in colrange
+                sofar = bidx + 1
+                pushtocolumn!(sb, rows[ptr], vals[ptr])
+            else
+                break
+            end
+        end
+        finalisecolumn!(sb)
+    end
+    matrix = sparse(sb)
+    intra = zero(op.intra)
+    inters = op.inters
+    boundary = extractboundary(matrix, intra, inters)
+    return Operator(matrix, intra, inters, boundary)
 end
 
 #######################################################################

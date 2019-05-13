@@ -211,7 +211,7 @@ function assembleblocks(builder::IJVbuilder{Tv,T,E,L}) where {Tv,T,E,L}
     return matrix, intra, inters, boundary
 end
 appendIJV!(ijv, ijv2::IJV) = (append!(ijv.I, ijv2.I); append!(ijv.J, ijv2.J); append!(ijv.V, ijv2.V))
-
+ 
 function extractboundary(matrix, intra::Block{Tv}, inters) where {Tv}
     rowsintra = rowvals(intra.matrix)
     rowsmatrix = rowvals(matrix)
@@ -226,11 +226,13 @@ function extractboundary(matrix, intra::Block{Tv}, inters) where {Tv}
                 for ptrm in nzrange(matrix, col) 
                     rowsmatrix[ptrm] == row && (ptrmatrix = ptrm; break)
                 end
-                iszero(ptrmatrix) && throw(ErrorException("Unexpected: found element in intercell harmonic not present in work matrix"))
+                iszero(ptrmatrix) && throw(ErrorException(
+                    "Unexpected: found element in intercell harmonic not present in work matrix"))
                 for ptri in nzrange(intra.matrix, col) 
                     rowsintra[ptri] == row && (ptrintra = ptri; break)
                 end
                 push!(boundary, (ptrmatrix, ptrintra))
+                # ptrintra == 0 if inter element is only present in ptrmatrix
             end
         end
     end

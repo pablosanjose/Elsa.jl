@@ -1,15 +1,16 @@
 ######################################################################
 # Mesh
 #######################################################################
-abstract type AbstractMesh end
-struct Mesh{V,GT} <: AbstractMesh
+abstract type AbstractMesh{D} end
+struct Mesh{D,V,GT} <: AbstractMesh{D}
     verts::V
     adjmat::SparseMatrixCSC{Bool,Int}
     simps::GT
 end
+Mesh{D}(verts::V, adjmat, simps::GT) where {D,V,GT} = Mesh{D,V,GT}(verts, adjmat, simps)
 
-Base.show(io::IO, mesh::Mesh) = print(io,
-"Mesh
+Base.show(io::IO, mesh::Mesh{D}) where {D} = print(io,
+"Mesh{$D}: mesh in $D-dimensional space
   Vertices  : $(nvertices(mesh))
   Edges     : $(nedges(mesh))
   Simplices : $(nsimplices(mesh))")
@@ -59,5 +60,5 @@ function marchingmesh(npoints::NTuple{D,Integer},
     end
     adjmat = sparse(s)
 
-    return Mesh(vgen, adjmat, sgen)
+    return Mesh{D}(vgen, adjmat, sgen)
 end
