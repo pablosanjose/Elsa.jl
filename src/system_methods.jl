@@ -17,15 +17,18 @@ transform(f::Function; kw...) = sys -> transform(sys, f; kw...)
 #######################################################################
 # System's Hamiltonian
 #######################################################################
-function hamiltonian(sys::System{E,L,T}; k = zero(SVector{E,T}), kphi = blochphases(k, sys), kw...) where {E,L,T}
-	length(kphi) == L || throw(DimensionMismatch("The dimension of the normalized Bloch phases `kphi` should match the lattice dimension $L"))
+function hamiltonian(sys::System{E,L,T}; 
+                     k = zero(SVector{E,T}), kphi = blochphases(k, sys), kw...) where {E,L,T}
+	length(kphi) == L || throw(DimensionMismatch(
+            "The dimension of the normalized Bloch phases `kphi` should match the lattice dimension $L"))
     L == 0 || insertblochphases!(sys.hamiltonian, SVector{L,T}(kphi))
     return sys.hamiltonian.matrix
 end
 hamiltonian(; kw...) = sys -> hamiltonian(sys; kw...)
 
 function blochphases(k, sys::System{E,L,T}) where {E,L,T}
-	length(k) == E || throw(DimensionMismatch("The dimension of the Bloch vector `k` should match the embedding dimension $E"))
+	length(k) == E || throw(DimensionMismatch(
+            "The dimension of the Bloch vector `k` should match the embedding dimension $E"))
 	return transpose(bravaismatrix(sys)) * SVector{E,T}(k) / (2pi)
 end
 

@@ -269,6 +269,10 @@ Bloch phases `kphi = k*B/2π`, where `B` is the system's Bravais matrix.
 By default the Hamiltonian at zero momentum (Gamma point) is returned. For `0`-dimensional 
 systems, the Bloch Hamiltonian is simply the Hamiltonian of the system.
 
+Important note: for performance reasons, `hamiltonian` reuses always the same preallocated 
+sparse matrix `system.hamiltonian.matrix`. Hence doing `h1 = hamiltonian(sys, k = k1)` and 
+then `h2 = hamiltonian(sys, k = k2)` overwrites `h1`, so that `h1 === h2`.
+
 # Examples
 ```jldoctest
 julia> hamiltonian(System(:honeycomb, Model(Hopping(1))), momentum = (0,1))
