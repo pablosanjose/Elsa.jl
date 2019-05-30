@@ -33,7 +33,8 @@ Bravais{E,L,T}(b::Bravais) where {E,L,T} =
     Bravais(padrightbottom(b.matrix, SMatrix{E,L,T}))
 
 System{E,L,T,Tv}(s::System) where {E,L,T,Tv} = 
-    System(convert(Lattice{E,L,T,Tv}, s.lattice), Operator{Tv,L}(s.hamiltonian))
+    System(convert(Lattice{E,L,T,Tv}, s.lattice), Operator{Tv,L}(s.hamiltonian), 
+           Operator{Tv,L}(s.velocity), s.sysinfo)
 
 Operator{Tv,L}(o::Operator) where {Tv,L} = 
     Operator{Tv,L}(o.matrix, o.intra, o.inters, o.boundary)

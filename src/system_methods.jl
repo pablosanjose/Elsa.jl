@@ -15,16 +15,25 @@ transform(sys::System, f; kw...) = transform!(deepcopy(sys), f; kw...)
 transform(f::Function; kw...) = sys -> transform(sys, f; kw...)
 
 #######################################################################
-# System's Hamiltonian
+# System's Hamiltonian and velocity
 #######################################################################
 function hamiltonian(sys::System{E,L,T}; 
-                     k = zero(SVector{E,T}), kphi = blochphases(k, sys), kw...) where {E,L,T}
-	length(kphi) == L || throw(DimensionMismatch(
-            "The dimension of the normalized Bloch phases `kphi` should match the lattice dimension $L"))
-    L == 0 || insertblochphases!(sys.hamiltonian, SVector{L,T}(kphi))
+                     k = zero(SVector{E,T}), ϕn = blochphases(k, sys)) where {E,L,T}
+    L == 0 || insertblochphases!(sys.hamiltonian, SVector{L,T}(ϕn))
     return sys.hamiltonian.matrix
 end
 hamiltonian(; kw...) = sys -> hamiltonian(sys; kw...)
+
+velocity(sys::System{E,L}; kw...) where {E,L} = ntuple(i -> velocity(sys, i; kw...), Val(L))
+
+velocity(sys::System{E,L}, axis::Int; kw...) where {E,L} =
+    velocity(sys, SMatrix{L,L,Int}(I)[:, axis]; kw...)
+
+function velocity(sys::System{E,L,T}, dϕaxis::Union{Tuple,SVector}; 
+                  k = zero(SVector{E,T}), ϕn = blochphases(k, sys)) where {E,L,T}
+    L == 0 || insertblochphases!(sys.velocity, SVector{L,T}(ϕn), SVector{L,T}(dϕaxis))
+    return sys.velocity.matrix
+end
 
 function blochphases(k, sys::System{E,L,T}) where {E,L,T}
 	length(k) == E || throw(DimensionMismatch(
@@ -266,7 +275,8 @@ function _combine(systems::NTuple{N,System}, model::Model; kw...) where {N}
         nsublats += length(system.lattice.sublats)
     end
     hamiltonian = Operator(builder)
-    return System(lattice, hamiltonian, sysinfo)
+    velocity = boundaryoperator(hamiltonian)
+    return System(lattice, hamiltonian, velocity, sysinfo)
 end
 
 _getsampledterms(system, systems...) = (system.sysinfo.sampledterms..., _getsampledterms(systems...)...)
@@ -357,7 +367,8 @@ function grow(sys::System{E,L}, supercell::SMatrix{L,L2,Int}, region::Function) 
     bravais = _growbravais(sys, supercell)
     sysinfo = _growsysinfo(sys.sysinfo, sublats)
     hamiltonian = _growhamiltonian(sys, supercell, sitemaps, sysinfo)
-    return System(Lattice(sublats, bravais), hamiltonian, sysinfo)
+    velocity = boundaryoperator(hamiltonian)
+    return System(Lattice(sublats, bravais), hamiltonian, velocity, sysinfo)
 end
 
 _growbravais(sys::System{Tv,T,E,L}, supercell) where {Tv,T,E,L} = 
@@ -513,7 +524,8 @@ function _bound(sys::System{E,L,T,Tv}, exceptaxes::SVector{L2,Int}) where {E,L,L
               if _isselfshadow(inter.ndist, exceptaxes)]
     boundary = extractboundary(matrix, intra, inters)
     ham = Operator(matrix, intra, inters, boundary)
-    return System(lattice, ham, sysinfo)         
+    vel = boundaryoperator(ham)
+    return System(lattice, ham, vel, sysinfo)         
 end
 
 # This is true if the part of ndist orthogonal to exceptaxes is zero

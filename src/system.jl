@@ -56,6 +56,7 @@ julia> Tuple(keys(Elsa.systempresets))
 struct System{E,L,T,Tv,S<:SystemInfo,EL}
     lattice::Lattice{E,L,T,EL}
     hamiltonian::Operator{Tv,L}
+    velocity::Operator{Tv,L}
     sysinfo::S
 end
 
@@ -69,7 +70,9 @@ function System(lat::Lattice{E,L,T}, model::Model{Tv} = Model();
                 htype::Type{Tv2} = Tv, kw...) where {E,L,T,Tv,Tv2}
     actualmodel = convert(Model{Tv2}, model)
     sysinfo = SystemInfo(lat, actualmodel)
-    return System(lat, Operator(lat, sysinfo), sysinfo)
+    hamiltonian = Operator(lat, sysinfo)
+    velocity = boundaryoperator(hamiltonian)
+    return System(lat, hamiltonian, velocity, sysinfo)
 end
 
 System(name::NameType; kw...) = systempresets[name](; kw...)
@@ -261,11 +264,11 @@ System{2,0,Float64,Complex{Float64}} : 0D system in 2D space
 bound
 
 """
-    hamiltonian(system; k, kphi)
+    hamiltonian(system; k, ϕn)
 
 Return the Bloch Hamiltonian of an `L`-dimensional `system` in `E`-dimensional space at 
 a given `E`-dimensional Bloch momentum `k`, or alternatively `L`-dimensional normalised 
-Bloch phases `kphi = k*B/2π`, where `B` is the system's Bravais matrix.
+Bloch phases `ϕn = k*B/2π`, where `B` is the system's Bravais matrix.
 By default the Hamiltonian at zero momentum (Gamma point) is returned. For `0`-dimensional 
 systems, the Bloch Hamiltonian is simply the Hamiltonian of the system.
 
@@ -275,15 +278,48 @@ then `h2 = hamiltonian(sys, k = k2)` overwrites `h1`, so that `h1 === h2`.
 
 # Examples
 ```jldoctest
-julia> hamiltonian(System(:honeycomb, Model(Hopping(1))), momentum = (0,1))
-2×2 SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
-  [1, 1]  =  2.59144+0.0im
-  [2, 1]  =  2.29572-1.52352im
-  [1, 2]  =  2.29572+1.52352im
-  [2, 2]  =  2.59144+0.0im
+julia> hamiltonian(System(:honeycomb, Model(Hopping(1))), ϕn = (0,0.5))
+2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
+  [1, 1]  =  -2.0+0.0im
+  [2, 1]  =  1.0-1.22465e-16im
+  [1, 2]  =  1.0+1.22465e-16im
+  [2, 2]  =  -2.0+0.0im
 ```
+
+# See also
+
+    'velocity`
 """
 hamiltonian
+
+"""
+    velocity(system::System{E,L}, axis = missing; k, ϕn)
+
+Return the velocity operator `∂H(k)` along the specified crystallographic `axis`, which can
+be an integer from 1 to `L` (unit axis), an `SVector{L}` or an `NTuple{L}`. If no `axis` is 
+given, a tuple of all velocity operators along each of the `L` axis is returned. See 
+`hamiltonian` for details on the `k` and `ϕn` keywords.
+
+Important note: for performance reasons, `velocity` reuses the same preallocated sparse 
+matrix `system.velocity.matrix`. Hence doing `h1 = velocity(sys, axis1, k = k1)` and 
+then `h2 = velocity(sys, axis2, k = k2)` overwrites `h1`, so that `h1 === h2`. An exception
+is the case `axis = missing`, wherin each returned velocity operator is an independent copy.
+
+# Examples
+```jldoctest
+julia> velocity(System(:honeycomb, Model(Hopping(1))), 1; ϕn = (0,0.5))
+2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
+  [1, 1]  =  -2.0+0.0im
+  [2, 1]  =  1.0-1.22465e-16im
+  [1, 2]  =  1.0+1.22465e-16im
+  [2, 2]  =  -2.0+0.0im
+```
+
+# See also
+
+    'hamiltonian`
+"""
+velocity
 
 """
     bravaismatrix(system)

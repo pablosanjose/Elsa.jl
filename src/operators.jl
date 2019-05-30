@@ -147,9 +147,11 @@ function updatenlinks!(b::Block, sysinfo)
     return nothing
 end
 
-insertblochphases!(o::Operator{Tv}, kn) where {Tv<:AbstractFloat} = 
+insertblochphases!(o::Operator{Tv,L}, kn) where {Tv<:AbstractFloat,L} = 
     throw(DomainError(Tv, "Cannot apply Bloch phases to a real Hamiltonian."))
-function insertblochphases!(op::Operator{Tv}, kn) where {Tv}
+function insertblochphases!(op::Operator{Tv,L}, ϕn, dϕaxis = missing) where {Tv,L} 
+    length(ϕn) == L || throw(DimensionMismatch(
+        "The dimension of the normalized Bloch phases should match the lattice dimension $L"))
     rows = rowvals(op.matrix)
     vals = nonzeros(op.matrix)
     valsintra = nonzeros(op.intra.matrix)
@@ -157,7 +159,9 @@ function insertblochphases!(op::Operator{Tv}, kn) where {Tv}
         vals[ptrmatrix] = iszero(ptrintra) ? zero(Tv) : valsintra[ptrintra]
     end
     for inter in op.inters
-        phase = exp(2pi * im * dot(inter.ndist, kn))
+        # dϕaxis != missing produces derivatives of Bloch phases respect a given axis
+        dexp = dϕaxis === missing ? 1.0 : 2pi * im * dot(inter.ndist, dϕaxis)
+        phase = dexp * exp(2pi * im * dot(inter.ndist, ϕn))
         for (i,j,v,ptr) in SparseMatrixReader(inter.matrix)
             for ptr in nzrange(op.matrix,j)
                 rows[ptr] == i && (vals[ptr] += phase * v; break)
