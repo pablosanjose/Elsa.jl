@@ -264,17 +264,16 @@ System{2,0,Float64,Complex{Float64}} : 0D system in 2D space
 bound
 
 """
-    hamiltonian(system; k, ϕn)
+    hamiltonian(system; k, ϕn, avoidcopy = false)
 
 Return the Bloch Hamiltonian of an `L`-dimensional `system` in `E`-dimensional space at 
 a given `E`-dimensional Bloch momentum `k`, or alternatively `L`-dimensional normalised 
 Bloch phases `ϕn = k*B/2π`, where `B` is the system's Bravais matrix.
 By default the Hamiltonian at zero momentum (Gamma point) is returned. For `0`-dimensional 
-systems, the Bloch Hamiltonian is simply the Hamiltonian of the system.
-
-Important note: for performance reasons, `hamiltonian` reuses always the same preallocated 
-sparse matrix `system.hamiltonian.matrix`. Hence doing `h1 = hamiltonian(sys, k = k1)` and 
-then `h2 = hamiltonian(sys, k = k2)` overwrites `h1`, so that `h1 === h2`.
+systems, the Bloch Hamiltonian is simply the Hamiltonian of the system. `avoidcopy = true` 
+is a performance optimization that allows returning the internal system hamiltonian matrix 
+instead of a copy (can lead to confusion/bugs - a second call to `hamiltonian` will 
+overwrite the result of the first when `avoidcopy = true`).
 
 # Examples
 ```jldoctest
@@ -293,17 +292,16 @@ julia> hamiltonian(System(:honeycomb, Model(Hopping(1))), ϕn = (0,0.5))
 hamiltonian
 
 """
-    velocity(system::System{E,L}, axis = missing; k, ϕn)
+    velocity(system::System{E,L}, axis = missing; k, ϕn, avoidcopy = false)
 
 Return the velocity operator `∂H(k)` along the specified crystallographic `axis`, which can
 be an integer from 1 to `L` (unit axis), an `SVector{L}` or an `NTuple{L}`. If no `axis` is 
 given, a tuple of all velocity operators along each of the `L` axis is returned. See 
-`hamiltonian` for details on the `k` and `ϕn` keywords.
+`hamiltonian` for details on the `k` and `ϕn` keywords. `avoidcopy = true` 
+is a performance optimization that allows returning the internal system velocity matrix
+instead of a copy (can lead to confusion/bugs - a second call to `velocity` will 
+overwrite the result of the first when `avoidcopy = true`).
 
-Important note: for performance reasons, `velocity` reuses the same preallocated sparse 
-matrix `system.velocity.matrix`. Hence doing `h1 = velocity(sys, axis1, k = k1)` and 
-then `h2 = velocity(sys, axis2, k = k2)` overwrites `h1`, so that `h1 === h2`. An exception
-is the case `axis = missing`, wherin each returned velocity operator is an independent copy.
 
 # Examples
 ```jldoctest

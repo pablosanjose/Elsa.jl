@@ -18,9 +18,10 @@ transform(f::Function; kw...) = sys -> transform(sys, f; kw...)
 # System's Hamiltonian and velocity
 #######################################################################
 function hamiltonian(sys::System{E,L,T}; 
-                     k = zero(SVector{E,T}), ϕn = blochphases(k, sys)) where {E,L,T}
+                     k = zero(SVector{E,T}), ϕn = blochphases(k, sys), 
+                     avoidcopy = false) where {E,L,T}
     L == 0 || insertblochphases!(sys.hamiltonian, SVector{L,T}(ϕn))
-    return sys.hamiltonian.matrix
+    return avoidcopy ? sys.hamiltonian.matrix : copy(sys.hamiltonian.matrix)
 end
 hamiltonian(; kw...) = sys -> hamiltonian(sys; kw...)
 
@@ -30,9 +31,10 @@ velocity(sys::System{E,L}, axis::Int; kw...) where {E,L} =
     velocity(sys, SMatrix{L,L,Int}(I)[:, axis]; kw...)
 
 function velocity(sys::System{E,L,T}, dϕaxis::Union{Tuple,SVector}; 
-                  k = zero(SVector{E,T}), ϕn = blochphases(k, sys)) where {E,L,T}
+                  k = zero(SVector{E,T}), ϕn = blochphases(k, sys),
+                  avoidcopy = false) where {E,L,T}
     L == 0 || insertblochphases!(sys.velocity, SVector{L,T}(ϕn), SVector{L,T}(dϕaxis))
-    return sys.velocity.matrix
+    return avoidcopy ? sys.velocity.matrix : copy(sys.velocity.matrix)
 end
 
 function blochphases(k, sys::System{E,L,T}) where {E,L,T}
