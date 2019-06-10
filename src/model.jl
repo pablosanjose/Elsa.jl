@@ -1,11 +1,14 @@
 #######################################################################
 # ModelBlock
 #######################################################################
+
 abstract type ModelTerm{F,S} end
+
 struct Onsite{F,S} <: ModelTerm{F,S}
     o::F
     sublats::S              # SL === Missing means any sublats 
 end
+
 struct Hopping{F,S,D,R} <: ModelTerm{F,S}
     h::F
     sublats::S              # S === Missing means any sublats 
@@ -18,16 +21,13 @@ isonsite(term::Hopping) = false
 
 (o::Onsite{F})(r, dr) where {F<:Function} = ensureSMatrix((o.o(r) + o.o(r)')/2)
 (o::Onsite{S})(r, dr) where {S} = ensureSMatrix((o.o + o.o')/2)
+
 (h::Hopping{F})(r, dr) where {F<:Function} = ensureSMatrix(h.h(r, dr))
 (h::Hopping{S})(r, dr) where {S}  = ensureSMatrix(h.h)
 
-function Base.show(io::IO, o::Onsite)
-    print(io, "ModelTerm: onsite term on sublats = $(o.sublats)")
-end
-
-function Base.show(io::IO, h::Hopping)
+Base.show(io::IO, o::Onsite) = print(io, "ModelTerm: onsite term on sublats = $(o.sublats)")
+Base.show(io::IO, h::Hopping) = 
     print(io, "ModelTerm: hopping term between sublat pairs = $(h.sublats), Bravais ndists = $(h.ndists) and maximum range = $(round(h.range, digits = 6))")
-end
 
 #######################################################################
 # Model
@@ -45,9 +45,12 @@ Define a `Model` of numeric type `Tv` (`Complex{Float64}` by default) from a col
 struct Model{Tv,N,MB<:NTuple{N,ModelTerm}}
     terms::MB
 end
+
 Model{Tv}(hs::Vararg{ModelTerm,N}) where {Tv,N} = Model{Tv,N,typeof(hs)}(hs)
 Model(hs...) = Model{Complex{Float64}}(hs...)
+
 nonsites(m::Model) = count(isonsite, m.terms)
+
 nhoppings(m::Model) = count(!isonsite, m.terms)
 
 function Base.show(io::IO, m::Model{Tv,N}) where {Tv,N}
@@ -68,6 +71,7 @@ Define a `Onsite<:ModelTerm` that models an onsite energy `o` at sites on specif
  `missing`, all sublattices are included.
 """
 Onsite(o; sublats = missing) = _onsite(o, _normaliseSL(sublats))
+
 _onsite(o, sublats) = Onsite(o, sublats)
 _onsite(o::SMatrix{N,N}, sublats) where {N} = Onsite(o, sublats)
 _onsite(o::SMatrix{N,M}, sublats) where {N,M} = throw(

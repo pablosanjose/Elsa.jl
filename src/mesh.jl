@@ -1,12 +1,15 @@
 ######################################################################
 # Mesh
 #######################################################################
+
 abstract type AbstractMesh{D} end
+
 struct Mesh{D,V,GT} <: AbstractMesh{D}
     verts::V
     adjmat::SparseMatrixCSC{Bool,Int}
     simps::GT
 end
+
 Mesh{D}(verts::V, adjmat, simps::GT) where {D,V,GT} = Mesh{D,V,GT}(verts, adjmat, simps)
 
 Base.show(io::IO, mesh::Mesh{D}) where {D} = print(io,
@@ -16,7 +19,9 @@ Base.show(io::IO, mesh::Mesh{D}) where {D} = print(io,
   Simplices : $(nsimplices(mesh))")
 
 nvertices(m::Mesh) = length(m.verts)
+
 nsimplices(m::Mesh) = length(m.simps)
+
 nedges(m::Mesh) = nnz(m.adjmat)
 
 ######################################################################

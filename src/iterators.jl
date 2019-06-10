@@ -1,6 +1,7 @@
 #######################################################################
 # BoxIterator
 #######################################################################
+
 struct BoxRegister{N}
     cellinds::Vector{Tuple{SVector{N,Int}, Int}}
 end
@@ -28,8 +29,11 @@ struct BoxIterator{N}
 end
 
 Base.IteratorSize(::BoxIterator) = Base.SizeUnknown()
+
 Base.IteratorEltype(::BoxIterator) = Base.HasEltype()
+
 Base.eltype(::BoxIterator{N}) where {N} = SVector{N,Int}
+
 boundingboxiter(b::BoxIterator) = (Tuple(b.npos), Tuple(b.ppos))
 
 function BoxIterator(seed::SVector{N}; maxiterations::Union{Int,Missing} = missing, nregisters::Int = 0) where {N}
@@ -154,6 +158,7 @@ function acceptcell!(b::BoxIterator{N}, cell) where {N}
     end
     return nothing
 end
+
 # Fallback for non-BoxIterators
 acceptcell!(b, cell) = nothing 
 
@@ -165,6 +170,7 @@ end
 #######################################################################
 # CoSort
 #######################################################################
+
 struct CoSortTup{T,Tv}
     x::T
     y::Tv
@@ -179,18 +185,26 @@ mutable struct CoSort{T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} <: Abstra
             throw(DimensionMismatch("Coarray length should exceed sorting array"))
     end
 end
+
 CoSort(sortvector::S, covector::C) where {T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} = 
     CoSort{T,Tv,S,C}(sortvector, covector, 0)
 
 Base.size(c::CoSort) = (size(c.sortvector, 1) - c.offset,)
-Base.getindex(c::CoSort, i) = CoSortTup(getindex(c.sortvector, i + c.offset), getindex(c.covector, i + c.offset))
-Base.setindex!(c::CoSort, t::CoSortTup, i) = (setindex!(c.sortvector, t.x, i + c.offset); setindex!(c.covector, t.y, i + c.offset); c) 
+
+Base.getindex(c::CoSort, i) = 
+    CoSortTup(getindex(c.sortvector, i + c.offset), getindex(c.covector, i + c.offset))
+
+Base.setindex!(c::CoSort, t::CoSortTup, i) = 
+    (setindex!(c.sortvector, t.x, i + c.offset); setindex!(c.covector, t.y, i + c.offset); c) 
+
 Base.isless(a::CoSortTup, b::CoSortTup) = isless(a.x, b.x)
+
 Base.Sort.defalg(v::C) where {T<:Union{Number, Missing}, C<:CoSort{T}} = Base.DEFAULT_UNSTABLE
 
 #######################################################################
 # SparseMatrixBuilder
 #######################################################################
+
 mutable struct SparseMatrixBuilder{T}
     m::Int
     n::Int
@@ -213,10 +227,13 @@ function SparseMatrixBuilder{Tv}(m, n, coordinationguess = 0) where Tv
     end
     return SparseMatrixBuilder(m, n, colptr, rowval, nzval, 1, 1, CoSort(rowval, nzval))
 end
-SparseArrays.nzrange(S::SparseMatrixBuilder, col::Integer) = 
-    S.colptr[col]:(S.colptr[col+1]-1)
+
+SparseArrays.nzrange(S::SparseMatrixBuilder, col::Integer) = S.colptr[col]:(S.colptr[col+1]-1)
+
 SparseArrays.rowvals(S::SparseMatrixBuilder) = S.rowval
+
 SparseArrays.nonzeros(S::SparseMatrixBuilder) = S.nzval
+
 Base.size(S::SparseMatrixBuilder) = (S.n, S.m)
 Base.size(S::SparseMatrixBuilder, k) = size(S)[k]
 
@@ -274,6 +291,7 @@ function SparseArrays.sparse(s::SparseMatrixBuilder)
     end
     return SparseMatrixCSC(s.m, s.n, s.colptr, s.rowval, s.nzval)
 end
+
 #######################################################################
 # SparseMatrixReader
 #######################################################################
@@ -283,8 +301,11 @@ struct SparseMatrixReader{Tv,Ti}
 end
 
 Base.IteratorSize(::SparseMatrixReader) = Base.HasLength()
+
 Base.IteratorEltype(::SparseMatrixReader) = Base.HasEltype()
+
 Base.eltype(::SparseMatrixReader{Tv,Ti}) where {Tv,Ti} = Tuple{Ti,Ti,Tv}
+
 Base.length(s::SparseMatrixReader) = nnz(s.matrix)
 
 function iterate(s::SparseMatrixReader, state = (1, 1))
@@ -301,6 +322,7 @@ enumerate_sparse(s::SparseMatrixCSC) = SparseMatrixReader(s)
 #######################################################################
 # BlockIterator
 #######################################################################
+
 struct BlockIterator{B<:Block,S<:SystemInfo}
     block::B
     sysinfo::S
@@ -335,8 +357,10 @@ function Base.iterate(blockiter::BlockIterator, state = (1, nextcolumn(blockiter
                (newptr, newcol)
     end
 end
+
 nextcolumn(blockiter) = 
     isempty(nzrange(blockiter.block.matrix, 1)) ? nextcolumn(blockiter, 1) : 1
+
 function nextcolumn(blockiter, col)
     c = col
     while true
@@ -348,7 +372,11 @@ function nextcolumn(blockiter, col)
     end
     return 0
 end
+
 Base.IteratorSize(::BlockIterator) = Base.SizeUnknown()
+
 Base.IteratorEltype(::BlockIterator) = Base.HasEltype()
+
 Base.eltype(::BlockIterator) = 
     Tuple{Tuple{Int,Int},Tuple{Int,Int},Tuple{Int,Int},Tuple{Int,Int},Int}
+    

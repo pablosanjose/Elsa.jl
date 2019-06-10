@@ -43,6 +43,7 @@ Block{Tv,L}(b::Block) where {Tv,L} =
     Block{Tv,L}(b.ndist, b.matrix, b.sysinfo, b.nlinks)
 
 Model{Tv}(m::Model) where {Tv} = Model{Tv}(m.terms...)
+
 promote_model(model::Model, sys::System{E,L,T,Tv}, systems...) where {E,L,T,Tv} = promote_model(Tv, model, systems...)
 promote_model(::Type{Tv}, model::Model, sys::System{E,L,T,Tv2}, systems...) where {Tv,E,L,T,Tv2} = promote_model(promote_type(Tv, Tv2), model, systems...)
 promote_model(::Type{Tv}, model::Model) where {Tv} = convert(Model{Tv}, model)

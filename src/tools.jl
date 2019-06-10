@@ -37,13 +37,15 @@ padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T)
     SMatrix{E2,L2,T2}(
         ntuple(k -> _padrightbottom((k - 1) % E2 + 1, (k - 1) ÷ E2 + 1, zero(T2), s), 
                Val(E2 * L2)))
-@inline _padrightbottom(i, j, zero, s::SMatrix{E,L}) where {E,L} = 
-    i > E || j > L ? zero : s[i,j]
 padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
+
 function padrightbottom(m::Matrix{T}, zeroT::T, im, jm) where T
     i0, j0 = size(m)
     [i <= i0 && j<= j0 ? m[i,j] : zeroT for i in 1:im, j in 1:jm]
 end
+
+@inline _padrightbottom(i, j, zero, s::SMatrix{E,L}) where {E,L} = 
+    i > E || j > L ? zero : s[i,j]
 
 # @inline tuplejoin(x) = x
 # @inline tuplejoin(x, y) = (x..., y...)
@@ -84,6 +86,7 @@ end
 ######################################################################
 # Permutations (taken from Combinatorics.jl)
 #######################################################################
+
 struct Permutations{T}
     a::T
     t::Int
@@ -165,4 +168,5 @@ function Base.factorial(n::T, k::T) where T<:Integer
     end
     return f
 end
+
 Base.factorial(n::Integer, k::Integer) = factorial(promote(n, k)...)

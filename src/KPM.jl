@@ -104,6 +104,7 @@ function _bandbracket(h, ::Missing)
     @warn  "Consider using the `bandrange` kwargs for faster performance. Computed bandrange = ($ϵmin, $ϵmax)"
     return _bandbracket(h, (ϵmin, ϵmax))
 end
+
 _bandbracket(h, (ϵmin, ϵmax), pad = 0.01) = ((ϵmax + ϵmin) / 2.0, (ϵmax - ϵmin) / (2.0 - pad))
 
 #######################################################################
