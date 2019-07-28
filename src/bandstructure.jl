@@ -2,7 +2,7 @@
 # Spectrum
 #######################################################################
 
-struct Spectrum{D,Tv,MK<:Mesh{D},ME<:Mesh{D}}
+struct Spectrum{D,Tv,MK<:Mesh{D},ME<:Mesh{D}}   # D is dimension of parameter space
     eigvecs::Array{Tv,3}
     eigvals::Matrix{Tv}
     mesh::MK
@@ -31,9 +31,9 @@ function spectrum(hfunc::Function, argmesh::Mesh;
     end
 end
 
-function _spectrum(h::SparseMatrixCSC, hwork; levels = 2, method = missing, kw...)
+function _spectrum(h, hwork; levels = 2, method = missing, kw...)
     if method === :exact || method === missing && (size(h, 1) < 129 || levels/size(h,1) > 0.2)
-        s = spectrum_dense(h, hwork; levels = levels, kw...)
+        s = spectrum_direct(h, hwork; levels = levels, kw...)
     elseif method === :arnoldi
         s = spectrum_arpack(h; levels = levels, kw...)
     else
@@ -42,7 +42,7 @@ function _spectrum(h::SparseMatrixCSC, hwork; levels = 2, method = missing, kw..
     return s
 end
 
-function spectrum_dense(h::SparseMatrixCSC, hwork; levels = 2, kw...)
+function spectrum_direct(h, hwork; levels = 2, kw...)
     hwork .= h
     dimh = size(h, 1)
     range = ((dimh - levels)÷2 + 1):((dimh + levels)÷2)
@@ -51,7 +51,7 @@ function spectrum_dense(h::SparseMatrixCSC, hwork; levels = 2, kw...)
     return (energies, states)
 end
 
-function spectrum_arpack(h::SparseMatrixCSC; levels = 2, sigma = 1.0im, kw...)
+function spectrum_arpack(h; levels = 2, sigma = 1.0im, kw...)
     (energies, states, _) = eigs(h; sigma = sigma, nev = levels, kw...)
     return (real.(energies), states)
 end

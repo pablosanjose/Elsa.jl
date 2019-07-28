@@ -4,13 +4,13 @@
 
 abstract type AbstractMesh{D} end
 
-struct Mesh{D,V,GT} <: AbstractMesh{D}
-    verts::V
-    adjmat::SparseMatrixCSC{Bool,Int}
-    simps::GT
+struct Mesh{D,V,S} <: AbstractMesh{D}   # D is dimension of parameter space
+    vertices::V                         # Iterable vertex container (generator, vector,...)
+    adjmat::SparseMatrixCSC{Bool,Int}   # Directed graph: only dest > src
+    simplices::S                        # Iterable simplex container (generator, vector,...)
 end
 
-Mesh{D}(verts::V, adjmat, simps::GT) where {D,V,GT} = Mesh{D,V,GT}(verts, adjmat, simps)
+Mesh{D}(vertices::V, adjmat, simplices::GT) where {D,V,GT} = Mesh{D,V,GT}(vertices, adjmat, simplices)
 
 Base.show(io::IO, mesh::Mesh{D}) where {D} = print(io,
 "Mesh{$D}: mesh in $D-dimensional space
@@ -18,9 +18,9 @@ Base.show(io::IO, mesh::Mesh{D}) where {D} = print(io,
   Edges     : $(nedges(mesh))
   Simplices : $(nsimplices(mesh))")
 
-nvertices(m::Mesh) = length(m.verts)
+nvertices(m::Mesh) = length(m.vertices)
 
-nsimplices(m::Mesh) = length(m.simps)
+nsimplices(m::Mesh) = length(m.simplices)
 
 nedges(m::Mesh) = nnz(m.adjmat)
 
