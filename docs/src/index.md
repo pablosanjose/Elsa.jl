@@ -7,15 +7,15 @@ The basic workflow is as follows. One can define a set of site positions in spac
 The following is a brief description of basic functionality to get started.
 
 ## Installation
-You need Julia 1.0 or higher to use `Elsa.jl`. Until I register the package it should be installed as follows
+You need Julia 1.0 or higher to use `Elsa.jl`. Until I register the package it should be installed from the `pkg>` environment (type `]` in the `julia>` prompt) as follows
 ```julia
-julia>] add https://github.com/pablosanjose/Elsa.jl 
+v*.* pkg> add https://github.com/pablosanjose/Elsa.jl 
 ```
 Then, to start using it in a Julia session do `using Elsa`
 
 Optionally, you can also install the associated `ElsaPlots.jl` package to visualise systems, bandstructures, etc.
 ```julia
-julia>] add https://github.com/pablosanjose/ElsaPlots.jl 
+jv*.* pkg> add https://github.com/pablosanjose/ElsaPlots.jl 
 ```
 
 
