@@ -151,6 +151,7 @@ function nextpermutation(m, t, state)
     return (perm, s)
 end
 
+# Taken from Combinatorics.jl
 # TODO: This should really live in Base, otherwise it's type piracy
 """
     factorial(n, k)
