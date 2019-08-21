@@ -1,6 +1,7 @@
 #######################################################################
 # Transform system
 #######################################################################
+
 function transform!(sys::System, f::Function; sublatinds = collect(eachindex(sys.lattice.sublats)))
     for s in sublatinds
         sind = sublatindex(sys.sysinfo, s)
@@ -9,34 +10,51 @@ function transform!(sys::System, f::Function; sublatinds = collect(eachindex(sys
     sys.lattice.bravais = transform(sys.lattice.bravais, f)
     return sys
 end
-transform!(f::Function; kw...) = sys -> transform!(sys, f; kw...)
 
+transform!(f::Function; kw...) = sys -> transform!(sys, f; kw...)
 transform(sys::System, f; kw...) = transform!(deepcopy(sys), f; kw...)
 transform(f::Function; kw...) = sys -> transform(sys, f; kw...)
 
 #######################################################################
-# System's Hamiltonian
+# System's Hamiltonian and velocity
 #######################################################################
-function hamiltonian(sys::System{E,L,T}; k = zero(SVector{E,T}), kphi = blochphases(k, sys), kw...) where {E,L,T}
-	length(kphi) == L || throw(DimensionMismatch("The dimension of the normalized Bloch phases `kphi` should match the lattice dimension $L"))
-    L == 0 || insertblochphases!(sys.hamiltonian, SVector{L,T}(kphi))
-    return sys.hamiltonian.matrix
+
+function hamiltonian(sys::System{E,L,T}; 
+                     k = zero(SVector{E,T}), ϕn = blochphases(k, sys), 
+                     avoidcopy = false) where {E,L,T}
+    L == 0 || insertblochphases!(sys.hamiltonian, SVector{L,T}(ϕn))
+    return avoidcopy ? sys.hamiltonian.matrix : copy(sys.hamiltonian.matrix)
 end
+
 hamiltonian(; kw...) = sys -> hamiltonian(sys; kw...)
 
+velocity(sys::System{E,L}; kw...) where {E,L} = ntuple(i -> velocity(sys, i; kw...), Val(L))
+velocity(sys::System{E,L}, axis::Int; kw...) where {E,L} =
+    velocity(sys, SMatrix{L,L,Int}(I)[:, axis]; kw...)
+
+function velocity(sys::System{E,L,T}, dϕaxis::Union{Tuple,SVector}; 
+                  k = zero(SVector{E,T}), ϕn = blochphases(k, sys),
+                  avoidcopy = false) where {E,L,T}
+    L == 0 || insertblochphases!(sys.velocity, SVector{L,T}(ϕn), SVector{L,T}(dϕaxis))
+    return avoidcopy ? sys.velocity.matrix : copy(sys.velocity.matrix)
+end
+
 function blochphases(k, sys::System{E,L,T}) where {E,L,T}
-	length(k) == E || throw(DimensionMismatch("The dimension of the Bloch vector `k` should match the embedding dimension $E"))
+	length(k) == E || throw(DimensionMismatch(
+            "The dimension of the Bloch vector `k` should match the embedding dimension $E"))
 	return transpose(bravaismatrix(sys)) * SVector{E,T}(k) / (2pi)
 end
 
 #######################################################################
 # Operator builder tools
 #######################################################################
+
 struct IJV{Tv}
     I::Vector{Int}
     J::Vector{Int}
     V::Vector{Tv}
 end
+
 IJV{Tv}() where {Tv} = IJV(Int[], Int[], Tv[])
 
 Base.resize!(ijv::IJV, n) = (resize!(ijv.I, n); resize!(ijv.J, n); resize!(ijv.V, n))
@@ -51,12 +69,14 @@ function Base.push!(ijv::IJV, s::SMatrix{N,M}, (rowoffset, coloffset)) where {N,
     end
     return nothing
 end
+
 Base.isempty(ijv::IJV) = isempty(ijv.I)
 
 struct IJVN{Tv,L}
     IJV::IJV{Tv}
     ndist::SVector{L,Int}
 end
+
 IJVN(b::Block) = IJVN(IJV(findnz(b.matrix)...), b.ndist)
 
 struct IJVbuilder{Tv,T,E,L,S<:SystemInfo,EL}
@@ -65,6 +85,7 @@ struct IJVbuilder{Tv,T,E,L,S<:SystemInfo,EL}
     IJVNs::Vector{IJVN{Tv,L}}
     kdtrees::Vector{KDTree{SVector{E,T},Euclidean,T}}
 end
+
 IJVbuilder(lat::Lattice{E,L,T}, sysinfo::SystemInfo{Tv}, ) where {E,L,T,Tv} = 
     IJVbuilder(sysinfo, lat, IJVN{Tv,L}[],
         Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, length(lat.sublats)))
@@ -97,6 +118,7 @@ Block(ijvn::IJVN, dimh, sysinfo::SystemInfo) =
 #######################################################################
 # Operator builder
 #######################################################################
+
 Operator(lat, sysinfo) = Operator(IJVbuilder(lat, sysinfo))
 
 function Operator(builder::IJVbuilder)
@@ -154,22 +176,24 @@ function applyterm!(builder::IJVbuilder{Tv,T,E,L}, (term, sample, sublats)) wher
     return builder
 end
 
-ndists(::Hopping{F,S,Missing}, ::Val{L}) where {F,S,L} = 
-    BoxIterator(zero(SVector{L,Int}))
-ndists(h::Hopping{F,S,D}, ::Val{L}) where {F,S,D,L} =
-    h.ndists
+ndists(::Hopping{F,S,Missing}, ::Val{L}) where {F,S,L} = BoxIterator(zero(SVector{L,Int}))
+ndists(h::Hopping{F,S,D}, ::Val{L}) where {F,S,D,L} = h.ndists
 ndists(::Onsite, ::Val{L}) where {L} = (zero(SVector{L,Int}),)
 
 filteredsublats(::Missing, sysinfo) = allorderedpairs(values(sysinfo.namesdict))
 filteredsublats(ss::NTuple{N,Tuple{Int,Int}}, sysinfo) where {N} = unique!(collect(ss))
 
-isselfhopping(term, (s1, s2), (itarget, jsource), ndist) = itarget == jsource && s1 == s2 && !isonsite(term) && iszero(ndist)
+isselfhopping(term, (s1, s2), (itarget, jsource), ndist) = 
+    itarget == jsource && s1 == s2 && !isonsite(term) && iszero(ndist)
+
 isvalidlink(term, (s1, s2), ndist) = needsconjugate(term, (s1, s2), ndist) || (iszero(ndist) && s1 == s2)
+
 needsconjugate(::Onsite, args...) = false
 needsconjugate(::Hopping{F,Missing,Missing}, (s1, s2), ndist) where {F} = s1 != s2 || ispositive(ndist)
 needsconjugate(::Hopping{F,S,Missing}, (s1, s2), ndist) where {F,S} = s1 != s2 || ispositive(ndist)
 needsconjugate(::Hopping{F,Missing}, (s1, s2), ndist) where {F} = s1 != s2 || !iszero(ndist)
 needsconjugate(::Hopping, (s1, s2), ndist) = s1 != s2 || !iszero(ndist)
+
 function ispositive(ndist)
     result = false
     for i in ndist
@@ -180,7 +204,8 @@ end
 
 @inline checkinfinite(modelterm) = modelterm.range === missing && modelterm.ndist === missing && 
     throw(ErrorException("Tried to implement an infinite-range hopping on an unbounded lattice"))
-function checkblockdims(::SMatrix{N,M}, sdata, sublatsiter) where {N,M}
+
+    function checkblockdims(::SMatrix{N,M}, sdata, sublatsiter) where {N,M}
     @boundscheck for (s1, s2) in sublatsiter
         (N == sdata.norbitals[s1]) && (M == sdata.norbitals[s2]) || 
             throw(DimensionMismatch("Hamiltonian term of dimension ($N,$M) does not match orbital ($(sdata.norbitals[s1]), $(sdata.norbitals[s2]))."))
@@ -191,6 +216,7 @@ function _targets(term::Hopping{F,S,D,R}, r2, dist, j, (s1, s2), builder) where 
     isassigned(builder.kdtrees, s1) || (builder.kdtrees[s1] = KDTree(builder.lattice.sublats[s1].sites))
     return inrange(builder.kdtrees[s1], r2 - dist, term.range)
 end
+
 _targets(term::Hopping{F,S,D,R}, r2, dist, j, (s1, s2), builder) where {F,S,D,R<:Missing} = 
     eachindex(builder.sublats[s1].sites)
 _targets(term::Onsite, r2, dist, j, (s1, s2), builder) = (j,)
@@ -210,8 +236,9 @@ function assembleblocks(builder::IJVbuilder{Tv,T,E,L}) where {Tv,T,E,L}
     boundary = extractboundary(matrix, intra, inters)
     return matrix, intra, inters, boundary
 end
-appendIJV!(ijv, ijv2::IJV) = (append!(ijv.I, ijv2.I); append!(ijv.J, ijv2.J); append!(ijv.V, ijv2.V))
 
+appendIJV!(ijv, ijv2::IJV) = (append!(ijv.I, ijv2.I); append!(ijv.J, ijv2.J); append!(ijv.V, ijv2.V))
+ 
 function extractboundary(matrix, intra::Block{Tv}, inters) where {Tv}
     rowsintra = rowvals(intra.matrix)
     rowsmatrix = rowvals(matrix)
@@ -226,11 +253,13 @@ function extractboundary(matrix, intra::Block{Tv}, inters) where {Tv}
                 for ptrm in nzrange(matrix, col) 
                     rowsmatrix[ptrm] == row && (ptrmatrix = ptrm; break)
                 end
-                iszero(ptrmatrix) && throw(ErrorException("Unexpected: found element in intercell harmonic not present in work matrix"))
+                iszero(ptrmatrix) && throw(ErrorException(
+                    "Unexpected: found element in intercell harmonic not present in work matrix"))
                 for ptri in nzrange(intra.matrix, col) 
                     rowsintra[ptri] == row && (ptrintra = ptri; break)
                 end
                 push!(boundary, (ptrmatrix, ptrintra))
+                # ptrintra == 0 if inter element is only present in ptrmatrix
             end
         end
     end
@@ -240,10 +269,12 @@ end
 #######################################################################
 # combine systems
 #######################################################################
+
 combine(ss...; kw...) = _combine(collectfirst(ss...)...; kw...)
 combine(model::Model) = sys -> combine(sys, model)
 
 _combine(systems, (m,)::Tuple{Model}; kw...) = _combine(systems, promote_model(m, systems...); kw...)
+
 function _combine(systems::NTuple{N,System}, model::Model; kw...) where {N}
     sublats = _combinesublats(systems...; kw...)
     bravais = first(systems).lattice.bravais
@@ -261,7 +292,8 @@ function _combine(systems::NTuple{N,System}, model::Model; kw...) where {N}
         nsublats += length(system.lattice.sublats)
     end
     hamiltonian = Operator(builder)
-    return System(lattice, hamiltonian, sysinfo)
+    velocity = boundaryoperator(hamiltonian)
+    return System(lattice, hamiltonian, velocity, sysinfo)
 end
 
 _getsampledterms(system, systems...) = (system.sysinfo.sampledterms..., _getsampledterms(systems...)...)
@@ -308,21 +340,26 @@ end
 #######################################################################
 # Grow system
 #######################################################################
+
 struct BlockBuilder{Tv,L}
     ndist::SVector{L,Int}
     matrixbuilder::SparseMatrixBuilder{Tv}
 end
+
 BlockBuilder{Tv,L}(ndist::SVector, n::Int) where {Tv,L} = BlockBuilder{Tv,L}(ndist, SparseMatrixBuilder{Tv}(n, n))
 BlockBuilder{Tv,L}(n::Int) where {Tv,L} = BlockBuilder{Tv,L}(zero(SVector{L,Int}), SparseMatrixBuilder{Tv}(n, n))
+
 Block(bb::BlockBuilder, sysinfo) = Block(bb.ndist, sparse(bb.matrixbuilder), sysinfo)
 
 struct OperatorBuilder{Tv,L}
     intra::BlockBuilder{Tv,L}
     inters::Vector{BlockBuilder{Tv,L}}
 end
+
 OperatorBuilder{Tv,L}(n::Int) where {Tv,L} =
     OperatorBuilder(BlockBuilder{Tv,L}(n), BlockBuilder{Tv,L}[])
-dim(o::OperatorBuilder) = size(o.intra.matrixbuilder, 1)
+
+    dim(o::OperatorBuilder) = size(o.intra.matrixbuilder, 1)
 
 function Operator(b::OperatorBuilder, sysinfo) 
     intra = Block(b.intra, sysinfo)
@@ -333,6 +370,7 @@ function Operator(b::OperatorBuilder, sysinfo)
 end
 
 _truefunc(r) = true
+
 grow(; kw...) = sys -> grow(sys; kw...)
 grow(sys::System{E,L}; supercell = SMatrix{L,0,Int}(), region = _truefunc) where {E,L} = 
     grow(sys, supercell, region)
@@ -342,7 +380,6 @@ grow(sys::System{E,L}, supercell::NTuple{L,Integer}, region) where {E,L} =
     grow(sys, SMatrix{L,L,Int}(Diagonal(SVector{L,Int}(supercell))), region)
 grow(sys::System{E,L}, supercell::NTuple{N,NTuple{L,Integer}}, region) where {E,L,N} = 
     grow(sys, toSMatrix(supercell...), region)
-
 grow(sys::System, supercell, region) = 
     throw(DimensionMismatch("Possible mismatch between `supercell` and system, or `region` not a function."))
 
@@ -352,7 +389,8 @@ function grow(sys::System{E,L}, supercell::SMatrix{L,L2,Int}, region::Function) 
     bravais = _growbravais(sys, supercell)
     sysinfo = _growsysinfo(sys.sysinfo, sublats)
     hamiltonian = _growhamiltonian(sys, supercell, sitemaps, sysinfo)
-    return System(Lattice(sublats, bravais), hamiltonian, sysinfo)
+    velocity = boundaryoperator(hamiltonian)
+    return System(Lattice(sublats, bravais), hamiltonian, velocity, sysinfo)
 end
 
 _growbravais(sys::System{Tv,T,E,L}, supercell) where {Tv,T,E,L} = 
@@ -369,6 +407,7 @@ function _growsysinfo(oldsysinfo::SystemInfo, sublats)
 end
 
 const TOOMANYITERS = 10^8
+
 function _growsublats(sys::System{E,L,T}, supercell, region) where {E,L,T}
     bravais = bravaismatrix(sys)
     iter = BoxIterator(zero(SVector{L,Int}))
@@ -412,6 +451,7 @@ function _growsublats(sys::System{E,L,T}, supercell, region) where {E,L,T}
 end
 
 pinvint(s::SMatrix{N,0}) where {N} = (SMatrix{0,0,Int}(), 0)
+
 function pinvint(s::SMatrix{N,M}) where {N,M}
     qrfact = qr(s)
     pinverse = inv(qrfact.R) * qrfact.Q'
@@ -419,10 +459,13 @@ function pinvint(s::SMatrix{N,M}) where {N,M}
     iszero(n) && throw(ErrorException("Supercell is singular"))
     return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
 end
+
 # This is true whenever old ndist is perpendicular to new lattice
 _hasnoshadow(supercell) = let invs = pinvint(supercell); ndist -> iszero(_newndist(ndist, invs)); end
+
 _newndist(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
 _newndist(oldndist, (pinvs, n)::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
+
 _wrappedndist(ndist, s, invs) = (nn = _newndist(ndist, invs); (nn, ndist - s * nn))
 
 
@@ -493,9 +536,10 @@ end
 #######################################################################
 # bound
 #######################################################################
+
 bound(;kw...) = sys -> bound(sys; kw...)
-bound(sys::System{E,L}; except = ()) where {E,L,L2} = 
-    _bound(sys, toSVector(Int, except))
+bound(sys::System{E,L}; except = ()) where {E,L,L2} = _bound(sys, toSVector(Int, except))
+
 function _bound(sys::System{E,L,T,Tv}, exceptaxes::SVector{L2,Int}) where {E,L,L2,T,Tv} 
     sublats = deepcopy(sys.lattice.sublats)
     bravais = Bravais(sys.lattice.bravais.matrix[:, exceptaxes])
@@ -508,7 +552,8 @@ function _bound(sys::System{E,L,T,Tv}, exceptaxes::SVector{L2,Int}) where {E,L,L
               if _isselfshadow(inter.ndist, exceptaxes)]
     boundary = extractboundary(matrix, intra, inters)
     ham = Operator(matrix, intra, inters, boundary)
-    return System(lattice, ham, sysinfo)         
+    vel = boundaryoperator(ham)
+    return System(lattice, ham, vel, sysinfo)         
 end
 
 # This is true if the part of ndist orthogonal to exceptaxes is zero

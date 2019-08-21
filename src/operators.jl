@@ -1,6 +1,7 @@
 #######################################################################
 # SystemInfo
 #######################################################################
+
 struct SystemInfo{Tv,S}
     sampledterms::S
     namesdict::Dict{NameType,Int}
@@ -10,6 +11,7 @@ struct SystemInfo{Tv,S}
     dims::Vector{Int}       # Hamiltonian block dimensions for each sublattice
     offsets::Vector{Int}    # Hamiltonian block offset for each sublattice
 end
+
 SystemInfo{Tv}(terms::S, args...) where {Tv,S} = SystemInfo{Tv,S}(terms, args...)
 
 function SystemInfo(lat::Lattice{E,L,T}, model::Model{Tv}, prevsamples...) where {E,L,T,Tv}
@@ -35,9 +37,11 @@ function SystemInfo(lat::Lattice{E,L,T}, model::Model{Tv}, prevsamples...) where
     end
     return SystemInfo{Tv}(allterms, namesdict, names, nsites, norbitals, dims, offsets)
 end
+
 getsamples(namesdict, zeropos) = ()
 getsamples(namesdict, zeropos, term, terms...) = 
     (_getsamples(namesdict, zeropos, term), getsamples(namesdict, zeropos, terms...)...)
+
 _getsamples(namesdict, zeropos, term) = 
     (term, term(zeropos, zeropos), _getsublats(namesdict, term.sublats))
 
@@ -47,18 +51,22 @@ _getsublats(namesdict, s::NTuple{N,Any}) where {N} =
                  sublatindex(namesdict, last(s[i]))), Val(N))
 
 _fillorbitals!(norbitals) = nothing
+
 function _fillorbitals!(norbitals, sample::Tuple, samples...) 
     _fillorbitals!(norbitals, sample...) 
     _fillorbitals!(norbitals, samples...)
 end
+
 function _fillorbitals!(norbitals, term, ::SMatrix{N,M}, ::Missing) where {N,M} 
     N == M ? fill!(norbitals, N) : throw(DimensionMismatch("Inconsitent model orbital dimensions"))
     return nothing
 end
+
 _fillorbitals!(norbitals, term, sm::SMatrix, ss::NTuple{N,Tuple{Int,Int}}) where {N} = 
     foreach(s -> _fillorbitals!(norbitals, sm, s), ss)
 _fillorbitals!(norbitals, ::SMatrix{N,M}, (s1, s2)::Tuple{Int,Int}) where {N,M} = 
     (_fillorbitals!(norbitals, Val(N), s1); _fillorbitals!(norbitals, Val(M), s2))
+
 function _fillorbitals!(norbitals, ::Val{N}, s) where {N}
     0 < s <= length(norbitals) || return nothing
     if norbitals[s] == 0
@@ -92,17 +100,23 @@ end
 #######################################################################
 # Operator
 #######################################################################
+
 mutable struct Block{Tv,L}
     ndist::SVector{L,Int}
     matrix::SparseMatrixCSC{Tv,Int}
     nlinks::Int
 end
+
 function Block(ndist, matrix, sysinfo::SystemInfo)
     b = Block(ndist, matrix, 0)
     isempty(matrix) || updatenlinks!(b, sysinfo)
     return b
 end
+
 Base.isempty(b::Block) = isempty(b.matrix)
+
+Base.zero(b::Block{Tv,L}) where {Tv,L} = 
+    Block(zero(SVector{L,Int}), spzeros(Tv, size(b.matrix)...), 0)
 
 function Base.show(io::IO, b::Block{Tv,L}) where {Tv,L}
     print(io, "Block{$Tv,$L}: Bloch harmonic $(b.ndist) of dimensions $(size(b.matrix)) with $(nnz(b.matrix)) elements")
@@ -133,6 +147,7 @@ end
 
 nlinks(o::Operator) = nlinks(o.intra) + (isempty(o.inters) ? 0 : sum(nlinks, o.inters))
 nlinks(b::Block) = b.nlinks
+
 nsublats(b::Block) = nsublats(b.sysinfo)
 
 function updatenlinks!(b::Block, sysinfo) 
@@ -145,9 +160,12 @@ function updatenlinks!(b::Block, sysinfo)
     return nothing
 end
 
-insertblochphases!(o::Operator{Tv}, kn) where {Tv<:AbstractFloat} = 
+insertblochphases!(o::Operator{Tv,L}, kn) where {Tv<:AbstractFloat,L} = 
     throw(DomainError(Tv, "Cannot apply Bloch phases to a real Hamiltonian."))
-function insertblochphases!(op::Operator{Tv}, kn) where {Tv}
+
+function insertblochphases!(op::Operator{Tv,L}, ϕn, dϕaxis = missing) where {Tv,L} 
+    length(ϕn) == L || throw(DimensionMismatch(
+        "The dimension of the normalized Bloch phases should match the lattice dimension $L"))
     rows = rowvals(op.matrix)
     vals = nonzeros(op.matrix)
     valsintra = nonzeros(op.intra.matrix)
@@ -155,7 +173,9 @@ function insertblochphases!(op::Operator{Tv}, kn) where {Tv}
         vals[ptrmatrix] = iszero(ptrintra) ? zero(Tv) : valsintra[ptrintra]
     end
     for inter in op.inters
-        phase = exp(2pi * im * dot(inter.ndist, kn))
+        # dϕaxis != missing produces derivatives of Bloch phases respect a given axis
+        dexp = dϕaxis === missing ? 1.0 : 2pi * im * dot(inter.ndist, dϕaxis)
+        phase = dexp * exp(2pi * im * dot(inter.ndist, ϕn))
         for (i,j,v,ptr) in SparseMatrixReader(inter.matrix)
             for ptr in nzrange(op.matrix,j)
                 rows[ptr] == i && (vals[ptr] += phase * v; break)
@@ -165,87 +185,28 @@ function insertblochphases!(op::Operator{Tv}, kn) where {Tv}
     return op
 end
 
-#######################################################################
-# Fields
-#######################################################################
-# struct Field{F,S}
-#     f::F
-#     sublats::S              # SL === Missing means any sublats 
-# end
-
-# field(f, sublats...) = Field(f, _normaliseSLpairs(sublats))
-# field(f) = Field(f, missing)
-# (f::Field)(s::S, r, dr) where {S<:SMatrix} = ensureSMatrix(f.f(s,r,dr))
-
-
-# #######################################################################
-# # BlochVector
-# #######################################################################
-
-# struct BlochVector{Tv,L}
-#     I::Vector{Int}
-#     J::Vector{Int}
-#     V::Vector{Tv}
-#     Voffsets::Vector{Int}
-#     Vns::NTuple{L, Vector{Vector{Tv}}}
-#     ndists::Vector{SVector{L, Int}}
-#     sublatorbitals::Vector{Int}   # orbitals in each sublattice
-#     sublatoffsets::Vector{Int}    # first index in each sublattice block
-#     workspace::SparseWorkspace{Tv}
-#     matrix::SparseMatrixCSC{Tv,Int}
-# end
-
-# function BlochVector{Tv,L}() where {Tv,L} 
-#     I = Int[]
-#     J = Int[]
-#     V = Tv[]
-#     Vns = ntuple(_ -> Vector{Tv}[], Val(L))
-#     Voffsets = Int[]
-#     ndists = SVector{L,Int}[]
-#     sublatorbitals = Int[]
-#     sublatoffsets = Int[]
-#     workspace = SparseWorkspace{Tv}(0, 0)
-#     mat = sparse(fill(zero(Tv), (0, 0)))
-#     return BlochVector(I, J, V, Voffsets, Vns, ndists, sublatorbitals, sublatoffsets, workspace, mat)
-# end
-
-# function Base.show(io::IO, op::BlochVector{Tv,L}) where {Tv,L}
-#     print(io, "Bloch $L-vector of dimensions $(size(op.matrix)) with $(nnz(op.matrix)) elements")
-# end
-
-# function insertblochphases!(bvec::BlochVector{Tv,L}, kn, axis) where {Tv,L}
-# 	L > 0 && _insertblochphases!(bvec.V, bvec.Vns[axis], bvec.Voffsets, bvec.ndists, convert(SVector{L,Tv}, kn), false)
-# 	return nothing
-# end
-
-# function gradient(op::Operator{Tv,L}; kn::SVector{L,Int} = zero(SVector{L,Int}), axis::Int = 1) where {Tv,L}
-#     ndists = op.ndists
-# 	workspace = op.workspace
-# 	dim = size(op.matrix, 1)
-# 	offset = op.Voffsets[1]
-# 	I = op.I[offset:end]
-# 	J = op.J[offset:end]
-# 	V = zeros(Tv, length(I))
-# 	Voffsets = op.Voffsets .- offset .+ 1
-# 	Vns = ntuple(ax -> [(2pi * im * n[ax]) .* v for (n, v) in zip(ndists, op.Vn)], Val(L))
-# 	L > 0 && _insertblochphases!(V, Vns[axis], Voffsets, ndists, kn, false)
-#     matrix = sparse!(I, J, V, dim, workspace)
-#     sublatorbitals = op.sublatorbitals
-#     sublatoffsets = op.sublatoffsets
-# 	return BlochVector(I, J, V, Voffsets, Vns, ndists, sublatorbitals, sublatoffsets, workspace, matrix)
-# end
-
-# _insertblochphases!(V::AbstractArray{T}, _...) where {T<:AbstractFloat} = throw(DomainError(T, "Cannot apply Bloch phases to a real Hamiltonian."))
-# function _insertblochphases!(V::AbstractArray{Complex{T}}, Vn, Voffsets, ndists, kn, intracell) where {T}
-#     if intracell
-#         V[Voffsets[1]:end] .= zero(Complex{T})
-#     else
-#         for n in 1:(length(Voffsets) - 1)
-#             phase = exp(2pi * im * dot(ndists[n], kn))
-#             for (Vnj, Vj) in enumerate(Voffsets[n]:(Voffsets[n + 1] - 1))
-#                 V[Vj] = Vn[n][Vnj] * phase
-#             end
-#         end
-#     end
-#     return nothing
-# end
+function boundaryoperator(op::Operator{Tv}) where {Tv}
+    n = length(op.boundary)
+    sb = SparseMatrixBuilder{Tv}(size(op.matrix)...)
+    rows = rowvals(op.matrix)
+    vals = nonzeros(op.matrix)
+    sofar = 1
+    for col in 1:size(op.matrix, 2)
+        colrange = nzrange(op.matrix, col)
+        for bidx in sofar:n
+            ptr = first(op.boundary[bidx])
+            if ptr in colrange
+                sofar = bidx + 1
+                pushtocolumn!(sb, rows[ptr], vals[ptr])
+            else
+                break
+            end
+        end
+        finalisecolumn!(sb)
+    end
+    matrix = sparse(sb)
+    intra = zero(op.intra)
+    inters = op.inters
+    boundary = extractboundary(matrix, intra, inters)
+    return Operator(matrix, intra, inters, boundary)
+end

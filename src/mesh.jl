@@ -1,21 +1,27 @@
 ######################################################################
 # Mesh
 #######################################################################
-abstract type AbstractMesh end
-struct Mesh{Vitr,GT} <: AbstractMesh
-    verts::Vitr
-    adjmat::SparseMatrixCSC{Bool,Int}
-    simps::GT
+
+abstract type AbstractMesh{D} end
+
+struct Mesh{D,V,S} <: AbstractMesh{D}   # D is dimension of parameter space
+    vertices::V                         # Iterable vertex container (generator, vector,...)
+    adjmat::SparseMatrixCSC{Bool,Int}   # Directed graph: only dest > src
+    simplices::S                        # Iterable simplex container (generator, vector,...)
 end
 
-Base.show(io::IO, mesh::Mesh) = print(io,
-"Mesh
+Mesh{D}(vertices::V, adjmat, simplices::GT) where {D,V,GT} = Mesh{D,V,GT}(vertices, adjmat, simplices)
+
+Base.show(io::IO, mesh::Mesh{D}) where {D} = print(io,
+"Mesh{$D}: mesh in $D-dimensional space
   Vertices  : $(nvertices(mesh))
   Edges     : $(nedges(mesh))
   Simplices : $(nsimplices(mesh))")
 
-nvertices(m::Mesh) = length(m.verts)
-nsimplices(m::Mesh) = length(m.simps)
+nvertices(m::Mesh) = length(m.vertices)
+
+nsimplices(m::Mesh) = length(m.simplices)
+
 nedges(m::Mesh) = nnz(m.adjmat)
 
 ######################################################################
@@ -59,5 +65,5 @@ function marchingmesh(npoints::NTuple{D,Integer},
     end
     adjmat = sparse(s)
 
-    return Mesh(vgen, adjmat, sgen)
+    return Mesh{D}(vgen, adjmat, sgen)
 end

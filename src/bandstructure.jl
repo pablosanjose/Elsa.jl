@@ -1,127 +1,113 @@
 #######################################################################
 # Spectrum
 #######################################################################
-struct Band{D,T,Tv}
-    keigvals::Vector{Mesh{D,T}}
-    eigvecs::Matrix{Tv}
+
+struct Spectrum{D,Tv,MK<:Mesh{D},ME<:Mesh{D}}   # D is dimension of parameter space
+    eigvecs::Array{Tv,3}
+    eigvals::Matrix{Tv}
+    mesh::MK
+    bands::Vector{ME}
 end
-struct Spectrum{D,T,Tv}
-    bands::Vector{Band{D,T,Tv}}
+
+function spectrum(hfunc::Function, argmesh::Mesh; 
+                  levels::Union{Int,Missing} = missing, degtol = sqrt(eps()), 
+                  randomshift = missing, kw...)
+    hsample = hfunc(first(argmesh.verts)...)
+    Tv = eltype(hsample)
+    dimh = ψlen = size(hsample, 1)
+    nϵ = levels === missing ? dimh : levels
+    nk = nvertices(argmesh)
+    eigvals = Matrix{Tv}(undef, (nϵ, nk))
+    eigvecs = Array{Tv,3}(undef, (ψlen, nϵ, nk))
+    hwork = Matrix{Tv}(undef, (dimh, dimh))
+    @showprogress "Diagonalising: " for (n,k) in enumerate(argmesh.verts)
+        (ϵk, ψk) = _spectrum(hfunc(k...), hwork; levels = nϵ, kw...)
+        # sort_spectrum!(energies_nk, states_nk, ordering)
+        # resolve_degeneracies!(ϵk, ψk, vfunc, k, degtol)
+        copyslice!(eigvals, CartesianIndices((1:nϵ, n:n)),
+                   ϵk,      CartesianIndices(1:nϵ))
+        copyslice!(eigvecs, CartesianIndices((1:ψlen, 1:nϵ, n:n)),
+                   ψk,      CartesianIndices((1:ψlen, 1:nϵ)))
+    end
 end
 
-# #######################################################################
-# # Brillouin
-# #######################################################################
-# """
-#     Brillouin(lat::Lattice; uniform::Bool = false, partitions = 5)
+function _spectrum(h, hwork; levels = 2, method = missing, kw...)
+    if method === :exact || method === missing && (size(h, 1) < 129 || levels/size(h,1) > 0.2)
+        s = spectrum_direct(h, hwork; levels = levels, kw...)
+    elseif method === :arnoldi
+        s = spectrum_arpack(h; levels = levels, kw...)
+    else
+        throw(ArgumentError("Unknown method. Choose between :arnoldi or :exact"))
+    end
+    return s
+end
 
-# Discretizes the Brillouin zone of Lattice `lat` into hypertriangular finite
-# elements, using a certain number of `partitions` per Bravais axis (accepts
-# an integer or a tuple of integers, one per axis). Keyword `uniform` specifies
-# the type of mesh, either "uniform" (as close to equilateral as possible) or
-# "simple" (cartesian partition)
+function spectrum_direct(h, hwork; levels = 2, kw...)
+    hwork .= h
+    dimh = size(h, 1)
+    range = ((dimh - levels)÷2 + 1):((dimh + levels)÷2)
+    ee = eigen!(Hermitian(hwork), range, kw...)
+    energies, states = ee.values, ee.vectors
+    return (energies, states)
+end
 
-# # Examples
-# ```jldoctest
-# julia> Brillouin(Lattice(:honeycomb), uniform = true, partitions = 200)
-# Brillouin{Float64,2} : discretization of 2-dimensional Brillouin zone
-#     Mesh type  : uniform
-#     Vertices   : 40000
-#     Partitions : (200, 200)
-#     3-elements : 80000
-# ```
-# """
-# struct Brillouin{T,L,LL}
-#     lattice::Lattice{T,L,L,LL}
-#     uniform::Bool
-#     partitions::NTuple{L,Int}
-# end
+function spectrum_arpack(h; levels = 2, sigma = 1.0im, kw...)
+    (energies, states, _) = eigs(h; sigma = sigma, nev = levels, kw...)
+    return (real.(energies), states)
+end
 
-# function Brillouin(lat::Lattice{T,E,L}; uniform::Bool = false, partitions = 5) where {T,E,L}
-#     partitions_tuple = tontuple(Val(L), partitions)
-#     if uniform
-#         lattice = uniform_discretization(lat, partitions_tuple)
-#     else
-#         lattice = simple_discretization(lat, partitions_tuple)
-#     end
-#     return Brillouin(lattice, uniform, partitions_tuple)
-# end
-# Brillouin(sys::System; kw...) = Brillouin(sys.lattice; kw...)
+resolve_degeneracies!(energies, states, vfunc::Missing, kn, degtol) = nothing
+function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}, degtol) where {L}
+    degsubspaces = degeneracies(energies, degtol)
+    if !(degsubspaces === nothing)
+        for subspaceinds in degsubspaces
+            for axis = 1:L
+                v = vfunc(kn, axis)  # Need to do it in-place for each subspace
+                subspace = view(states, :, subspaceinds)
+                vsubspace = subspace' * v * subspace
+                veigen = eigen!(vsubspace)
+                subspace .= subspace * veigen.vectors
+                success = !hasdegeneracies(veigen.values, degtol)
+                success && break
+            end
+        end
+    end
+    return nothing
+end
 
-# Base.show(io::IO, m::Brillouin{T,L,N}) where {T,L,N} =
-#     print(io, "Brillouin{$T,$L} : discretization of $L-dimensional Brillouin zone
-#     Mesh type  : $(m.uniform ? "uniform" : "simple")
-#     Vertices   : $(nsites(m.lattice))
-#     Partitions : $(m.partitions)")
+function hasdegeneracies(energies, degtol)
+    has = false
+    for i in eachindex(energies), j in (i+1):length(energies)
+        if abs(energies[i] - energies[j]) < degtol
+            has = true
+            break
+        end
+    end
+    return has
+end
 
-# # phi-space sampling z, k-space G'z. M = diagonal(partitions)
-# # M G' z =  Tr * n, where n are SVector{L,Int}, and Tr is a hypertriangular lattice
-# # For some integer S = (n1,n2...), (z1, z2, z3) = I (corners of BZ).
-# # Hence S = round.(Tr^{-1} G' M) = supercell. Bravais are z_i for n = I, so simply S^{-1}
-# # Links should be fixed at the Tr level, then transform so that D * Tr = S^{-1}, and do Supercell(S)
-# function uniform_discretization(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,Int}) where {T,E,L}
-#     M = diagsmatrix(partitions_tuple)
-#     A = qr(bravaismatrix(lat)).R
-#     Gt = qr(transpose(inv(A))).R
-#     Gt = Gt / Gt[1,1]
-#     Tr = hypertriangularbravais(lat)
-#     S = round.(Int, inv(Tr) * Gt * M)
-#     iS = inv(S)
-#     D = iS * inv(Tr)
-#     meshlat = Lattice(Sublat(zero(SVector{L,T})), Bravais(Tr), LinkRule(1))
-#     meshlat = transform!(meshlat, r -> D * r)
-#     meshlat = lattice!(meshlat, Supercell(S))
-#     # methlat = transform!(meshlat, r -> Gt * r)  # to go back to k space
-#     return meshlat
-# end
+function degeneracies(energies, degtol)
+    if hasdegeneracies(energies, degtol)
+        deglist = Vector{Int}[]
+        isclassified = BitArray(false for _ in eachindex(energies))
+        for i in eachindex(energies)
+            isclassified[i] && continue
+            degeneracyfound = false
+            for j in (i + 1):length(energies)
+                if !isclassified[j] && abs(energies[i] - energies[j]) < degtol
+                    !degeneracyfound && push!(deglist, [i])
+                    degeneracyfound = true
+                    push!(deglist[end], j)
+                    isclassified[j] = true
+                end
+            end
+        end
+        return deglist
+    else
+        return nothing
+    end
+end
 
-# # Transformation D takes hypertriangularbravais to minisquare (phi-space delta): D * Tr = M^{-1}
-# # However, Tr has to be chosen to match bravais angles of G' as much as possible: Trsigned
-# # Build+link Trsigned, transform, Supercell(M)
-# function simple_discretization(lat::Lattice{T,E,L}, partitions_tuple::NTuple{L,Int}) where {T,E,L}
-#     M = diagsmatrix(partitions_tuple)
-#     A = qr(bravaismatrix(lat)).R
-#     Gt = qr(transpose(inv(A))).R
-#     Gt = Gt / Gt[1,1]
-#     Tr = hypertriangularbravais(lat)
-#     Trsigned = zero(MMatrix{L,L,T})
-#     for i in 1:L
-#         Trsigned[1:L, i] .= Tr[1:L, i] * sign_positivezero(Gt[1,i])
-#     end
-#     D = inv(Trsigned * M)
-#     meshlat = Lattice(Sublat(zero(SVector{L,T})), Bravais(Trsigned), LinkRule(1))
-#     meshlat = transform!(meshlat, r -> D * r)
-#     meshlat = lattice!(meshlat, Supercell(M))
-#     return meshlat
-# end
-
-# # Completes the L2 vectors into an L-dimensional basis s with new vectors at 60 degree angles
-# hypertriangularbravais(lat::Lattice{T,E,L}) where {T,E,L} = hypertriangularbravais(SMatrix{L,1,T}(I))
-# function hypertriangularbravais(s::SMatrix{L,L2,T}) where {L,L2,T}
-#     v1 = s[:,L2]
-#     factor = T(1/(L2+1))
-#     v2 = modifyat(v1, L2, v1[L2]*factor)
-#     v2 = modifyat(v2, L2 + 1, v1[L2]*sqrt(1 - factor^2))
-#     return hypertriangularbravais(hcat(s, v2))
-# end
-# hypertriangularbravais(s::SMatrix{L,L}) where L = s
-
-# function cartesianlattice(ranges::Vararg{<:AbstractArray,N}) where {N}
-#     partitions = length.(ranges)
-#     T = promote_type(Float16, map(eltype, ranges)...)
-#     brmat = hypertriangularbravais(SMatrix{N,1,T}(I))
-#     lat = Lattice(Sublat(zero(SVector{N,T})), Bravais(brmat), LinkRule(1.5), Supercell(partitions...))
-#     invbrmat = inv(brmat)
-#     sites = lat.sublats[1].sites
-#     for (i, site) in enumerate(sites)
-#         sites[i] = SVector{N,T}(_getrangesindex(ranges, invbrmat * site + 1))
-#     end
-#     boundedlat = Lattice(lat.sublats[1])
-#     boundedlat.links.intralink = lat.links.intralink
-#     updatelinks!(boundedlat)
-#     return boundedlat
-# end
-# _getrangesindex(ranges, inds::SVector{N}) where N = ntuple(i -> ranges[i][round(Int, inds[i])], Val(N))
 
 # #######################################################################
 # # BandSampling

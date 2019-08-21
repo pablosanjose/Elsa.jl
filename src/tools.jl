@@ -37,13 +37,15 @@ padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T)
     SMatrix{E2,L2,T2}(
         ntuple(k -> _padrightbottom((k - 1) % E2 + 1, (k - 1) ÷ E2 + 1, zero(T2), s), 
                Val(E2 * L2)))
-@inline _padrightbottom(i, j, zero, s::SMatrix{E,L}) where {E,L} = 
-    i > E || j > L ? zero : s[i,j]
 padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
+
 function padrightbottom(m::Matrix{T}, zeroT::T, im, jm) where T
     i0, j0 = size(m)
     [i <= i0 && j<= j0 ? m[i,j] : zeroT for i in 1:im, j in 1:jm]
 end
+
+@inline _padrightbottom(i, j, zero, s::SMatrix{E,L}) where {E,L} = 
+    i > E || j > L ? zero : s[i,j]
 
 # @inline tuplejoin(x) = x
 # @inline tuplejoin(x, y) = (x..., y...)
@@ -63,9 +65,28 @@ negSVector(s::SVector{0,<:Number}) where {L} = s    ## Work around BUG: -SVector
 
 allorderedpairs(v) = [(i, j) for i in v, j in v if i >= j]
 
+# Like copyto! but with potentially different tensor orders
+function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1}, 
+                    src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
+    isempty(Rdest) && return dest
+    if length(Rdest) != length(Rsrc)
+        throw(ArgumentError("source and destination must have same length (got $(length(Rsrc)) and $(length(Rdest)))"))
+    end
+    checkbounds(dest, first(Rdest))
+    checkbounds(dest, last(Rdest))
+    checkbounds(src, first(Rsrc))
+    checkbounds(src, last(Rsrc))
+    src′ = Base.unalias(dest, src)
+    for (Is, Id) in zip(Rsrc, Rdest)
+        @inbounds dest[Id] = src′[Is]
+    end
+    return dest
+end
+
 ######################################################################
 # Permutations (taken from Combinatorics.jl)
 #######################################################################
+
 struct Permutations{T}
     a::T
     t::Int
@@ -130,6 +151,7 @@ function nextpermutation(m, t, state)
     return (perm, s)
 end
 
+# Taken from Combinatorics.jl
 # TODO: This should really live in Base, otherwise it's type piracy
 """
     factorial(n, k)
@@ -147,4 +169,5 @@ function Base.factorial(n::T, k::T) where T<:Integer
     end
     return f
 end
+
 Base.factorial(n::Integer, k::Integer) = factorial(promote(n, k)...)

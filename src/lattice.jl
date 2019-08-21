@@ -19,9 +19,9 @@ mutable struct Sublat{E,T}  # Mutable because name is non-isbits and slow anyway
     sites::Vector{SVector{E,T}}
     name::NameType
 end
+
 Sublat(sites::Vector{<:SVector}; name = :_, kw...) = Sublat(sites, name)
-Sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) = 
-    Sublat(toSVectors(vs...); kw...)
+Sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) = Sublat(toSVectors(vs...); kw...)
 Sublat{E,T}(;kw...) where {E,T} = Sublat(SVector{E,T}[]; kw...)
 
 Base.show(io::IO, s::Sublat{E,T}) where {E,T} = print(io, 
@@ -55,6 +55,7 @@ Bravais{E}() where {E} = Bravais(SMatrix{E,0,Float64,0}())
 Bravais(vs::Union{Tuple, AbstractVector}...) = Bravais(toSMatrix(vs...))
 
 transform(b::Bravais{E,0}, f::F) where {E,F <: Function} = b
+
 function transform(b::Bravais{E,L}, f::F) where {E,L,F<:Function}
     svecs = let z = zero(SVector{E,Float64})
         ntuple(i -> f(b.matrix[:, i]) - f(z), Val(L))
@@ -85,9 +86,11 @@ mutable struct Lattice{E,L,T,EL}  # mutable: Lattice transform needs to change b
     sublats::Vector{Sublat{E,T}}
     bravais::Bravais{E,L,T,EL}
 end
+
 Lattice(sublats::Sublat{E}...; kw...) where {E} = Lattice(Bravais{E}(), sublats...; kw...)
 Lattice(bravais::Bravais, sublats::Sublat...; kw...) = 
     _lattice(bravais, promote(sublats...); kw...)
+
 function _lattice( 
         bravais::Bravais{EB,L},
         sublats::Union{NTuple{N,Sublat{E,T}},Vector{Sublat{E,T}}}; 
@@ -106,6 +109,7 @@ function _lattice(
     end
     return Lattice(actualsublats, actualbravais)
 end
+
 function uniquename(names, name, i)
     newname = Symbol(:_, i)
     return newname in names ? uniquename(names, name, i + 1) : newname

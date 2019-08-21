@@ -33,7 +33,8 @@ Bravais{E,L,T}(b::Bravais) where {E,L,T} =
     Bravais(padrightbottom(b.matrix, SMatrix{E,L,T}))
 
 System{E,L,T,Tv}(s::System) where {E,L,T,Tv} = 
-    System(convert(Lattice{E,L,T,Tv}, s.lattice), Operator{Tv,L}(s.hamiltonian))
+    System(convert(Lattice{E,L,T,Tv}, s.lattice), Operator{Tv,L}(s.hamiltonian), 
+           Operator{Tv,L}(s.velocity), s.sysinfo)
 
 Operator{Tv,L}(o::Operator) where {Tv,L} = 
     Operator{Tv,L}(o.matrix, o.intra, o.inters, o.boundary)
@@ -42,6 +43,7 @@ Block{Tv,L}(b::Block) where {Tv,L} =
     Block{Tv,L}(b.ndist, b.matrix, b.sysinfo, b.nlinks)
 
 Model{Tv}(m::Model) where {Tv} = Model{Tv}(m.terms...)
+
 promote_model(model::Model, sys::System{E,L,T,Tv}, systems...) where {E,L,T,Tv} = promote_model(Tv, model, systems...)
 promote_model(::Type{Tv}, model::Model, sys::System{E,L,T,Tv2}, systems...) where {Tv,E,L,T,Tv2} = promote_model(promote_type(Tv, Tv2), model, systems...)
 promote_model(::Type{Tv}, model::Model) where {Tv} = convert(Model{Tv}, model)

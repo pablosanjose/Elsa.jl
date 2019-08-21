@@ -66,8 +66,10 @@ systempresets = Dict(
 struct Region{E,F} <: Function
     f::F
 end
+
 Region{E}(f::F) where {E,F<:Function} = Region{E,F}(f)
 Region(name::NameType, args...) = regionpresets[name](args...)
+
 (region::Region{E})(r::SVector{E2}) where {E,E2} = region.f(r)
 # (region::Region{E})(r::SVector{E2}) where {E,E2} = 
 #    throw(DimensionMismatch("Region of dimension $E used in an $E2-dimensional space"))
