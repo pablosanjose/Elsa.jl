@@ -1,7 +1,7 @@
 module LatticeTest
 
-using Test
 using Elsa
+using Test
 using Elsa: nsites, nlinks
 
 @testset "bravais" begin

@@ -35,7 +35,7 @@ System{2,2,Float64,Complex{Float64}} : 2D system in 2D space
   Total hoppings      : 8 [Complex{Float64}]
   Coordination        : 2.6666666666666665
 
-julia> System(:honeycomb, Model(Hopping(@SMatrix[1 2; 0 1], sublats = (1,2))), 
+julia> System(LatticePresets.honeycomb(), Model(Hopping(@SMatrix[1 2; 0 1], sublats = (1,2))), 
               dim = Val(3), htype = Float32, norbitals = 2)
 System{3,2,Float64,Float32} : 2D system in 3D space
   Bravais vectors     : ((0.5, 0.866025, 0.0), (-0.5, 0.866025, 0.0))
@@ -46,7 +46,7 @@ System{3,2,Float64,Float32} : 2D system in 3D space
   Coordination        : 3.0
 
 julia> Tuple(keys(Elsa.systempresets))
-(:bcc, :cubic, :honeycomb, :linear, :graphene_bilayer, :square, :triangular)
+(LatticePresets.bcc(), LatticePresets.cubic(), LatticePresets.honeycomb(), :linear, :graphene_bilayer, :square, :triangular)
 ```
 
 # See also:
@@ -77,15 +77,16 @@ function System(lat::Lattice{E,L,T}, model::Model{Tv} = Model();
     return System(lat, hamiltonian, velocity, sysinfo)
 end
 
-System(name::NameType; kw...) = systempresets[name](; kw...)
-System(name::NameType, model::Model; kw...) = combine(System(name; kw...), model)
+# System(name::NameType; kw...) = systempresets[name](; kw...)
+# System(name::NameType, model::Model; kw...) = combine(System(name; kw...), model)
 
-System(sys::System{E,L,T,Tv}, model::Model; kw...) where {E,L,T,Tv} = System(sys.lattice, convert(Model{Tv}, model); kw...)
+System(sys::System{E,L,T,Tv}, model::Model; kw...) where {E,L,T,Tv} = 
+    System(sys.lattice, convert(Model{Tv}, model); kw...)
 
 Base.show(io::IO, sys::System{E,L,T,Tv}) where {E,L,T,Tv} = print(io, 
 "System{$E,$L,$T,$Tv} : $(L)D system in $(E)D space
-  Bravais vectors     : $(vectorsastuples(sys))
-  Sublattice names    : $((sublatnames(sys)... ,))
+  Bravais vectors     : $(vectorsastuples(sys.lattice.bravais))
+  Sublattice names    : $((sublatnames(sys.lattice)... ,))
   Sublattice orbitals : $((norbitals(sys)... ,))
   Total sites         : $(nsites(sys)) [$T]
   Total hoppings      : $(nlinks(sys)) [$Tv]
@@ -98,18 +99,21 @@ Broadcast.broadcastable(sys::System) = Ref(sys)
 # System internal API
 #######################################################################
 
-vectorsastuples(sys::System) = vectorsastuples(sys.lattice.bravais.matrix)
+vectorsastuples(br::Bravais) = vectorsastuples(br.matrix)
 vectorsastuples(mat::SMatrix{E,L}) where {E,L} = ntuple(l -> round.((mat[:,l]... ,), digits = 6), Val(L))
 
 nsublats(sys::System) = length(sys.lattice.sublats)
+nsublats(lat::Lattice) = length(lat.sublats)
 
 sublatindex(sys::System, s) = sublatindex(sys.sysinfo.namesdict, s)
 sublatindex(s::SystemInfo, name) = sublatindex(s.namesdict, name)
 sublatindex(d::Dict, name::NameType) = d[name]
 sublatindex(s::Dict, i::Integer) = Int(i)
 
-sublatname(sys::System, s) = sys.sysinfo.names[s]
-sublatnames(sys::System) = _parsename.(sys.sysinfo.names)
+sublatname(sys::System, s) = _parsename(sys.sysinfo.names[s])
+sublatnames(sys::System) = sublatname.(Ref(sys), 1:nsublats(sys))
+sublatname(lat::Lattice, s) = _parsename(lat.sublats[s].name)
+sublatnames(lat::Lattice) = sublatname.(Ref(lat), 1:nsublats(lat))
 
 _parsename(name::Symbol) = (sname = String(name); first(sname) == '_' ? Base.parse(Int, sname[2:end]) : name)
 
@@ -156,7 +160,7 @@ Functional syntax, equivalent to `transform(system, f; kw...)`
 
 # Examples
 ```jldoctest
-julia> transform!(System(:honeycomb, dim = Val(3)), r -> 2r + SVector(0,0,1))
+julia> transform!(System(LatticePresets.honeycomb(), dim = Val(3)), r -> 2r + SVector(0,0,1))
 System{3,2,Float64,Complex{Float64}} : 2D system in 3D space
   Bravais vectors     : ((1.0, 1.732051, 0.0), (-1.0, 1.732051, 0.0))
   Sublattice names    : (:A, :B)
@@ -190,7 +194,7 @@ system.
 
 # Examples
 ```jldoctest
-julia> combine(System(:honeycomb), System(:honeycomb), Model(Hopping(1, sublats = (:A, 4))))
+julia> combine(System(LatticePresets.honeycomb()), System(LatticePresets.honeycomb()), Model(Hopping(1, sublats = (:A, 4))))
 System{2,2,Float64,Complex{Float64}} : 2D system in 2D space
   Bravais vectors     : ((0.5, 0.866025), (-0.5, 0.866025))
   Sublattice names    : (:A, :B, 3, 4)
@@ -249,7 +253,7 @@ Functional syntax, equivalent to `bound(system; kw...)``
 
 # Examples
 ```jldoctest
-julia> bound(System(:cubic), except = (1, 3))
+julia> bound(System(LatticePresets.cubic()), except = (1, 3))
 System{3,2,Float64,Complex{Float64}} : 2D system in 3D space
   Bravais vectors     : ((1.0, 0.0, 0.0), (0.0, 0.0, 1.0))
   Sublattice names    : (1,)
@@ -284,7 +288,7 @@ overwrite the result of the first when `avoidcopy = true`).
 
 # Examples
 ```jldoctest
-julia> hamiltonian(System(:honeycomb, Model(Hopping(1))), ϕn = (0,0.5))
+julia> hamiltonian(System(LatticePresets.honeycomb(), Model(Hopping(1))), ϕn = (0,0.5))
 2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
   [1, 1]  =  -2.0+0.0im
   [2, 1]  =  1.0-1.22465e-16im
@@ -312,7 +316,7 @@ overwrite the result of the first when `avoidcopy = true`).
 
 # Examples
 ```jldoctest
-julia> velocity(System(:honeycomb, Model(Hopping(1))), 1; ϕn = (0,0.5))
+julia> velocity(System(LatticePresets.honeycomb(), Model(Hopping(1))), 1; ϕn = (0,0.5))
 2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
   [1, 1]  =  -2.0+0.0im
   [2, 1]  =  1.0-1.22465e-16im
@@ -357,7 +361,7 @@ to a specific sublat.
 
 # Examples
 ```jldoctest
-julia> sys = System(:honeycomb, Model(Hopping(1))) |> grow(region = Region(:square, 2))
+julia> sys = System(LatticePresets.honeycomb(), Model(Hopping(1))) |> grow(region = Region(:square, 2))
 System{2,0,Float64,Complex{Float64}} : 0D system in 2D space
   Bravais vectors     : ()
   Sublattice names    : (:A, :B)

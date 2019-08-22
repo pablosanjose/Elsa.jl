@@ -46,8 +46,8 @@ These are some of the basic types in `Elsa.jl`:
 
 - `System`: the basic object whose properties we want to compute. Its a combination of a `Lattice` (itself a combination of one or several `Sublat`s and a `Bravais` matrix) and a tight-binding `Model` that becomes translated into a Hamiltonian of type `Operator`.
     - The canonical constructor is `System(sublats..., bravais, model)`. This collects `sublats` and `bravais` into a `Lattice`, applies `model` to it, and bundles the resulting hamiltonian with the lattice.
-    - Alternatively we can use presets, defined in the `Dict` `systempresets`. *Example*: `System(:honeycomb, Model(Hopping(1)))`
-    - We can override the type `T` of site positions, the element type `Tv` of the Hamiltonian and the embedding dimension `E` using keyword arguments in the `System` constructor, as in `System(:honeycomb, dim = Val(E), ptype = T, htype = Tv)`.
+    - Alternatively we can use presets, defined in the `Dict` `systempresets`. *Example*: `System(LatticePresets.honeycomb(), Model(Hopping(1)))`
+    - We can override the type `T` of site positions, the element type `Tv` of the Hamiltonian and the embedding dimension `E` using keyword arguments in the `System` constructor, as in `System(LatticePresets.honeycomb(), dim = Val(E), ptype = T, htype = Tv)`.
 
 ## System API
 
@@ -60,10 +60,10 @@ A number of functions are available to easily build complex systems incrementall
 
 One can use a functional for of all the above to chain a number of operations. The two following instructions would then be equivalent
 ```julia
-System(:honeycomb) |> grow(region = Region(:circle, 3))
+System(LatticePresets.honeycomb()) |> grow(region = Region(:circle, 3))
 ```
 ```julia
-grow(System(:honeycomb), region = Region(:circle, 3))
+grow(System(LatticePresets.honeycomb()), region = Region(:circle, 3))
 ```
 
 Lastly, one can replace the Hamiltonian of a system `sys` using a different model like this: `System(sys, model)`. This preserves all sublattices and Bravais vectors, but recomputes the Hamiltonian (unlike `combine` which adds to the existing Hamiltonian).
@@ -135,12 +135,12 @@ The above can be streamlined by using built-in presets. System presets are just 
 Currently available system presets are (the list will keep growing):
 ```julia
 julia> Tuple(keys(Elsa.systempresets))
-(:bcc, :cubic, :honeycomb, :linear, :graphene_bilayer, :square, :triangular)
+(LatticePresets.bcc(), LatticePresets.cubic(), LatticePresets.honeycomb(), :linear, :graphene_bilayer, :square, :triangular)
 ```
 
 We can use a system preset by passing its name to the `System` builder. 
 ```julia
-julia> System(:honeycomb)
+julia> System(LatticePresets.honeycomb())
 System{2,2,Float64,Complex{Float64}} : 2D system in 2D space
   Bravais vectors     : ((0.5, 0.866025), (-0.5, 0.866025))
   Sublattice names    : (:A, :B)
@@ -182,9 +182,9 @@ We now wish to build a finite-sized graphene flake of circular shape, with a rad
 a0 = 0.246
 incircle(r) = r[1]^2 + r[2]^2 < 50^2;
 ```
-The system is defined by applying a model to the `:honeycomb` preset, and rescaling it to the proper lattice constant `a0`
+The system is defined by applying a model to the `LatticePresets.honeycomb()` preset, and rescaling it to the proper lattice constant `a0`
 ```julia
-julia> sys = System(:honeycomb, Model(Hopping(1, sublats = (1,2)))) |> transform(r-> a0 * r)
+julia> sys = System(LatticePresets.honeycomb(), Model(Hopping(1, sublats = (1,2)))) |> transform(r-> a0 * r)
 System{2,2,Float64,Complex{Float64}} : 2D system in 2D space
   Bravais vectors     : ((0.123, 0.213042), (-0.123, 0.213042))
   Sublattice names    : (:A, :B)
@@ -208,7 +208,7 @@ Note that the resulting lattice is `0D`, since it has zero Bravais vectors (it i
 
 `Elsa.jl` also has a number of region presets (see `Tuple(keys(Elsa.regionpresets))`). The above region can also be written as `Region(:circle, 50)`:
 ```julia
-julia> System(:honeycomb, Model(Hopping(1, sublats = (1,2)))) |> transform(r-> a0 * r) |> grow(region = Region(:circle, 50))
+julia> System(LatticePresets.honeycomb(), Model(Hopping(1, sublats = (1,2)))) |> transform(r-> a0 * r) |> grow(region = Region(:circle, 50))
 System{2,0,Float64,Complex{Float64}} : 0D system in 2D space
   Bravais vectors     : ()
   Sublattice names    : (:A, :B)
@@ -238,7 +238,7 @@ We now build a Kane-Mele model (http://dx.doi.org/10.1103/PhysRevLett.95.226801)
 
 We start by defining a honeycomb system without any hopping (to which the Kane-Mele model will be added), the nearest and next nearest hoppings (in absolute value), and the `σ0` and `σz` Pauli matrices
 ```julia
-sys0 = System(:honeycomb)
+sys0 = System(LatticePresets.honeycomb())
 t1 = 1
 t2 = 0.1
 σ0 = @SMatrix[1 0; 0 1]

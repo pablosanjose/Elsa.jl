@@ -64,6 +64,9 @@ function transform(b::Bravais{E,L}, f::F) where {E,L,F<:Function}
     return Bravais(matrix)
 end
 
+Base.:*(factor, b::Bravais) = Bravais(factor * b.matrix)
+Base.:*(b::Bravais, factor) = Bravais(b.matrix * factor)
+
 #######################################################################
 # Lattice
 #######################################################################
@@ -94,7 +97,7 @@ Lattice(bravais::Bravais, sublats::Sublat...; kw...) =
 function _lattice( 
         bravais::Bravais{EB,L},
         sublats::Union{NTuple{N,Sublat{E,T}},Vector{Sublat{E,T}}}; 
-        dim::Val{E2} = Val(E), ptype::Type{T2} = T, kw...) where {N,T,E,L,T2,E2,EB}
+        dim::Val{E2} = Val(E), ptype::Type{T2} = T) where {N,T,E,L,T2,E2,EB}
     actualsublats = convert(Vector{Sublat{E2,T2}}, collect(sublats))
     actualbravais = convert(Bravais{E2,L,T2}, bravais)
     names = NameType[:_]
@@ -115,6 +118,7 @@ function uniquename(names, name, i)
     return newname in names ? uniquename(names, name, i + 1) : newname
 end
 
-Base.show(io::IO, s::Lattice{E,L,T}) where {E,L,T} = print(io, 
-"Lattice{$E,$L,$T}: $L-dimensional lattice with $(length(s.sublats)) $T-typed $(length(s.sublats) > 1 ? 
-"sublattices" : "sublattice") in $E-dimensional embedding space")
+Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T} = print(io, 
+"Lattice{$E,$L,$T} : $(L)D lattice in $(E)D space
+  Bravais vectors     : $(vectorsastuples(lat.bravais))
+  Sublattice names    : $((sublatnames(lat)... ,))")

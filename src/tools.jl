@@ -1,5 +1,3 @@
-extended_eps(T = Float64) = sqrt(eps(T))
-
 toSMatrix() = SMatrix{0,0,Float64}()
 toSMatrix(ss::NTuple{N,Number}...) where {N} = toSMatrix(SVector{N}.(ss)...)
 toSMatrix(ss::SVector{N}...) where {N} = hcat(ss...)

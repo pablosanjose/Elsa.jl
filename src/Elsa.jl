@@ -6,10 +6,11 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
 import Base: convert, iterate, ==
 import SparseArrays: sparse!
 
-export Sublat, Bravais, Lattice, System, systempresets, Model, Hopping, Onsite,  Region,
+export Sublat, Bravais, Lattice, System, Model, Hopping, Onsite,
        grow, combine, transform, transform!, hamiltonian, bound,
        sitepositions, neighbors, bravaismatrix, marchingmesh
 export MomentaKPM, dosKPM
+export LatticePresets, SystemPresets, RegionPresets
 
 export @SMatrix, @SVector, SMatrix, SVector
 
