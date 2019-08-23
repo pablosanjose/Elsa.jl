@@ -6,7 +6,7 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
 import Base: convert, iterate, ==
 import SparseArrays: sparse!
 
-export Sublat, Bravais, Lattice, System, Model, Hopping, Onsite,
+export sublat, bravais, lattice, System, Model, Hopping, Onsite,
        grow, combine, transform, transform!, hamiltonian, bound,
        sitepositions, neighbors, bravaismatrix, marchingmesh
 export MomentaKPM, dosKPM

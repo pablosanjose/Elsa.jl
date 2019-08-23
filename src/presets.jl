@@ -8,31 +8,31 @@ using Elsa
 using Elsa: NameType
 
 linear(; a0 = 1, kw...) = 
-    Lattice(a0 * Bravais((1.,)), Sublat((0.,); kw...))
+    lattice(a0 * bravais((1.,)), sublat((0.,); kw...))
 
 square(; a0 = 1, kw...) = 
-    Lattice(a0 * Bravais((1., 0.), (0., 1.)), Sublat((0., 0.); kw...))
+    lattice(a0 * bravais((1., 0.), (0., 1.)), sublat((0., 0.); kw...))
 
 triangular(; a0 = 1, kw...) = 
-    Lattice(a0 * Bravais(( cos(pi/3), sin(pi/3)),(-cos(pi/3), sin(pi/3))), 
-        Sublat((0., 0.); kw...))
+    battice(a0 * bravais(( cos(pi/3), sin(pi/3)),(-cos(pi/3), sin(pi/3))), 
+        sublat((0., 0.); kw...))
 
-honeycomb(; a0 = 1, name::Tuple{NameType,NameType} = (:A, :B), kw...) = 
-    Lattice(a0 * Bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3))),
-        Sublat((0.0, -0.5/sqrt(3.0)); name = first(name)),
-        Sublat((0.0,  0.5/sqrt(3.0)); name =  last(name)); kw...)
+honeycomb(; a0 = 1, kw...) = 
+    lattice(a0 * bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3))),
+        sublat((0.0, -0.5/sqrt(3.0)), name = :A),
+        sublat((0.0,  0.5/sqrt(3.0)), name = :B); kw...)
 
 cubic(; a0 = 1, kw...) = 
-    Lattice(a0 * Bravais((1., 0., 0.), (0., 1., 0.), (0., 0., 1.)),
-        Sublat((0., 0., 0.)); kw...)
+    lattice(a0 * bravais((1., 0., 0.), (0., 1., 0.), (0., 0., 1.)),
+        sublat((0., 0., 0.)); kw...)
 
 fcc(; a0 = 1, kw...) = 
-    Lattice(a0 * Bravais(@SMatrix([-1. -1. 0.; 1. -1. 0.; 0. 1. -1.])'/sqrt(2.)),
-        Sublat((0., 0., 0.)); kw...)
+    lattice(a0 * bravais(@SMatrix([-1. -1. 0.; 1. -1. 0.; 0. 1. -1.])'/sqrt(2.)),
+        sublat((0., 0., 0.)); kw...)
 
 bcc(; a0 = 1, kw...) = 
-    Lattice(a0 * Bravais((1., 0., 0.), (0., 1., 0.), (0.5, 0.5, 0.5)),
-        Sublat((0., 0., 0.)); kw...)
+    lattice(a0 * bravais((1., 0., 0.), (0., 1., 0.), (0.5, 0.5, 0.5)),
+        sublat((0., 0., 0.)); kw...)
 
 end # module
 
@@ -50,11 +50,11 @@ function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 =
                             kwsys...)
     (m, r) = twistindices
     θ = acos((3m^2 + 3m*r +r^2/2)/(3m^2 + 3m*r + r^2))
-    sAbot = Sublat((0.0, -0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Ab)
-    sBbot = Sublat((0.0,  0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Bb)
-    sAtop = Sublat((0.0, -0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :At)
-    sBtop = Sublat((0.0,  0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :Bt)
-    bravais = a0 * Bravais(( cos(pi/3), sin(pi/3), 0), 
+    sAbot = sublat((0.0, -0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Ab)
+    sBbot = sublat((0.0,  0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Bb)
+    sAtop = sublat((0.0, -0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :At)
+    sBtop = sublat((0.0,  0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :Bt)
+    bravais = a0 * bravais(( cos(pi/3), sin(pi/3), 0), 
                            (-cos(pi/3), sin(pi/3), 0))
     if gcd(r, 3) == 1
         scbot = @SMatrix[m -(m+r); (m+r) 2m+r]
@@ -63,23 +63,23 @@ function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 =
         scbot = @SMatrix[m+r÷3 -r÷3; r÷3 m+2r÷3]
         sctop = @SMatrix[m+2r÷3 r÷3; -r÷3 m+r÷3]
     end
-    lattop = Lattice(bravais, sAtop, sBtop)
-    latbot = Lattice(bravais, sAbot, sBbot)
+    lattop = lattice(bravais, sAtop, sBtop)
+    latbot = lattice(bravais, sAbot, sBbot)
     modelintra = Model(Hopping(hopintra, range = rangeintralayer))
     systop = grow(System(lattop, modelintra; dim = Val(3), kwsys...), supercell = sctop)
     sysbot = grow(System(latbot, modelintra; dim = Val(3), kwsys...), supercell = scbot)
-    topR = let R = @SMatrix[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]
-        transform(systop, r -> R * r)
+    let R = @SMatrix[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]
+        transform!(systop, r -> R * r)
     end
-    botR = let R = @SMatrix[cos(θ/2) sin(θ/2) 0; -sin(θ/2) cos(θ/2) 0; 0 0 1]
-        transform(sysbot, r -> R * r)
+    let R = @SMatrix[cos(θ/2) sin(θ/2) 0; -sin(θ/2) cos(θ/2) 0; 0 0 1]
+        transform!(sysbot, r -> R * r)
     end
     modelinter = Model(Hopping(
         (r,dr) -> hopinter * exp(-3*(norm(dr)/interlayerdistance - 1)) * 
                                 dr[3]^2/sum(abs2,dr), 
         range = rangeinterlayer, 
         sublats = ((:Ab,:At), (:Ab,:Bt), (:Bb,:At), (:Bb,:Bt))))
-    return combine(botR, topR, modelinter)
+    return combine(sysbot, systop, modelinter)
 end
 
 end # module

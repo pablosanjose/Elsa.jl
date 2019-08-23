@@ -85,7 +85,7 @@ System(sys::System{E,L,T,Tv}, model::Model; kw...) where {E,L,T,Tv} =
 
 Base.show(io::IO, sys::System{E,L,T,Tv}) where {E,L,T,Tv} = print(io, 
 "System{$E,$L,$T,$Tv} : $(L)D system in $(E)D space
-  Bravais vectors     : $(vectorsastuples(sys.lattice.bravais))
+  Bravais vectors     : $(displayvectors(sys.lattice.bravais))
   Sublattice names    : $((sublatnames(sys.lattice)... ,))
   Sublattice orbitals : $((norbitals(sys)... ,))
   Total sites         : $(nsites(sys)) [$T]
@@ -99,23 +99,8 @@ Broadcast.broadcastable(sys::System) = Ref(sys)
 # System internal API
 #######################################################################
 
-vectorsastuples(br::Bravais) = vectorsastuples(br.matrix)
-vectorsastuples(mat::SMatrix{E,L}) where {E,L} = ntuple(l -> round.((mat[:,l]... ,), digits = 6), Val(L))
-
 nsublats(sys::System) = length(sys.lattice.sublats)
 nsublats(lat::Lattice) = length(lat.sublats)
-
-sublatindex(sys::System, s) = sublatindex(sys.sysinfo.namesdict, s)
-sublatindex(s::SystemInfo, name) = sublatindex(s.namesdict, name)
-sublatindex(d::Dict, name::NameType) = d[name]
-sublatindex(s::Dict, i::Integer) = Int(i)
-
-sublatname(sys::System, s) = _parsename(sys.sysinfo.names[s])
-sublatnames(sys::System) = sublatname.(Ref(sys), 1:nsublats(sys))
-sublatname(lat::Lattice, s) = _parsename(lat.sublats[s].name)
-sublatnames(lat::Lattice) = sublatname.(Ref(lat), 1:nsublats(lat))
-
-_parsename(name::Symbol) = (sname = String(name); first(sname) == '_' ? Base.parse(Int, sname[2:end]) : name)
 
 norbitals(sys::System) = sys.sysinfo.norbitals
 
@@ -145,38 +130,35 @@ function _boundingbox!(bmin, bmax, site)
 end
 
 #######################################################################
-# System external API
+# External API
 #######################################################################
 """
-    transform!(system::System, f::Function; sublats)
+    transform!(s::Union{Lattice,System}, f::Function; sublats)
 
-Change `system` in-place by moving positions `r` of sites in sublattices specified 
-by `sublats` (all by default) to `f(r)`. Bravais vectors are also updated, but the 
-system Hamiltonian is unchanged.
+Change `s` in-place by moving positions `r` of sites in sublattices specified by `sublats` 
+(all by default) to `f(r)`. Bravais vectors are also updated, but the system Hamiltonian is 
+unchanged.
 
-    system |> transform(f::Function; kw...)
+    s |> transform!(f::Function; kw...)
 
-Functional syntax, equivalent to `transform(system, f; kw...)`
+Functional syntax, equivalent to `transform!(s, f; kw...)`
 
 # Examples
 ```jldoctest
-julia> transform!(System(LatticePresets.honeycomb(), dim = Val(3)), r -> 2r + SVector(0,0,1))
-System{3,2,Float64,Complex{Float64}} : 2D system in 3D space
+julia> transform!(LatticePresets.honeycomb(dim = Val(3)), r -> 2r + SVector(0,0,1))
+Lattice{3,2,Float64} : 2D lattice in 3D space
   Bravais vectors     : ((1.0, 1.732051, 0.0), (-1.0, 1.732051, 0.0))
   Sublattice names    : (:A, :B)
-  Sublattice orbitals : (0, 0)
-  Total sites         : 2 [Float64]
-  Total hoppings      : 0 [Complex{Float64}]
-  Coordination        : 0.0
+  Sublattice orbitals : ((:noname), (:noname))
 ```
 """
 transform!
 
 """
-    transform(system::System, f::Function; sublats)
+    transform(s::Union{Lattice,System}, f::Function; sublats)
 
-Perform a `transform!` on a `deepcopy` of `system`, so that the result is completely
-decoupled from the original. See `transform!` for more information.
+Perform a `transform!` on a `deepcopy` of `s`, so that the result is completely decoupled 
+from the original. See `transform!` for more information.
 ```
 """
 transform
@@ -331,9 +313,9 @@ julia> velocity(System(LatticePresets.honeycomb(), Model(Hopping(1))), 1; ϕn = 
 velocity
 
 """
-    bravaismatrix(system)
+    bravaismatrix(s)
 
-Return the Bravais matrix of a system. Its columns are the Bravais vectors.
+Return the Bravais matrix of `s`. Its columns are the Bravais vectors.
 """
 bravaismatrix(sys::System) = sys.lattice.bravais.matrix
 bravaismatrix(lat::Lattice) = lat.bravais.matrix

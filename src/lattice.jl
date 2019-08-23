@@ -11,48 +11,79 @@ can be entered as tuples or `SVectors`.
 
 # Examples
 ```jldoctest
-julia> Sublat((0, 0), (1, 1), (1, -1), name = :A)
-Sublat{Int64,2}(:A, SArray{Tuple{2},Int64,1,2}[[0, 0], [1, 1], [1, -1]])
+julia> sublat((0.0, 0), (1, 1), (1, -1), name = :A, orbitals = (:up, :down))
+Sublat{2,Float64,2} : sublattice in 2D space with 2 orbitals per site
+  Sites    : 3
+  Name     : :A
+  Orbitals : (:up, :down)
 ```
 """
-mutable struct Sublat{E,T}  # Mutable because name is non-isbits and slow anyway
+struct Sublat{E,T,D}
     sites::Vector{SVector{E,T}}
     name::NameType
+    orbitals::NTuple{D,NameType}
 end
 
-Sublat(sites::Vector{<:SVector}; name = :_, kw...) = Sublat(sites, name)
-Sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) = Sublat(toSVectors(vs...); kw...)
-Sublat{E,T}(;kw...) where {E,T} = Sublat(SVector{E,T}[]; kw...)
+Base.empty(s::Sublat) = sublat(empty(s.sites), s.name, s.orbitals)
 
-Base.show(io::IO, s::Sublat{E,T}) where {E,T} = print(io, 
-"Sublat{$E,$T}: sublattice `:$(s.name)` of $(length(s.sites)) $T-typed sites in $E-dimensional embedding space")
+Base.show(io::IO, s::Sublat{E,T,D}) where {E,T,D} = print(io, 
+"Sublat{$E,$T,$D} : sublattice in $(E)D space with $D orbitals per site
+  Sites    : $(length(s.sites))
+  Name     : $(displayname(s))
+  Orbitals : $(displayorbitals(s))")
+
+displayname(s::Sublat) = s.name == nametype(:_) ? "pending" : string(":", s.name)
+displayorbitals(s::Sublat) = string("(", join(string.(":", s.orbitals), ", "), ")")
+
+# API #
+
+sublat(sites::Vector{<:SVector}; name = nametype(:_), orbitals = (nametype(:noname),)) = 
+    Sublat(sites, nametype(name), nametype.(Tuple(orbitals)))
+sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) = sublat(toSVectors(vs...); kw...)
 
 transform!(s::S, f::F) where {S <: Sublat,F <: Function} = (s.sites .= f.(s.sites); s)
 
 #######################################################################
 # Bravais
 #######################################################################
-"""
-    Bravais(vecs...)
-    Bravais(mat)
-
-Create a `Bravais{E,L}` that adds `L` Bravais vectors
-`vecs` in `E` dimensional space, alternatively given as the columns of matrix
-`mat`. For higher efficiency write `vecs` as `Tuple`s or `SVector`s and `mat`
-as `SMatrix`.
-
-# Examples
-```jldoctest
-julia> Bravais((1, 2), (3, 4))
-Bravais{Int64,2,2,4}([1 3; 2 4])
-```
-"""
 struct Bravais{E,L,T,EL}
     matrix::SMatrix{E,L,T,EL}
 end
 
-Bravais{E}() where {E} = Bravais(SMatrix{E,0,Float64,0}())
-Bravais(vs::Union{Tuple, AbstractVector}...) = Bravais(toSMatrix(vs...))
+Bravais{E,T}() where {E,T} = Bravais(SMatrix{E,0,T,0}())
+
+displayvectors(br::Bravais) = displayvectors(br.matrix)
+displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; digits = nothing) where {E,L} = 
+    ntuple(l -> round.((mat[:,l]... ,); digits = digits), Val(L))
+displayvectors(mat::SMatrix{E,L,Integer}; kw...) where {E,L} = 
+    ntuple(l -> (mat[:,l]... ,), Val(L))
+
+Base.show(io::IO, b::Bravais{E,L,T}) where {E,L,T} = print(io, 
+"Bravais{$E,$L,$T} : set of $L Bravais vectors in $(E)D space. 
+  Vectors : $(displayvectors(b))
+  Matrix  : ", b.matrix)
+  
+# API #
+
+"""
+    bravais(vecs...)
+    bravais(mat)
+
+Create a `Bravais{E,L}` that adds `L` Bravais vectors `vecs` in `E` dimensional space, 
+alternatively given as the columns of matrix `mat`. For higher instantiation efficiency 
+enter `vecs` as `Tuple`s or `SVector`s and `mat` as `SMatrix`.
+
+We can scale a `b::Bravais` simply by multiplying it with a factor `a`, like `a * b`.
+
+# Examples
+```jldoctest
+julia> bravais((1.0, 2), (3, 4))
+Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space. 
+  Vectors : ((1.0, 2.0), (3.0, 4.0))
+  Matrix  : [1.0 3.0; 2.0 4.0]
+```
+"""
+bravais(vs::Union{Tuple, AbstractVector}...) = Bravais(toSMatrix(vs...))
 
 transform(b::Bravais{E,0}, f::F) where {E,F <: Function} = b
 
@@ -70,13 +101,56 @@ Base.:*(b::Bravais, factor) = Bravais(b.matrix * factor)
 #######################################################################
 # Lattice
 #######################################################################
-"""
-    Lattice(bravais::Bravais, sublats::Sublat...; dim::Val{E}, ptype::T)
+struct Lattice{E,L,T,EL,S<:Tuple{Vararg{Sublat{E,T}}}}
+    bravais::Bravais{E,L,T,EL}
+    sublats::S
+end
 
-Create a `Lattice{E,L,T}` with `Bravais` matrix `bravais` and sublattices `sublats` in 
-`E`-dimensional space, converted to a common type `Sublat{E,T}`. `bravais` is converted 
-to match `E` and `T` from `sublats`. To override the embedding  dimension `E`, use keyword 
-`dim = Val(E)`. Similarly, override type `T` with `ptype = T`.
+_lattice(sublats::NTuple{N,Sublat{E,T}}; kw...) where {E,T,N} = _lattice(Bravais{E,T}(), sublats; kw...)
+function _lattice(bravais::Bravais{EB,L}, sublats::NTuple{N,Sublat{E,T}}; 
+                 dim::Val{E2} = Val(E), type::Type{T2} = T,
+                 names::NTuple{N} = (s->s.name).(sublats),
+                 orbitals::NTuple{N,Tuple} = (s->s.orbitals).(sublats)) where {N,T,E,L,T2,E2,EB}
+    allnames = NameType[:_]
+    vecnames = collect(names)
+    for i in eachindex(vecnames)
+        vecnames[i] in allnames && (vecnames[i] = uniquename(allnames, vecnames[i], i))
+        push!(allnames, vecnames[i])
+    end
+    names = ntuple(n -> vecnames[n], Val(N))
+    actualsublats = Sublat{E2,T2}.(sublats, nametype.(names), map.(nametype, orbitals))
+    actualbravais = convert(Bravais{E2,L,T2}, bravais)
+    return Lattice(actualbravais, actualsublats)
+end
+
+function uniquename(allnames, name, i)
+    newname = nametype(i)
+    return newname in allnames ? uniquename(allnames, name, i + 1) : newname
+end
+
+displaynames(l::Lattice) = string("(", join(displayname.(l.sublats), ", "), ")")
+displayorbitals(l::Lattice) = string("(", join(displayorbitals.(l.sublats), ", "), ")")
+displayvectors(lat::Lattice) = displayvectors(lat.bravais.matrix, digits = 6)
+
+sublatindex(lat::Lattice, name::NameType) = findfirst(s -> (s.name == name), lat.sublats)
+sublatindex(lat::Lattice, i::Integer) = Int(i)
+
+Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T} = print(io, 
+"Lattice{$E,$L,$T} : $(L)D lattice in $(E)D space
+  Bravais vectors     : $(displayvectors(lat))
+  Sublattice names    : $(displaynames(lat))
+  Sublattice orbitals : $(displayorbitals(lat))")
+
+# API #
+
+"""
+lattice([bravais::Bravais,] sublats::Sublat...; dim::Val{E}, type::T, names, orbitals)
+
+Create a `Lattice{E,L,T}` with `Bravais` matrix `bravais` and sublattices `sublats` 
+converted to a common  `E`-dimensional embedding space and type `T`. To override the 
+embedding  dimension `E`, use keyword `dim = Val(E)`. Similarly, override type `T` with 
+`type = T`. The keywords `names::Tuple` and `orbitals::Tuple{Tuple}` can be used to rename 
+`sublats` or redefine their orbitals per site.
 
 # Examples
 ```jldoctest
@@ -85,40 +159,16 @@ Lattice{3,1,Float64}: 1-dimensional lattice with 2 Float64-typed sublattices in
 3-dimensional embedding space
 ```
 """
-mutable struct Lattice{E,L,T,EL}  # mutable: Lattice transform needs to change bravais
-    sublats::Vector{Sublat{E,T}}
-    bravais::Bravais{E,L,T,EL}
-end
+lattice(sublats::Sublat...; kw...) = _lattice(promote(sublats...); kw...)
+lattice(br::Bravais, sublats::Sublat...; kw...) = _lattice(br, promote(sublats...); kw...)
 
-Lattice(sublats::Sublat{E}...; kw...) where {E} = Lattice(Bravais{E}(), sublats...; kw...)
-Lattice(bravais::Bravais, sublats::Sublat...; kw...) = 
-    _lattice(bravais, promote(sublats...); kw...)
-
-function _lattice( 
-        bravais::Bravais{EB,L},
-        sublats::Union{NTuple{N,Sublat{E,T}},Vector{Sublat{E,T}}}; 
-        dim::Val{E2} = Val(E), ptype::Type{T2} = T) where {N,T,E,L,T2,E2,EB}
-    actualsublats = convert(Vector{Sublat{E2,T2}}, collect(sublats))
-    actualbravais = convert(Bravais{E2,L,T2}, bravais)
-    names = NameType[:_]
-    for (i, sublat) in enumerate(actualsublats)
-        if sublat.name in names
-            actualname = uniquename(names, sublat.name, i)
-            actualsublats[i].name = actualname
-        else
-            actualname = sublat.name
-        end
-        push!(names, actualname)
+function transform!(lat::Lattice, f::Function; sublatinds = eachindex(lat.sublats))
+    for s in sublatinds
+        sind = sublatindex(lat, s)
+        transform!(lat.sublats[sind], f)
     end
-    return Lattice(actualsublats, actualbravais)
+    br = transform(lat.bravais, f)
+    return Lattice(br, lat.sublats)
 end
 
-function uniquename(names, name, i)
-    newname = Symbol(:_, i)
-    return newname in names ? uniquename(names, name, i + 1) : newname
-end
-
-Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T} = print(io, 
-"Lattice{$E,$L,$T} : $(L)D lattice in $(E)D space
-  Bravais vectors     : $(vectorsastuples(lat.bravais))
-  Sublattice names    : $((sublatnames(lat)... ,))")
+transform(lat::Lattice, f; kw...) = transform!(deepcopy(lat), f; kw...)
