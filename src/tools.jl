@@ -11,12 +11,13 @@ toSVectors(vs...) = [promote(toSVector.(vs)...)...]
 toSVector(v::SVector) = v
 toSVector(v::NTuple{N,Number}) where {N} = SVector(v)
 toSVector(x::Number) = SVector{1}(x)
+toSVector(::Tuple{}) = SVector{0,Float64}()
 toSVector(::Type{T}, v) where {T} = T.(toSVector(v))
 toSVector(::Type{T}, ::Tuple{}) where {T} = SVector{0,T}()
 # Dynamic dispatch
 toSVector(v::AbstractVector) = SVector(Tuple(v))
 
-ensureSMatrix(f::Function) = f
+# ensureSMatrix(f::Function) = f
 ensureSMatrix(m::T) where T<:Number = SMatrix{1,1,T,1}(m)
 ensureSMatrix(m::SMatrix) = m
 ensureSMatrix(m::Array) = 
@@ -31,19 +32,22 @@ padright(sv::StaticVector{E,T}, x::T2, ::Val{E2}) where {E,T,E2,T2} =
     SVector{E2, T2}(ntuple(i -> i > E ? x : T2(sv[i]), Val(E2)))
 padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
 
-@inline padrightbottom(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,T2,S<:SMatrix{E2,L2,T2}} =
-    SMatrix{E2,L2,T2}(
-        ntuple(k -> _padrightbottom((k - 1) % E2 + 1, (k - 1) ÷ E2 + 1, zero(T2), s), 
-               Val(E2 * L2)))
-padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
+@inline pad(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,T2,S<:SMatrix{E2,L2,T2}} =
+    S(ntuple(k -> _pad((k - 1) % E2 + 1, (k - 1) ÷ E2 + 1, zero(T2), s), Val(E2 * L2)))
 
-function padrightbottom(m::Matrix{T}, zeroT::T, im, jm) where T
-    i0, j0 = size(m)
-    [i <= i0 && j<= j0 ? m[i,j] : zeroT for i in 1:im, j in 1:jm]
-end
-
-@inline _padrightbottom(i, j, zero, s::SMatrix{E,L}) where {E,L} = 
+@inline _pad(i, j, zero, s::SMatrix{E,L}) where {E,L} = 
     i > E || j > L ? zero : s[i,j]
+
+## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
+negative(s::SVector{L,<:Number}) where {L} = -s
+negative(s::SVector{0,<:Number}) where {L} = s
+
+# padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
+
+# function padrightbottom(m::Matrix{T}, zeroT::T, im, jm) where T
+#     i0, j0 = size(m)
+#     [i <= i0 && j<= j0 ? m[i,j] : zeroT for i in 1:im, j in 1:jm]
+# end
 
 # @inline tuplejoin(x) = x
 # @inline tuplejoin(x, y) = (x..., y...)
@@ -52,34 +56,33 @@ end
 # tuplesort(t::Tuple) = t
 # tuplesort(::Missing) = missing
 
-collectfirst(s::T, ss...) where {T} = _collectfirst((s,), ss...)
-_collectfirst(ts::NTuple{N,T}, s::T, ss...) where {N,T} = _collectfirst((ts..., s), ss...)
-_collectfirst(ts::Tuple, ss...) = (ts, ss)
-_collectfirst(ts::NTuple{N,System}, s::System, ss...) where {N} = _collectfirst((ts..., s), ss...)
+# collectfirst(s::T, ss...) where {T} = _collectfirst((s,), ss...)
+# _collectfirst(ts::NTuple{N,T}, s::T, ss...) where {N,T} = _collectfirst((ts..., s), ss...)
+# _collectfirst(ts::Tuple, ss...) = (ts, ss)
+# _collectfirst(ts::NTuple{N,System}, s::System, ss...) where {N} = _collectfirst((ts..., s), ss...)
 # collectfirsttolast(ss...) = tuplejoin(reverse(collectfirst(ss...))...)
 
-negSVector(s::SVector{L,<:Number}) where {L} = -s
-negSVector(s::SVector{0,<:Number}) where {L} = s    ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
 
-allorderedpairs(v) = [(i, j) for i in v, j in v if i >= j]
 
-# Like copyto! but with potentially different tensor orders
-function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1}, 
-                    src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
-    isempty(Rdest) && return dest
-    if length(Rdest) != length(Rsrc)
-        throw(ArgumentError("source and destination must have same length (got $(length(Rsrc)) and $(length(Rdest)))"))
-    end
-    checkbounds(dest, first(Rdest))
-    checkbounds(dest, last(Rdest))
-    checkbounds(src, first(Rsrc))
-    checkbounds(src, last(Rsrc))
-    src′ = Base.unalias(dest, src)
-    for (Is, Id) in zip(Rsrc, Rdest)
-        @inbounds dest[Id] = src′[Is]
-    end
-    return dest
-end
+# allorderedpairs(v) = [(i, j) for i in v, j in v if i >= j]
+
+# # Like copyto! but with potentially different tensor orders
+# function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1}, 
+#                     src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
+#     isempty(Rdest) && return dest
+#     if length(Rdest) != length(Rsrc)
+#         throw(ArgumentError("source and destination must have same length (got $(length(Rsrc)) and $(length(Rdest)))"))
+#     end
+#     checkbounds(dest, first(Rdest))
+#     checkbounds(dest, last(Rdest))
+#     checkbounds(src, first(Rsrc))
+#     checkbounds(src, last(Rsrc))
+#     src′ = Base.unalias(dest, src)
+#     for (Is, Id) in zip(Rsrc, Rdest)
+#         @inbounds dest[Id] = src′[Is]
+#     end
+#     return dest
+# end
 
 ######################################################################
 # Permutations (taken from Combinatorics.jl)

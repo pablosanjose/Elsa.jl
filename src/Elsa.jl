@@ -6,8 +6,8 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
 import Base: convert, iterate, ==
 import SparseArrays: sparse!
 
-export sublat, bravais, lattice, System, Model, Hopping, Onsite,
-       grow, combine, transform, transform!, hamiltonian, bound,
+export sublat, bravais, lattice, hopping, onsite, hamiltonian,
+       grow, combine, transform, transform!, bound,
        sitepositions, neighbors, bravaismatrix, marchingmesh
 export MomentaKPM, dosKPM
 export LatticePresets, SystemPresets, RegionPresets
@@ -19,16 +19,17 @@ export @SMatrix, @SVector, SMatrix, SVector
 const NameType = Symbol
 const nametype = Symbol
 
-include("presets.jl")
-include("model.jl")
-include("lattice.jl")
-include("operators.jl")
-include("system.jl")
 include("iterators.jl")
-include("system_methods.jl")
-include("KPM.jl")
-include("mesh.jl")
-include("bandstructure.jl")
+include("presets.jl")
+include("lattice.jl")
+include("model.jl")
+include("hamiltonian.jl")
+# include("operators.jl")
+# include("system.jl")
+# include("system_methods.jl")
+# include("KPM.jl")
+# include("mesh.jl")
+# include("bandstructure.jl")
 include("convert.jl")
 include("tools.jl")
 

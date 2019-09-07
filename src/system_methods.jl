@@ -2,8 +2,8 @@
 # Transform system
 #######################################################################
 
-function transform!(sys::System, f::Function; sublatinds = collect(eachindex(sys.lattice.sublats)))
-    for s in sublatinds
+function transform!(sys::System, f::Function; sublats = eachindex(sys.lattice.sublats))
+    for s in sublats
         sind = sublatindex(sys.sysinfo, s)
         transform!(sys.lattice.sublats[sind], f)
     end
