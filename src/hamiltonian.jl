@@ -25,11 +25,12 @@ blocktype(t) = t
 
 Base.size(h::Hamiltonian) = (n = size(h.domain.bitmask)[end]; (n, n))
 
-Base.show(io::IO, h::HamiltonianHarmonic{L,Tv,A}) where {L,Tv,N,A<:AbstractArray{<:SMatrix{N,N,Tv}}} =
-    print(io, "HamiltonianHarmonic{$L,$Tv} with dn = $(Tuple(h.dn)) and elements:", h.h)
+Base.show(io::IO, h::HamiltonianHarmonic{L,Tv,A}) where
+    {L,Tv,N,A<:AbstractArray{<:SMatrix{N,N,Tv}}} = print(io,
+"HamiltonianHarmonic{$L,$Tv} with dn = $(Tuple(h.dn)) and elements:", h.h)
 
-Base.show(io::IO, ham::Hamiltonian{L,Tv,H}) where {L,Tv,N,
-    H<:HamiltonianHarmonic{L,Tv,<:AbstractArray{<:SMatrix{N,N,Tv}}}} = print(io,
+Base.show(io::IO, ham::Hamiltonian{L,Tv,H}) where 
+    {L,Tv,N,H<:HamiltonianHarmonic{L,Tv,<:AbstractArray{<:SMatrix{N,N,Tv}}}} = print(io,
 "Hamiltonian{$L,$Tv} : $(L)D Hamiltonian of element type SMatrix{$N,$N,$Tv}
   Bloch harmonics  : $(length(ham.harmonics))
   Harmonic size    : $(size(ham))")
