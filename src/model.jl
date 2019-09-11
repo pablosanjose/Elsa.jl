@@ -4,7 +4,7 @@
 abstract type AbstractModelTerm end
 abstract type TightbindingModelTerm <: AbstractModelTerm end
 
-struct OnsiteTerm{F<:Union{Function,AbstractMatrix,Number},
+struct OnsiteTerm{F,
                   S<:Union{Missing,Tuple{Vararg{Union{Int,NameType}}}},
                   C} <: TightbindingModelTerm
     o::F
@@ -13,7 +13,7 @@ struct OnsiteTerm{F<:Union{Function,AbstractMatrix,Number},
     forcehermitian::Bool
 end
 
-struct HoppingTerm{F<:Union{Function,AbstractMatrix,Number},
+struct HoppingTerm{F,
                    S<:Union{Missing,Tuple{Vararg{NTuple{2,Union{Int,NameType}}}}},
                    D<:Union{Missing,Tuple{Vararg{SVector{L,Int}}} where L},
                    R<:Union{Missing,Real},
@@ -26,11 +26,11 @@ struct HoppingTerm{F<:Union{Function,AbstractMatrix,Number},
     forcehermitian::Bool
 end
 
-(o::OnsiteTerm{<:Function})(r) = (v = ensureSMatrix(o.o(r)); o.forcehermitian ? (v + v')/2 : v)
-(o::OnsiteTerm)(r) = ensureSMatrix(o.o)
+(o::OnsiteTerm{<:Function})(r) = o.o(r)
+(o::OnsiteTerm)(r) = o.o
 
-(h::HoppingTerm{<:Function})(r, dr) = ensureSMatrix(h.h(r, dr))
-(h::HoppingTerm)(r, dr) = ensureSMatrix(h.h)
+(h::HoppingTerm{<:Function})(r, dr) = h.h(r, dr)
+(h::HoppingTerm)(r, dr) = h.h
 
 normalizesublats(s::Union{Integer,NameType}) = Tuple(s)
 normalizesublats(s::Missing) = missing

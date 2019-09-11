@@ -115,8 +115,9 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm) where {L,M}
         offset = builder.lat.offsets[s]
         for (n, r) in enumerate(builder.lat.sublats[s].sites)
             i = offset + n
-            v = pad(term(r), M) # already Hermitian (if necessary) by term(r) definition
-            push!(ijv, (i, i, v))
+            vs = orbsized(term(r), builder.lat.sublats[s])
+            v = pad(vs, M)
+            term.forcehermitian ? push!(ijv, (i, i, v)) : push!(ijv, (i, i, 0.5 * (v + v')))
         end
     end
     return nothing
@@ -140,7 +141,8 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
                     foundlink = true
                     rtarget = builder.lat.sublats[s1].sites[i]
                     r, dr = _rdr(rsource, rtarget)
-                    v = pad(term(r, dr), M)
+                    vs = orbsized(term(r, dr), builder.lat.sublats[s1], builder.lat.sublats[s2])
+                    v = pad(vs, M)
                     push!(ijv, (offset1 + i, offset2 + j, v))
                     addadjoint && push!(ijvc, (offset2 + j, offset1 + i, v'))
                 end
@@ -150,6 +152,10 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
     end
     return nothing
 end
+
+orbsized(m, sublat) = orbsized(m, sublat, sublat)
+orbsized(m, s1::Sublat{E1,T1,D1}, s2::Sublat{E2,T2,D2}) where {E1,T1,D1,E2,T2,D2} = 
+    SMatrix{D1,D2}(m)
 
 # If dns are specified in model term (not missing), iterate over them. Otherwise do a search.
 dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
