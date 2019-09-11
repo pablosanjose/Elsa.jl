@@ -126,6 +126,7 @@ end
 function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
     checkinfinite(term)
     for (s1, s2) in sublats(term, builder.lat)
+        sublat1, sublat2 = builder.lat.sublats[s1], builder.lat.sublats[s2]
         offset1, offset2 = builder.lat.offsets[s1], builder.lat.offsets[s2]
         dns = dniter(term.dns, Val(L))
         for dn in dns
@@ -133,15 +134,15 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
             foundlink = false
             ijv = builder[dn]
             addadjoint && (ijvc = builder[negative(dn)])
-            for (j, site) in enumerate(builder.lat.sublats[s2].sites)
+            for (j, site) in enumerate(sublat2.sites)
                 rsource = site - builder.lat.bravais.matrix * dn
                 itargets = targets(builder, term.range, rsource, s1)
                 for i in itargets
                     isselfhopping((i, j), (s1, s2), dn) && continue
                     foundlink = true
-                    rtarget = builder.lat.sublats[s1].sites[i]
+                    rtarget = sublat1.sites[i]
                     r, dr = _rdr(rsource, rtarget)
-                    vs = orbsized(term(r, dr), builder.lat.sublats[s1], builder.lat.sublats[s2])
+                    vs = orbsized(term(r, dr), sublat1, sublat2)
                     v = pad(vs, M)
                     push!(ijv, (offset1 + i, offset2 + j, v))
                     addadjoint && push!(ijvc, (offset2 + j, offset1 + i, v'))
@@ -157,7 +158,6 @@ orbsized(m, sublat) = orbsized(m, sublat, sublat)
 orbsized(m, s1::Sublat{E1,T1,D1}, s2::Sublat{E2,T2,D2}) where {E1,T1,D1,E2,T2,D2} =
     SMatrix{D1,D2}(m)
 
-# If dns are specified in model term (not missing), iterate over them. Otherwise do a search.
 dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
 dniter(dns, ::Val) = dns
 
