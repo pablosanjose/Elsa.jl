@@ -39,33 +39,37 @@ normalizesublats(n) = throw(ErrorException(
 
 normalizesublatpairs(s::Tuple{Union{Integer,NameType},Union{Integer,NameType}}) = (s,)
 normalizesublatpairs(s::Union{Integer,NameType}) = ((s,s),)
-normalizesublatpairs(s::NTuple{N,Any}) where {N} = 
+normalizesublatpairs(s::NTuple{N,Any}) where {N} =
     ntuple(n -> first(normalizesublatpairs(s[n])), Val(N))
 normalizesublatpairs(s::Missing) = missing
 normalizesublatpairs(s) = throw(ErrorException(
     "`sublats` for `hopping` must be either `missing`, a tuple `(s₁, s₂)`, or a tuple of such tuples, with `sᵢ` either an `Integer` or a `$(NameType)` (i.e. a sublattice number or name)"))
 
-sublats(t::OnsiteTerm, lat::Lattice) = 
+normalizedn(dn::Missing) = missing
+normalizedn(dn::Tuple{Vararg{Tuple}}) = SVector.(dn)
+normalizedn(dn::Tuple{Vararg{Integer}}) = (SVector(dn),)
+
+sublats(t::OnsiteTerm, lat::Lattice) =
     t.sublats === missing ? collect(1:nsublats(lat)) : t.sublats
-sublats(t::HoppingTerm, lat::Lattice) = 
+sublats(t::HoppingTerm, lat::Lattice) =
     t.sublats === missing ? collect(Iterators.product(1:nsublats(lat), 1:nsublats(lat))) : t.sublats
 
 displayparameter(::Type{<:Function}) = "Function"
 displayparameter(::Type{T}) where {T} = "$T"
 
-function Base.show(io::IO, o::OnsiteTerm{F}) where {F} 
+function Base.show(io::IO, o::OnsiteTerm{F}) where {F}
     i = get(io, :indent, "")
-    print(io, 
-"$(i)OnsiteTerm{$(displayparameter(F))}: 
+    print(io,
+"$(i)OnsiteTerm{$(displayparameter(F))}:
 $(i)  Sublattices      : $(o.sublats === missing ? "any" : o.sublats)
 $(i)  Force Hermitian  : $(o.forcehermitian)
 $(i)  Coefficient      : $(o.coefficient)")
 end
 
-function Base.show(io::IO, h::HoppingTerm{F}) where {F} 
+function Base.show(io::IO, h::HoppingTerm{F}) where {F}
     i = get(io, :indent, "")
-    print(io, 
-"$(i)HoppingTerm{$(displayparameter(F))}: 
+    print(io,
+"$(i)HoppingTerm{$(displayparameter(F))}:
 $(i)  Sublattice pairs : $(h.sublats === missing ? "any" : h.sublats)
 $(i)  dn cell jumps    : $(h.dns === missing ? "any" : h.dns)
 $(i)  Hopping range    : $(round(h.range, digits = 6))
@@ -80,13 +84,13 @@ function onsite(o; sublats = missing, forcehermitian::Bool = true)
 end
 
 function hopping(h; sublats = missing, range::Real = 1, dn = missing, forcehermitian::Bool = true)
-    return HoppingTerm(h, normalizesublatpairs(sublats), dn, range + sqrt(eps(Float64)), 
-                       1, forcehermitian)
+    return HoppingTerm(h, normalizesublatpairs(sublats), normalizedn(dn),
+                       range + sqrt(eps(Float64)), 1, forcehermitian)
 end
 
-Base.:*(x, o::OnsiteTerm) = 
+Base.:*(x, o::OnsiteTerm) =
     OnsiteTerm(o.o, o.sublats, x * o.coefficient, o.forcehermitian)
-Base.:*(x, t::HoppingTerm) = 
+Base.:*(x, t::HoppingTerm) =
     HoppingTerm(t.h, t.sublats, t.dns, t.range, x * t.coefficient, t.forcehermitian)
 Base.:*(t::TightbindingModelTerm, x) = x * t
 Base.:-(t::TightbindingModelTerm) = (-1) * t
@@ -113,7 +117,7 @@ Base.:+(t::TightbindingModelTerm, m::TightbindingModel) = TightbindingModel((t, 
 Base.:-(m::TightbindingModel, t::TightbindingModelTerm) = m + (-t)
 Base.:-(t::TightbindingModelTerm, m::TightbindingModel) = t + (-m)
 
-function Base.show(io::IO, m::TightbindingModel{N,F}) where {N,F} 
+function Base.show(io::IO, m::TightbindingModel{N,F}) where {N,F}
     ioindent = IOContext(io, :indent => "  ")
     print(io, "TightbindingModel{$N,$F}: $N terms, of which $F can be fused:", "\n")
     foreach(t -> print(ioindent, t, "\n"), m.terms)
