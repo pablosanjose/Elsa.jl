@@ -18,10 +18,10 @@ toSVector(::Type{T}, ::Tuple{}) where {T} = SVector{0,T}()
 toSVector(v::AbstractVector) = SVector(Tuple(v))
 
 # ensureSMatrix(f::Function) = f
-ensureSMatrix(m::T) where T<:Number = SMatrix{1,1,T,1}(m)
-ensureSMatrix(m::SMatrix) = m
-ensureSMatrix(m::Array) = 
-    throw(ErrorException("Write all model terms using scalars or @SMatrix[matrix]"))
+# ensureSMatrix(m::T) where T<:Number = SMatrix{1,1,T,1}(m)
+# ensureSMatrix(m::SMatrix) = m
+# ensureSMatrix(m::Array) =
+#     throw(ErrorException("Write all model terms using scalars or @SMatrix[matrix]"))
 
 _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
@@ -35,7 +35,7 @@ padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T)
 @inline pad(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,T2,S<:SMatrix{E2,L2,T2}} =
     S(ntuple(k -> _pad((k - 1) % E2 + 1, (k - 1) ÷ E2 + 1, zero(T2), s), Val(E2 * L2)))
 
-@inline _pad(i, j, zero, s::SMatrix{E,L}) where {E,L} = 
+@inline _pad(i, j, zero, s::SMatrix{E,L}) where {E,L} =
     i > E || j > L ? zero : s[i,j]
 
 ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
@@ -67,7 +67,7 @@ negative(s::SVector{0,<:Number}) where {L} = s
 # allorderedpairs(v) = [(i, j) for i in v, j in v if i >= j]
 
 # # Like copyto! but with potentially different tensor orders
-# function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1}, 
+# function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
 #                     src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
 #     isempty(Rdest) && return dest
 #     if length(Rdest) != length(Rsrc)

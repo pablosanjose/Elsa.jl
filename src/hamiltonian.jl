@@ -102,7 +102,7 @@ function sparse_hamiltonian(::Type{M}, lat::Lattice{E,L}, terms...) where {E,L,T
     HT = HamiltonianHarmonic{L,Tv,SparseMatrixCSC{M,Int}}
     n = nsites(lat)
     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n, (x, xc) -> 0.5 * (x + xc)))
-                  for e in builder.ijvs if !isempty(e)]
+                   for e in builder.ijvs if !isempty(e)]
     return Hamiltonian(harmonics, lat.domain)
 end
 
@@ -154,7 +154,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
 end
 
 orbsized(m, sublat) = orbsized(m, sublat, sublat)
-orbsized(m, s1::Sublat{E1,T1,D1}, s2::Sublat{E2,T2,D2}) where {E1,T1,D1,E2,T2,D2} = 
+orbsized(m, s1::Sublat{E1,T1,D1}, s2::Sublat{E2,T2,D2}) where {E1,T1,D1,E2,T2,D2} =
     SMatrix{D1,D2}(m)
 
 # If dns are specified in model term (not missing), iterate over them. Otherwise do a search.

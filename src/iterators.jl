@@ -12,9 +12,9 @@ BoxRegister{N}() where N = BoxRegister(Tuple{NTuple{N,Int}, Int}[])
     BoxIterator(seed::SVector{N,Int}; maxiterations = missing, nregisters = 0)
 
 Cartesian iterator `iter` over `SVector{N,Int}`s (`cell`s) that starts at `seed` and
-grows outwards in the form of a box of increasing sides (not necesarily equal) until 
-it encompasses a certain N-dimensional region. To signal that a cell is in the desired 
-region the user calls `acceptcell!(iter, cell)`.  The option `nregisters = n` creates `n` 
+grows outwards in the form of a box of increasing sides (not necesarily equal) until
+it encompasses a certain N-dimensional region. To signal that a cell is in the desired
+region the user calls `acceptcell!(iter, cell)`.  The option `nregisters = n` creates `n`
 `BoxRegister`s that store `(cell, index)`
 """
 struct BoxIterator{N}
@@ -160,7 +160,7 @@ function acceptcell!(b::BoxIterator{N}, cell) where {N}
 end
 
 # Fallback for non-BoxIterators
-acceptcell!(b, cell) = nothing 
+acceptcell!(b, cell) = nothing
 
 function registersite!(iter, cell, sublat, idx)
     push!(iter.registers[sublat].cellinds, (cell, idx))
@@ -186,16 +186,16 @@ mutable struct CoSort{T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} <: Abstra
     end
 end
 
-CoSort(sortvector::S, covector::C) where {T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} = 
+CoSort(sortvector::S, covector::C) where {T,Tv,S<:AbstractVector{T},C<:AbstractVector{Tv}} =
     CoSort{T,Tv,S,C}(sortvector, covector, 0)
 
 Base.size(c::CoSort) = (size(c.sortvector, 1) - c.offset,)
 
-Base.getindex(c::CoSort, i) = 
+Base.getindex(c::CoSort, i) =
     CoSortTup(getindex(c.sortvector, i + c.offset), getindex(c.covector, i + c.offset))
 
-Base.setindex!(c::CoSort, t::CoSortTup, i) = 
-    (setindex!(c.sortvector, t.x, i + c.offset); setindex!(c.covector, t.y, i + c.offset); c) 
+Base.setindex!(c::CoSort, t::CoSortTup, i) =
+    (setindex!(c.sortvector, t.x, i + c.offset); setindex!(c.covector, t.y, i + c.offset); c)
 
 Base.isless(a::CoSortTup, b::CoSortTup) = isless(a.x, b.x)
 
@@ -246,7 +246,7 @@ function pushtocolumn!(s::SparseMatrixBuilder, row::Int, x, skipdupcheck::Bool =
     return s
 end
 
-# pushtocolumn!(s::SparseMatrixBuilder, rows::AbstractArray, xs::AbstractArray) = 
+# pushtocolumn!(s::SparseMatrixBuilder, rows::AbstractArray, xs::AbstractArray) =
 #     pushtocolumn!(s, rows, xs, eachindex(rows))
 # function pushtocolumn!(s::SparseMatrixBuilder, rows::AbstractArray, xs::AbstractArray, range)
 #     n = length(range)
@@ -318,65 +318,3 @@ function iterate(s::SparseMatrixReader, state = (1, 1))
 end
 
 enumerate_sparse(s::SparseMatrixCSC) = SparseMatrixReader(s)
-
-# #######################################################################
-# # BlockIterator
-# #######################################################################
-
-# struct BlockIterator{B<:Block,S<:SystemInfo}
-#     block::B
-#     sysinfo::S
-# end
-
-# # returns ((s1, s2), (target, source), (row, col), boxsize, ptr), one per box (site pair), 
-# # where boxsize is (N,M) for orbitals in site pair
-# function Base.iterate(blockiter::BlockIterator, state = (1, nextcolumn(blockiter)))
-#     block = blockiter.block
-#     sysinfo = blockiter.sysinfo
-#     (ptr, col) = state
-#     if col === 0 || !checkbounds(Bool, rowvals(block.matrix), ptr)
-#         return nothing
-#     else
-#         row = rowvals(block.matrix)[ptr]
-#         s1 = findsublat(row, sysinfo.offsets)
-#         s2 = findsublat(col, sysinfo.offsets)
-#         (iszero(s1) || iszero(s2)) && throw(
-#             ErrorException("Unexpected row/col ($row, $col) out of offset range"))
-#         (n, m) = sysinfo.norbitals[s1], sysinfo.norbitals[s2]
-#         rangecol = nzrange(block.matrix, col)
-#         newptr = ptr + n
-#         if newptr > maximum(rangecol) 
-#             newcol = nextcolumn(blockiter, col)
-#             newptr += length(rangecol) * (m - 1)
-#         else
-#             newcol = col
-#         end
-#         targetsite = 1 + (row - 1 - sysinfo.offsets[s1]) ÷ n
-#         sourcesite = 1 + (col - 1 - sysinfo.offsets[s2]) ÷ m
-#         return ((s1, s2), (targetsite, sourcesite), (row, col), (n, m), ptr), 
-#                (newptr, newcol)
-#     end
-# end
-
-# nextcolumn(blockiter) = 
-#     isempty(nzrange(blockiter.block.matrix, 1)) ? nextcolumn(blockiter, 1) : 1
-
-# function nextcolumn(blockiter, col)
-#     c = col
-#     while true
-#         s = findsublat(c, blockiter.sysinfo.offsets)
-#         iszero(s) && break
-#         c += blockiter.sysinfo.norbitals[s]
-#         c > size(blockiter.block.matrix, 2) && break
-#         isempty(nzrange(blockiter.block.matrix, c)) || return c
-#     end
-#     return 0
-# end
-
-# Base.IteratorSize(::BlockIterator) = Base.SizeUnknown()
-
-# Base.IteratorEltype(::BlockIterator) = Base.HasEltype()
-
-# Base.eltype(::BlockIterator) = 
-#     Tuple{Tuple{Int,Int},Tuple{Int,Int},Tuple{Int,Int},Tuple{Int,Int},Int}
-    

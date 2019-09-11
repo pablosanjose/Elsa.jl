@@ -7,30 +7,30 @@ module LatticePresets
 using Elsa
 using Elsa: NameType
 
-linear(; a0 = 1, kw...) = 
+linear(; a0 = 1, kw...) =
     lattice(a0 * bravais((1.,)), sublat((0.,); kw...))
 
-square(; a0 = 1, kw...) = 
+square(; a0 = 1, kw...) =
     lattice(a0 * bravais((1., 0.), (0., 1.)), sublat((0., 0.); kw...))
 
-triangular(; a0 = 1, kw...) = 
-    battice(a0 * bravais(( cos(pi/3), sin(pi/3)),(-cos(pi/3), sin(pi/3))), 
+triangular(; a0 = 1, kw...) =
+    battice(a0 * bravais(( cos(pi/3), sin(pi/3)),(-cos(pi/3), sin(pi/3))),
         sublat((0., 0.); kw...))
 
-honeycomb(; a0 = 1, kw...) = 
+honeycomb(; a0 = 1, kw...) =
     lattice(a0 * bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3))),
         sublat((0.0, -0.5/sqrt(3.0)), name = :A),
         sublat((0.0,  0.5/sqrt(3.0)), name = :B); kw...)
 
-cubic(; a0 = 1, kw...) = 
+cubic(; a0 = 1, kw...) =
     lattice(a0 * bravais((1., 0., 0.), (0., 1., 0.), (0., 0., 1.)),
         sublat((0., 0., 0.)); kw...)
 
-fcc(; a0 = 1, kw...) = 
+fcc(; a0 = 1, kw...) =
     lattice(a0 * bravais(@SMatrix([-1. -1. 0.; 1. -1. 0.; 0. 1. -1.])'/sqrt(2.)),
         sublat((0., 0., 0.)); kw...)
 
-bcc(; a0 = 1, kw...) = 
+bcc(; a0 = 1, kw...) =
     lattice(a0 * bravais((1., 0., 0.), (0., 1., 0.), (0.5, 0.5, 0.5)),
         sublat((0., 0., 0.)); kw...)
 
@@ -44,9 +44,9 @@ module SystemPresets
 
 using Elsa, LinearAlgebra
 
-function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 = 0.246, 
-                            interlayerdistance = 1.36a0, rangeintralayer = a0/sqrt(3), 
-                            rangeinterlayer = 4a0/sqrt(3), hopintra = 2.70, hopinter = 0.48, 
+function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 = 0.246,
+                            interlayerdistance = 1.36a0, rangeintralayer = a0/sqrt(3),
+                            rangeinterlayer = 4a0/sqrt(3), hopintra = 2.70, hopinter = 0.48,
                             kwsys...)
     (m, r) = twistindices
     θ = acos((3m^2 + 3m*r +r^2/2)/(3m^2 + 3m*r + r^2))
@@ -54,7 +54,7 @@ function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 =
     sBbot = sublat((0.0,  0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Bb)
     sAtop = sublat((0.0, -0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :At)
     sBtop = sublat((0.0,  0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :Bt)
-    bravais = a0 * bravais(( cos(pi/3), sin(pi/3), 0), 
+    bravais = a0 * bravais(( cos(pi/3), sin(pi/3), 0),
                            (-cos(pi/3), sin(pi/3), 0))
     if gcd(r, 3) == 1
         scbot = @SMatrix[m -(m+r); (m+r) 2m+r]
@@ -75,9 +75,9 @@ function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 =
         transform!(sysbot, r -> R * r)
     end
     modelinter = Model(Hopping(
-        (r,dr) -> hopinter * exp(-3*(norm(dr)/interlayerdistance - 1)) * 
-                                dr[3]^2/sum(abs2,dr), 
-        range = rangeinterlayer, 
+        (r,dr) -> hopinter * exp(-3*(norm(dr)/interlayerdistance - 1)) *
+                                dr[3]^2/sum(abs2,dr),
+        range = rangeinterlayer,
         sublats = ((:Ab,:At), (:Ab,:Bt), (:Bb,:At), (:Bb,:Bt))))
     return combine(sysbot, systop, modelinter)
 end
@@ -100,7 +100,7 @@ Region{E}(f::F) where {E,F<:Function} = Region{E,F}(f)
 
 (region::Region{E})(r::SVector{E2}) where {E,E2} = region.f(r)
 
-Base.show(io::IO, ::Region{E}) where {E} = 
+Base.show(io::IO, ::Region{E}) where {E} =
     print(io, "Region{$E} : region in $(E)D space")
 
 extended_eps(T = Float64) = sqrt(eps(T))
