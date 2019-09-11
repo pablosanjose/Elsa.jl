@@ -108,57 +108,45 @@ end
 
 applyterms!(builder, terms...) = foreach(term -> applyterm!(builder, term), terms)
 
-applyterm!(builder, term::OnsiteTerm) =
-    foreach(s -> applyterm!(builder, term, builder.lat.sublats[s], s), sublats(term, builder.lat))
-
-# Function barrier for type-stable sublat
-function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm,
-                    sublat::Sublat{E,T,D}, s) where {L,E,T,D,Tv,M<:SMatrix{Dp,Dp,Tv} where Dp}
-    dn0 = zero(SVector{L,Int})
-    ijv = builder[dn0]
-    offset = builder.lat.offsets[s]
-    for (n, r) in enumerate(sublat.sites)
-        i = offset + n
-        v = pad(SMatrix{D,D,Tv}(term(r)), M)
-        push!(ijv, (i, i, v))
-    end
-    return nothing
-end
-
-function applyterm!(builder, term::HoppingTerm)
-    checkinfinite(term)
-    foreach(sublats(term, builder.lat)) do ss
-        applyterm!(builder, term, ss,
-                   builder.lat.sublats[first(ss)], builder.lat.sublats[last(ss)])
-    end
-    return nothing
-end
-
-# Function barrier for type-stable sublat1 and sublat2
-function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, (s1, s2),
-                    sublat1::Sublat{E,T,D1}, sublat2::Sublat{E,T,D2}) where {L,E,T,D1,D2,Tv,
-                                                                 M<:SMatrix{D,D,Tv} where D}
-    offset1, offset2 = builder.lat.offsets[s1], builder.lat.offsets[s2]
-    dns = dniter(term.dns, Val(L))
-    for dn in dns
-        addadjoint = term.forcehermitian
-        foundlink = false
-        ijv = builder[dn]
-        addadjoint && (ijvc = builder[negative(dn)])
-        for (j, site) in enumerate(sublat2.sites)
-            rsource = site - builder.lat.bravais.matrix * dn
-            itargets = targets(builder, term.range, rsource, s1)
-            for i in itargets
-                isselfhopping((i, j), (s1, s2), dn) && continue
-                foundlink = true
-                rtarget = sublat1.sites[i]
-                r, dr = _rdr(rsource, rtarget)
-                v = pad(SMatrix{D1,D2,Tv}(term(r, dr)), M)
-                push!(ijv, (offset1 + i, offset2 + j, v))
-                addadjoint && push!(ijvc, (offset2 + j, offset1 + i, v'))
-            end
+function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm) where {L,M}
+    for s in sublats(term, builder.lat)
+        dn0 = zero(SVector{L,Int})
+        ijv = builder[dn0]
+        offset = builder.lat.offsets[s]
+        for (n, r) in enumerate(builder.lat.sublats[s].sites)
+            i = offset + n
+            v = pad(term(r), M) # already Hermitian (if necessary) by term(r) definition
+            push!(ijv, (i, i, v))
         end
-        foundlink && acceptcell!(dns, dn)
+    end
+    return nothing
+end
+
+function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
+    checkinfinite(term)
+    for (s1, s2) in sublats(term, builder.lat)
+        offset1, offset2 = builder.lat.offsets[s1], builder.lat.offsets[s2]
+        dns = dniter(term.dns, Val(L))
+        for dn in dns
+            addadjoint = term.forcehermitian
+            foundlink = false
+            ijv = builder[dn]
+            addadjoint && (ijvc = builder[negative(dn)])
+            for (j, site) in enumerate(builder.lat.sublats[s2].sites)
+                rsource = site - builder.lat.bravais.matrix * dn
+                itargets = targets(builder, term.range, rsource, s1)
+                for i in itargets
+                    isselfhopping((i, j), (s1, s2), dn) && continue
+                    foundlink = true
+                    rtarget = builder.lat.sublats[s1].sites[i]
+                    r, dr = _rdr(rsource, rtarget)
+                    v = pad(term(r, dr), M)
+                    push!(ijv, (offset1 + i, offset2 + j, v))
+                    addadjoint && push!(ijvc, (offset2 + j, offset1 + i, v'))
+                end
+            end
+            foundlink && acceptcell!(dns, dn)
+        end
     end
     return nothing
 end
