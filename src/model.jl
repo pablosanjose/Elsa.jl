@@ -5,7 +5,7 @@ abstract type AbstractModelTerm end
 abstract type TightbindingModelTerm <: AbstractModelTerm end
 
 struct OnsiteTerm{F,
-                  S<:Union{Missing,Tuple{Vararg{Union{Int,NameType}}}},
+                  S<:Union{Missing,Tuple{Vararg{Int}}},
                   C} <: TightbindingModelTerm
     o::F
     sublats::S
@@ -14,7 +14,7 @@ struct OnsiteTerm{F,
 end
 
 struct HoppingTerm{F,
-                   S<:Union{Missing,Tuple{Vararg{NTuple{2,Union{Int,NameType}}}}},
+                   S<:Union{Missing,Tuple{Vararg{Tuple{Int,Int}}}},
                    D<:Union{Missing,Tuple{Vararg{SVector{L,Int}}} where L},
                    R<:Union{Missing,Real},
                    C} <: TightbindingModelTerm
@@ -32,18 +32,18 @@ end
 (h::HoppingTerm{<:Function})(r, dr) = h.h(r, dr)
 (h::HoppingTerm)(r, dr) = h.h
 
-normalizesublats(s::Union{Integer,NameType}) = Tuple(s)
+normalizesublats(s::Integer) = Tuple(s)
 normalizesublats(s::Missing) = missing
 normalizesublats(n) = throw(ErrorException(
-    "`sublats` for `onsite` must be either `missing`, an `s` or a tuple of `s`s, with `s` either an `Integer` or a `$(NameType)` (i.e. a sublattice number or name)"))
+    "`sublats` for `onsite` must be either `missing`, an `s` or a tuple of `s`s, with `s::Integer` a sublattice number"))
 
-normalizesublatpairs(s::Tuple{Union{Integer,NameType},Union{Integer,NameType}}) = (s,)
+normalizesublatpairs(s::Tuple{Integer,Integer}) = (s,)
 normalizesublatpairs(s::Union{Integer,NameType}) = ((s,s),)
 normalizesublatpairs(s::NTuple{N,Any}) where {N} =
     ntuple(n -> first(normalizesublatpairs(s[n])), Val(N))
 normalizesublatpairs(s::Missing) = missing
 normalizesublatpairs(s) = throw(ErrorException(
-    "`sublats` for `hopping` must be either `missing`, a tuple `(s₁, s₂)`, or a tuple of such tuples, with `sᵢ` either an `Integer` or a `$(NameType)` (i.e. a sublattice number or name)"))
+    "`sublats` for `hopping` must be either `missing`, a tuple `(s₁, s₂)`, or a tuple of such tuples, with `sᵢ::Integer` a sublattice number"))
 
 normalizedn(dn::Missing) = missing
 normalizedn(dn::Tuple{Vararg{Tuple}}) = SVector.(dn)
