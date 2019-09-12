@@ -71,7 +71,7 @@ function Base.show(io::IO, h::HoppingTerm{F}) where {F}
     i = get(io, :indent, "")
     print(io,
 "$(i)HoppingTerm{$(displayparameter(F))}:
-$(i)  Sublattice pairs : $(h.sublats === missing ? "any" : h.sublats)
+$(i)  Sublattice pairs : $(h.sublats === missing ? "any" : (t -> Pair(reverse(t)...)).(h.sublats))
 $(i)  dn cell jumps    : $(h.dns === missing ? "any" : h.dns)
 $(i)  Hopping range    : $(round(h.range, digits = 6))
 $(i)  Force Hermitian  : $(h.forcehermitian)

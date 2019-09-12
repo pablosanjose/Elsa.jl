@@ -86,7 +86,8 @@ function IJVBuilder{M}(lat::Lattice{E,L,T}) where {E,L,T,M}
     return IJVBuilder(lat, ijvs, kdtrees)
 end
 
-function Base.getindex(b::IJVBuilder{L,M}, dn::SVector{L,Int}) where {L,M}
+function Base.getindex(b::IJVBuilder{L,M}, dn::SVector{L2,Int}) where {L,L2,M}
+    L == L2 || throw(error("Tried to apply an $L2-dimensional model to an $L-dimensional lattice"))
     for e in b.ijvs
         e.dn == dn && return e
     end
