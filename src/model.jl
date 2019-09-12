@@ -37,11 +37,12 @@ normalizesublats(s::Missing) = missing
 normalizesublats(n) = throw(ErrorException(
     "`sublats` for `onsite` must be either `missing`, an `s` or a tuple of `s`s, with `s::Integer` a sublattice number"))
 
-normalizesublatpairs(s::Tuple{Integer,Integer}) = (s,)
-normalizesublatpairs(s::Union{Integer,NameType}) = ((s,s),)
+normalizesublatpairs(s::Missing) = missing
+normalizesublatpairs((s1, s2)::Tuple{Integer,Integer}) = ((s1, s2),)
+normalizesublatpairs((s2, s1)::Pair{<:Integer,<:Integer}) = ((s1, s2),)
+normalizesublatpairs(s::Integer) = ((s,s),)
 normalizesublatpairs(s::NTuple{N,Any}) where {N} =
     ntuple(n -> first(normalizesublatpairs(s[n])), Val(N))
-normalizesublatpairs(s::Missing) = missing
 normalizesublatpairs(s) = throw(ErrorException(
     "`sublats` for `hopping` must be either `missing`, a tuple `(s₁, s₂)`, or a tuple of such tuples, with `sᵢ::Integer` a sublattice number"))
 
