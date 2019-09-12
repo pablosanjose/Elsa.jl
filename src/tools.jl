@@ -42,6 +42,17 @@ padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T)
 negative(s::SVector{L,<:Number}) where {L} = -s
 negative(s::SVector{0,<:Number}) where {L} = s
 
+function nnzdiag(s::SparseMatrixCSC)
+    count = 0
+    rowptrs = rowvals(s)
+    for col in 1:size(s,2)
+        for ptr in nzrange(s, col)
+            rowptrs[ptr] == col && (count += 1; break)
+        end
+    end
+    return count
+end
+
 # padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
 
 # function padrightbottom(m::Matrix{T}, zeroT::T, im, jm) where T

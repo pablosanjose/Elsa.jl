@@ -23,7 +23,23 @@ blocktype(::Type{S}, s::Sublat{E,T,D}, ss...) where {N,Tv,E,T,D,S<:SMatrix{N,N,T
     (M = max(N,D); blocktype(SMatrix{M,M,Tv,M^2}, ss...))
 blocktype(t) = t
 
-Base.size(h::Hamiltonian) = (n = size(h.domain.bitmask)[end]; (n, n))
+nsites(h::Hamiltonian) = size(h.domain.bitmask)[end]
+
+function nhoppings(ham::Hamiltonian)
+    count = 0
+    for h in ham.harmonics
+        count += iszero(h.dn) ? (nnz(h.h) - nnzdiag(h.h)) : nnz(h.h)
+    end
+    return count
+end
+
+function nonsites(ham::Hamiltonian)
+    count = 0
+    for h in ham.harmonics
+        iszero(h.dn) && (count += nnzdiag(h.h))
+    end
+    return count
+end
 
 Base.show(io::IO, h::HamiltonianHarmonic{L,Tv,A}) where
     {L,Tv,N,A<:AbstractArray{<:SMatrix{N,N,Tv}}} = print(io,
@@ -33,13 +49,10 @@ Base.show(io::IO, ham::Hamiltonian{L,Tv,H}) where
     {L,Tv,N,H<:HamiltonianHarmonic{L,Tv,<:AbstractArray{<:SMatrix{N,N,Tv}}}} = print(io,
 "Hamiltonian{$L,$Tv} : $(L)D Hamiltonian of element type SMatrix{$N,$N,$Tv}
   Bloch harmonics  : $(length(ham.harmonics))
-  Harmonic size    : $(size(ham))")
-#   Bravais vectors     : $(displayvectors(sys.lattice.bravais))
-#   Sublattice names    : $((sublatnames(sys.lattice)... ,))
-#   Sublattice orbitals : $((norbitals(sys)... ,))
-#   Total sites         : $(nsites(sys)) [$T]
-#   Total hoppings      : $(nlinks(sys)) [$Tv]
-#   Coordination        : $(coordination(sys))")
+  Harmonic size    : $((n -> "$n × $n")(nsites(ham)))
+  Onsites          : $(nonsites(ham))
+  Hoppings         : $(nhoppings(ham))
+  Coordination     : $(nhoppings(ham) / nsites(ham))")
 
 # API #
 
