@@ -18,6 +18,7 @@ Base.show(io::IO, s::Sublat{E,T,D}) where {E,T,D} = print(io,
 displayname(s::Sublat) = s.name == nametype(:_) ? "pending" : string(":", s.name)
 displayorbitals(s::Sublat) = string("(", join(string.(":", s.orbitals), ", "), ")")
 nsites(s::Sublat) = length(s.sites)
+norbitals(s::Sublat{E,T,D}) where {E,T,D} = D
 
 # API #
 
@@ -135,10 +136,13 @@ orbitaltype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
 _orbitaltype(::Type{S}, s::Sublat{E,T,D}, ss...) where {N,Tv,E,T,D,S<:SVector{N,Tv}} =
     (M = max(N,D); _orbitaltype(SVector{M,Tv}, ss...))
 _orbitaltype(t) = t
+
 # find SMatrix type that can hold all matrix elements between lattice sites
 blocktype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
     _blocktype(orbitaltype(lat, Tv))
 _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
+
+sublat(lat::Lattice, siteidx) = findlast(o -> o < siteidx, lat.offsets)
 
 displaynames(l::Lattice) = string("(", join(displayname.(l.sublats), ", "), ")")
 displayorbitals(l::Lattice) = string("(", join(displayorbitals.(l.sublats), ", "), ")")
