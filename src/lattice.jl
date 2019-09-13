@@ -9,7 +9,7 @@ end
 
 Base.empty(s::Sublat) = sublat(empty(s.sites), s.name, s.orbitals)
 
-Base.show(io::IO, s::Sublat{E,T,D}) where {E,T,D} = print(io, 
+Base.show(io::IO, s::Sublat{E,T,D}) where {E,T,D} = print(io,
 "Sublat{$E,$T,$D} : sublattice of $T-typed sites in $(E)D space with $D orbitals per site
   Sites    : $(length(s.sites))
   Name     : $(displayname(s))
@@ -25,8 +25,8 @@ nsites(s::Sublat) = length(s.sites)
     sublat(sites...; name::$(NameType), orbitals = (:noname,))
     sublat(sites::Vector{<:SVector}; name::$(NameType), orbitals = (:noname,))
 
-Create a `Sublat{E,T,D}` that adds a sublattice, of name `name`, with sites at positions 
-`sites` in `E` dimensional space, each of which hosts `D` different orbitals, with orbital 
+Create a `Sublat{E,T,D}` that adds a sublattice, of name `name`, with sites at positions
+`sites` in `E` dimensional space, each of which hosts `D` different orbitals, with orbital
 names specified by `orbitals`. Sites can be entered as tuples or `SVectors`.
 
 # Examples
@@ -38,7 +38,7 @@ Sublat{2,Float64,2} : sublattice in 2D space with 2 orbitals per site
   Orbitals : (:upspin, :downspin)
 ```
 """
-sublat(sites::Vector{<:SVector}; name = :_, orbitals = (:noname,)) = 
+sublat(sites::Vector{<:SVector}; name = :_, orbitals = (:noname,)) =
     Sublat(sites, nametype(name), nametype.(Tuple(orbitals)))
 sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) = sublat(toSVectors(vs...); kw...)
 
@@ -54,24 +54,24 @@ end
 Bravais{E,T}() where {E,T} = Bravais(SMatrix{E,0,T,0}())
 
 displayvectors(br::Bravais) = displayvectors(br.matrix)
-displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; kw...) where {E,L} = 
+displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; kw...) where {E,L} =
     ntuple(l -> round.(Tuple(mat[:,l]); kw...), Val(L))
-displayvectors(mat::SMatrix{E,L,<:Integer}; kw...) where {E,L} = 
+displayvectors(mat::SMatrix{E,L,<:Integer}; kw...) where {E,L} =
     ntuple(l -> mat[:,l], Val(L))
 
-Base.show(io::IO, b::Bravais{E,L,T}) where {E,L,T} = print(io, 
-"Bravais{$E,$L,$T} : set of $L Bravais vectors in $(E)D space. 
+Base.show(io::IO, b::Bravais{E,L,T}) where {E,L,T} = print(io,
+"Bravais{$E,$L,$T} : set of $L Bravais vectors in $(E)D space.
   Vectors : $(displayvectors(b))
   Matrix  : ", b.matrix)
-  
+
 # API #
 
 """
     bravais(vecs...)
     bravais(mat)
 
-Create a `Bravais{E,L}` that adds `L` Bravais vectors `vecs` in `E` dimensional space, 
-alternatively given as the columns of matrix `mat`. For higher instantiation efficiency 
+Create a `Bravais{E,L}` that adds `L` Bravais vectors `vecs` in `E` dimensional space,
+alternatively given as the columns of matrix `mat`. For higher instantiation efficiency
 enter `vecs` as `Tuple`s or `SVector`s and `mat` as `SMatrix`.
 
 We can scale a `b::Bravais` simply by multiplying it with a factor `a`, like `a * b`.
@@ -79,7 +79,7 @@ We can scale a `b::Bravais` simply by multiplying it with a factor `a`, like `a 
 # Examples
 ```jldoctest
 julia> bravais((1.0, 2), (3, 4))
-Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space. 
+Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space.
   Vectors : ((1.0, 2.0), (3.0, 4.0))
   Matrix  : [1.0 3.0; 2.0 4.0]
 ```
@@ -102,15 +102,16 @@ Base.:*(b::Bravais, factor) = Bravais(b.matrix * factor)
 #######################################################################
 # Domain
 #######################################################################
-struct Domain{L,O,B}
+struct Domain{L,O,D}
     boundingbox::CartesianIndices{L,NTuple{L,UnitRange{Int}}}
     openboundaries::NTuple{O,Int}
-    bitmask::BitArray{B}
+    bitmask::BitArray{D}
 end
 
-Domain{L,O,B}(sites) where {L,O,B} = 
-    Domain(CartesianIndices(ntuple(_->1:1, Val(L))), ntuple(identity, Val(O)), 
-           trues(ntuple(d -> d == B ? sites : 1, Val(B))))
+Domain{L,O,D}(nsites) where {L,O,D} =
+    Domain(CartesianIndices(ntuple(_->1:1, Val(L))),
+           ntuple(identity, Val(O)),
+           trues(ntuple(d -> d == D ? nsites : 1, Val(D))))
 
 nopenboundaries(::Domain{L,O}) where {L,O} = O
 ndomainsites(d::Domain) = sum(d.bitmask)
@@ -124,37 +125,51 @@ struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},S<:Tuple{Vararg{Sublat{E,T
     domain::D
     offsets::Vector{Int}
 end
-Lattice(bravais::Bravais{E2,L}, sublats::Tuple{Vararg{Sublat{E,T}}}) where {E,L,T,E2} = 
-    Lattice(convert(Bravais{E,L,T}, bravais), sublats, 
+Lattice(bravais::Bravais{E2,L}, sublats::Tuple{Vararg{Sublat{E,T}}}) where {E,L,T,E2} =
+    Lattice(convert(Bravais{E,L,T}, bravais), sublats,
             Domain{L,L,L+1}(sum(nsites, sublats)), offsets(sublats))
+
+# find SVector type that can hold all orbital amplitudes in any lattice sites
+orbitaltype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
+    _orbitaltype(SVector{1,Tv}, lat.sublats...)
+_orbitaltype(::Type{S}, s::Sublat{E,T,D}, ss...) where {N,Tv,E,T,D,S<:SVector{N,Tv}} =
+    (M = max(N,D); _orbitaltype(SVector{M,Tv}, ss...))
+_orbitaltype(t) = t
+# find SMatrix type that can hold all matrix elements between lattice sites
+blocktype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
+    _blocktype(orbitaltype(lat, Tv))
+_blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
 
 displaynames(l::Lattice) = string("(", join(displayname.(l.sublats), ", "), ")")
 displayorbitals(l::Lattice) = string("(", join(displayorbitals.(l.sublats), ", "), ")")
 displayvectors(lat::Lattice) = displayvectors(lat.bravais.matrix; digits = 6)
 
-Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T} = print(io, 
+Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T} = print(io,
 "Lattice{$E,$L,$T} : $(L)D lattice in $(E)D space
-  Bravais vectors     : $(displayvectors(lat))
-  Sublattice names    : $(displaynames(lat))
-  Sublattice orbitals : $(displayorbitals(lat))
-  Sites per unit cell : $(nsites.(lat.sublats)) --> $(nsites(lat)) in total
-  Sites in domain     : $(ndomainsites(lat.domain)) in total")
+  Bravais vectors : $(displayvectors(lat))
+  Sublattices     : $(nsublats(lat))
+    Names         : $(displaynames(lat))
+    Orbitals      : $(displayorbitals(lat))
+    Sites         : $(nsites.(lat.sublats)) --> $(nsites(lat)) total per unit cell
+  Domain
+    Dimensions    : $(nopenboundaries(lat.domain))
+    Total sites   : $(ndomainsites(lat.domain))")
 
 # API #
 
 """
     lattice([bravais::Bravais,] sublats::Sublat...; dim::Val{E}, type::T, names, orbitals)
 
-Create a `Lattice{E,L,T}` with `Bravais` matrix `bravais` and sublattices `sublats` 
-converted to a common  `E`-dimensional embedding space and type `T`. To override the 
-embedding  dimension `E`, use keyword `dim = Val(E)`. Similarly, override type `T` with 
-`type = T`. The keywords `names::Tuple` and `orbitals::Tuple{Tuple}` can be used to rename 
+Create a `Lattice{E,L,T}` with `Bravais` matrix `bravais` and sublattices `sublats`
+converted to a common  `E`-dimensional embedding space and type `T`. To override the
+embedding  dimension `E`, use keyword `dim = Val(E)`. Similarly, override type `T` with
+`type = T`. The keywords `names::Tuple` and `orbitals::Tuple{Tuple}` can be used to rename
 `sublats` or redefine their orbitals per site.
 
 # Examples
 ```jldoctest
 julia> lattice(bravais((1, 0)), Sublat((0, 0.)), Sublat((0, Float32(1))); dim = Val(3))
-Lattice{3,1,Float64}: 1-dimensional lattice with 2 Float64-typed sublattices in 
+Lattice{3,1,Float64}: 1-dimensional lattice with 2 Float64-typed sublattices in
 3-dimensional embedding space
 ```
 """
@@ -175,7 +190,7 @@ transform(lat::Lattice, f; kw...) = transform!(deepcopy(lat), f; kw...)
 # Auxiliary #
 
 _lattice(sublats::NTuple{N,Sublat{E,T}}; kw...) where {E,T,N} = _lattice(Bravais{E,T}(), sublats; kw...)
-function _lattice(bravais::Bravais{E,L,T1}, sublats::NTuple{N,Sublat{E,T2}}; 
+function _lattice(bravais::Bravais{E,L,T1}, sublats::NTuple{N,Sublat{E,T2}};
                  dim::Val{E2} = Val(E), type::Type{T} = promote_type(T1,T2),
                  names::NTuple{N} = (s->s.name).(sublats),
                  orbitals::NTuple{N,Tuple} = (s->s.orbitals).(sublats)) where {N,T,E,L,T1,T2,E2}

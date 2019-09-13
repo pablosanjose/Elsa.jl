@@ -17,12 +17,6 @@ struct HamiltonianBuilder{L,Tv,H<:Hamiltonian{L,Tv},F<:Function,P<:NamedTuple}
     parameters::P
 end
 
-blocktype(::Type{Tv}, lat::Lattice) where {Tv} =
-    blocktype(SMatrix{1,1,Tv,1}, lat.sublats...)
-blocktype(::Type{S}, s::Sublat{E,T,D}, ss...) where {N,Tv,E,T,D,S<:SMatrix{N,N,Tv}} =
-    (M = max(N,D); blocktype(SMatrix{M,M,Tv,M^2}, ss...))
-blocktype(t) = t
-
 nsites(h::Hamiltonian) = size(h.domain.bitmask)[end]
 
 function nhoppings(ham::Hamiltonian)
@@ -58,8 +52,8 @@ Base.show(io::IO, ham::Hamiltonian{L,Tv,H}) where
 
 hamiltonian(lat::Lattice, t::TightbindingModelTerm...; kw...) =
     hamiltonian(lat, TightbindingModel(t))
-hamiltonian(lat::Lattice{E,L,T}, m::TightbindingModel; htype::Type = Complex{T}) where {E,L,T} =
-    sparse_hamiltonian(blocktype(htype, lat), lat, m.terms...)
+hamiltonian(lat::Lattice{E,L,T}, m::TightbindingModel; type::Type = Complex{T}) where {E,L,T} =
+    sparse_hamiltonian(blocktype(lat, type), lat, m.terms...)
 
 #######################################################################
 # auxiliary types
