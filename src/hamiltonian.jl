@@ -6,9 +6,8 @@ struct HamiltonianHarmonic{L,Tv,A<:AbstractMatrix{<:SMatrix{N,N,Tv} where N}}
     h::A
 end
 
-struct Hamiltonian{L,Tv,H<:HamiltonianHarmonic{L,Tv},D<:Domain{L}}
+struct Hamiltonian{L,Tv,H<:HamiltonianHarmonic{L,Tv}}
     harmonics::Vector{H}
-    domain::D
 end
 
 struct HamiltonianBuilder{L,Tv,H<:Hamiltonian{L,Tv},F<:Function,P<:NamedTuple}
@@ -112,7 +111,7 @@ function sparse_hamiltonian(::Type{M}, lat::Lattice{E,L}, terms...) where {E,L,T
     n = nsites(lat)
     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n, (x, xc) -> 0.5 * (x + xc)))
                    for e in builder.ijvs if !isempty(e)]
-    return Hamiltonian(harmonics, lat.domain)
+    return Hamiltonian(harmonics)
 end
 
 applyterms!(builder, terms...) = foreach(term -> applyterm!(builder, term), terms)

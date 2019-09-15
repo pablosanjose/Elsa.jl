@@ -1,16 +1,17 @@
 #######################################################################
 # State
 #######################################################################
-struct State{D,O,V,T,A<:AbstractArray{V,D}}
+struct State{L,O,D,V,T,A<:AbstractArray{V,D}}
     vector::A
     phases::SVector{O,T}
+    domain::Domain{L,O,D}
 end
 
 State(lat::Lattice{E,L,T};
       type::Type{Tv} = Complex{T},
       vector = Array{orbitaltype(lat, type)}(undef, size(lat.domain.bitmask)),
       phases = zerophases(lat)) where {E,L,T,Tv} =
-    State(vector, phases)
+    State(vector, phases, lat.domain)
 
 zerophases(lat::Lattice{E,L,T}) where {E,L,T} =
     zero(SVector{length(lat.domain.openboundaries),T})
@@ -38,7 +39,7 @@ function randomstate(lat::Lattice{E,L,T}, type::Type{<:Number} = Complex{T}) whe
     v0 = vec(v)
     normalize!(v0) # an unsafe, faster rmul!(v0, 1/sqrt(sum(abs2, v0))) works too (v0~1)
     rv = reinterpret(S, v0)
-    return State(rv, zerophases(lat))
+    return State(rv, zerophases(lat), lat.domain)
 end
 
 mask(S::Type{V}, orbs) where {N,T,V<:SVector{N,T}} =
