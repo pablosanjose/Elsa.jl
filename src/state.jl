@@ -30,12 +30,12 @@ function randomstate(lat::Lattice{E,L,T}; type::Type{<:Number} = Complex{T}) whe
     bitmask = lat.domain.bitmask
     norbs = norbitals.(lat.sublats)
     v = rand(n, N, size(bitmask)...) # for performance, use n×N Floats to build an S
-    for c in CartesianIndices(bitmask)
+    @inbounds for c in CartesianIndices(bitmask)
         site = first(Tuple(c))
         indomain = bitmask[c]
         norb = norbs[sublat(lat, site)] * indomain
-        @inbounds for j in 1:N, i in 1:n
-            v[i, j, Tuple(c)...] *= j <= norb
+        for j in 1:N, i in 1:n
+            v[i, j, Tuple(c)...] = (v[i, j, Tuple(c)...] - 0.5) * (j <= norb)
         end
     end
     v0 = vec(v)
