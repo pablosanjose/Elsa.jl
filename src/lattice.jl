@@ -112,7 +112,7 @@ end
 Domain{L,O,D}(nsites) where {L,O,D} =
     Domain(CartesianIndices(ntuple(_->1:1, Val(L))),
            ntuple(identity, Val(O)),
-           trues(ntuple(d -> d == D ? nsites : 1, Val(D))))
+           trues(ntuple(d -> d == 1 ? nsites : 1, Val(D))))
 
 nopenboundaries(::Domain{L,O}) where {L,O} = O
 ndomainsites(d::Domain) = sum(d.bitmask)
