@@ -22,14 +22,14 @@ Base.show(io::IO, s::State{L,O,D,V}) where {L,O,D,N,Tv,V<:SVector{N,Tv}} = print
   Max orbital size : $N
   Orbtitals        : $(length(s.vector))")
 
-function randomstate(lat::Lattice{E,L,T}; type::Type{<:Number} = Complex{T}) where {E,L,T,Tv}
+function randomstate(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv}
     V = orbitaltype(lat, type)
     n, r = divrem(sizeof(eltype(V)), sizeof(T))
     N = length(V)
     r == 0 || throw(error("Unexpected error: cannot reinterpret orbital type $V as a number of floats"))
     bitmask = lat.domain.bitmask
     norbs = norbitals.(lat.sublats)
-    v = rand(n, N, size(bitmask)...) # for performance, use n×N Floats to build an S
+    v = rand(T, n, N, size(bitmask)...) # for performance, use n×N Floats to build an S
     @inbounds for c in CartesianIndices(bitmask)
         site = first(Tuple(c))
         indomain = bitmask[c]
