@@ -24,7 +24,7 @@ Base.show(io::IO, s::State{L,O,D,V}) where {L,O,D,N,Tv,V<:SVector{N,Tv}} = print
 
 function randomstate(lat::Lattice{E,L,T}; type::Type{<:Number} = Complex{T}) where {E,L,T,Tv}
     V = orbitaltype(lat, type)
-    n, r = divrem(sizeof(eltype(V)), sizeof(Float64))
+    n, r = divrem(sizeof(eltype(V)), sizeof(T))
     N = length(V)
     r == 0 || throw(error("Unexpected error: cannot reinterpret orbital type $V as a number of floats"))
     bitmask = lat.domain.bitmask
@@ -35,7 +35,7 @@ function randomstate(lat::Lattice{E,L,T}; type::Type{<:Number} = Complex{T}) whe
         indomain = bitmask[c]
         norb = norbs[sublat(lat, site)] * indomain
         for j in 1:N, i in 1:n
-            v[i, j, Tuple(c)...] = (v[i, j, Tuple(c)...] - 0.5) * (j <= norb)
+            v[i, j, Tuple(c)...] = (v[i, j, Tuple(c)...] - T(0.5)) * (j <= norb)
         end
     end
     v0 = vec(v)
