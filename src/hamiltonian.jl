@@ -16,7 +16,7 @@ struct HamiltonianBuilder{L,Tv,H<:Hamiltonian{L,Tv},F<:Function,P<:NamedTuple}
     parameters::P
 end
 
-nsites(h::Hamiltonian) = length(first(h.domain.bitmask))
+nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : size(first(h.harmonics).h, 1)
 
 function nhoppings(ham::Hamiltonian)
     count = 0

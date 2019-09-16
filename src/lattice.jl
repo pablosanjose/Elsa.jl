@@ -7,7 +7,9 @@ struct Sublat{E,T,D}
     orbitals::NTuple{D,NameType}
 end
 
-Base.empty(s::Sublat) = sublat(empty(s.sites), s.name, s.orbitals)
+Base.empty(s::Sublat) = Sublat(empty(s.sites), s.name, s.orbitals)
+
+Base.copy(s::Sublat) = Sublat(copy(s.sites), s.name, s.orbitals)
 
 Base.show(io::IO, s::Sublat{E,T,D}) where {E,T,D} = print(io,
 "Sublat{$E,$T,$D} : sublattice of $T-typed sites in $(E)D space with $D orbitals per site
@@ -104,18 +106,25 @@ Base.:*(b::Bravais, factor) = Bravais(b.matrix * factor)
 # Domain
 #######################################################################
 struct Domain{L,O}
-    boundingbox::CartesianIndices{L,NTuple{L,UnitRange{Int}}}
     openboundaries::NTuple{O,Int}
-    bitmask::Array{BitVector,L}
+    cellmask::Array{BitVector,L}
 end
 
 Domain{L,O}(nsites::Integer) where {L,O} =
-    Domain(CartesianIndices(ntuple(_->1:1, Val(L))),
-           ntuple(identity, Val(O)),
+    Domain(ntuple(identity, Val(O)),
            [trues(nsites) for _ in CartesianIndices(ntuple(_ -> 1:1, Val(L)))])
 
 nopenboundaries(::Domain{L,O}) where {L,O} = O
-ndomainsites(d::Domain) = sum(sum, d.bitmask)
+ndomainsites(d::Domain) = sum(sum, d.cellmask)
+function scale(d::Domain, s)
+    sized = size(d.cellmask)
+    mask = similar(d.cellmask, s .* sized)
+    for c in CartesianIndices(mask)
+        cd = CartesianIndex(mod1.(Tuple(c), sized))
+        mask[c] = copy(d.cellmask[cd])
+    end
+    return Domain(d.openboundaries, mask)
+end
 
 #######################################################################
 # Lattice
@@ -190,6 +199,8 @@ function transform!(lat::Lattice, f::Function; sublats = eachindex(lat.sublats))
 end
 
 transform(lat::Lattice, f; kw...) = transform!(deepcopy(lat), f; kw...)
+scale(lat::Lattice, s) =
+    Lattice(lat.bravais, copy.(lat.sublats), scale(lat.domain, s), copy(lat.offsets))
 
 # Auxiliary #
 

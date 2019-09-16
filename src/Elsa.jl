@@ -4,10 +4,10 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
       FFTW, ProgressMeter, Arpack
 
 import Base: convert, iterate, ==
-import SparseArrays: sparse!
+import SparseArrays: sparse!, mul!
 
 export sublat, bravais, lattice, hopping, onsite, hamiltonian, randomstate,
-       grow, combine, transform, transform!, bound,
+       scale, mul!, grow, combine, transform, transform!, bound,
        sitepositions, neighbors, bravaismatrix, marchingmesh
 export MomentaKPM, dosKPM
 export LatticePresets, SystemPresets, RegionPresets
