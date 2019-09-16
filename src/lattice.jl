@@ -103,19 +103,19 @@ Base.:*(b::Bravais, factor) = Bravais(b.matrix * factor)
 #######################################################################
 # Domain
 #######################################################################
-struct Domain{L,O,D}
+struct Domain{L,O}
     boundingbox::CartesianIndices{L,NTuple{L,UnitRange{Int}}}
     openboundaries::NTuple{O,Int}
-    bitmask::BitArray{D}
+    bitmask::Array{BitVector,L}
 end
 
-Domain{L,O,D}(nsites) where {L,O,D} =
+Domain{L,O}(nsites::Integer) where {L,O} =
     Domain(CartesianIndices(ntuple(_->1:1, Val(L))),
            ntuple(identity, Val(O)),
-           trues(ntuple(d -> d == 1 ? nsites : 1, Val(D))))
+           [trues(nsites) for _ in CartesianIndices(ntuple(_ -> 1:1, Val(L)))])
 
 nopenboundaries(::Domain{L,O}) where {L,O} = O
-ndomainsites(d::Domain) = sum(d.bitmask)
+ndomainsites(d::Domain) = sum(sum, d.bitmask)
 
 #######################################################################
 # Lattice
@@ -126,9 +126,9 @@ struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},S<:Tuple{Vararg{Sublat{E,T
     domain::D
     offsets::Vector{Int}
 end
-Lattice(bravais::Bravais{E2,L}, sublats::Tuple{Vararg{Sublat{E,T}}}) where {E,L,T,E2} =
-    Lattice(convert(Bravais{E,L,T}, bravais), sublats,
-            Domain{L,L,L+1}(sum(nsites, sublats)), offsets(sublats))
+Lattice(bravais::Bravais{E2,L}, sublats::Tuple{Vararg{Sublat{E,T}}},
+        domain = Domain{L,L}(sum(nsites, sublats))) where {E,L,T,E2} =
+    Lattice(convert(Bravais{E,L,T}, bravais), sublats, domain, offsets(sublats))
 
 # find SVector type that can hold all orbital amplitudes in any lattice sites
 orbitaltype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
