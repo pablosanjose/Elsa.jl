@@ -52,6 +52,9 @@ function nnzdiag(s::SparseMatrixCSC)
     end
     return count
 end
+nnzdiag(s::Matrix) = minimum(size(s))
+
+pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')
 
 # padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
 

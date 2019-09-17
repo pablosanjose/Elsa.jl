@@ -105,26 +105,42 @@ Base.:*(b::Bravais, factor) = Bravais(b.matrix * factor)
 #######################################################################
 # Domain
 #######################################################################
-struct Domain{L,O}
-    openboundaries::NTuple{O,Int}
-    cellmask::Array{BitVector,L}
+struct Domain{L,O,A<:AbstractArray{BitVector,L},LO}
+    openbravais::SMatrix{L,O,Int,LO}
+    cellmask::OffsetArray{BitVector,L,A}
 end
 
-Domain{L,O}(nsites::Integer) where {L,O} =
-    Domain(ntuple(identity, Val(O)),
-           [trues(nsites) for _ in CartesianIndices(ntuple(_ -> 1:1, Val(L)))])
+Domain{L,O}(nsites::Integer,
+            ranges::NTuple{L,AbstractRange} = ntuple(_ -> 0:0, Val(L))) where {L,O} =
+    Domain(SMatrix{L,O,Int,L*O}(I),
+           OffsetArray([trues(nsites) for _ in CartesianIndices(ranges)], ranges))
 
 nopenboundaries(::Domain{L,O}) where {L,O} = O
+
 ndomainsites(d::Domain) = sum(sum, d.cellmask)
-function scale(d::Domain, s)
-    sized = size(d.cellmask)
-    mask = similar(d.cellmask, s .* sized)
-    for c in CartesianIndices(mask)
-        cd = CartesianIndex(mod1.(Tuple(c), sized))
-        mask[c] = copy(d.cellmask[cd])
+
+function scale(d::Domain, naxes)
+    a = axes(d.cellmask)
+    newmask = similar(d.cellmask, naxes)
+    bbox = boundingbox(d)
+    for c in CartesianIndices(newmask)
+        cd, _ = wrap(c, bbox)
+        newmask[c] = copy(d.cellmask[cd])
     end
-    return Domain(d.openboundaries, mask)
+    return Domain(d.openbravais, newmask)
 end
+
+boundingbox(d::Domain) = extrema.(axes(d.cellmask))
+
+@inline wrap(i::CartesianIndex, bbox) = wrap(Tuple(i), bbox)
+@inline function wrap(i::Tuple, bbox)
+    n = _wrapdiv.(i, bbox)
+    j = _wrapmod.(i, bbox)
+    return CartesianIndex(j), SVector(n)
+end
+_wrapdiv(n, (nmin, nmax)) = nmin <= n <= nmax ? 0 : div(n - nmin, 1 + nmax - nmin)
+_wrapmod(n, (nmin, nmax)) = nmin <= n <= nmax ? n : nmin + mod(n - nmin, 1 + nmax - nmin)
+
 
 #######################################################################
 # Lattice

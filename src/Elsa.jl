@@ -4,7 +4,7 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
       FFTW, ProgressMeter, Arpack
 
 import Base: convert, iterate, ==
-import SparseArrays: sparse!, mul!
+import SparseArrays: sparse!, mul!, getcolptr
 
 export sublat, bravais, lattice, hopping, onsite, hamiltonian, randomstate,
        scale, mul!, grow, combine, transform, transform!, bound,

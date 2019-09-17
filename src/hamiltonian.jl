@@ -21,7 +21,7 @@ nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : size(first(h.harmonics).h, 1
 function nhoppings(ham::Hamiltonian)
     count = 0
     for h in ham.harmonics
-        count += iszero(h.dn) ? (nnz(h.h) - nnzdiag(h.h)) : nnz(h.h)
+        count += iszero(h.dn) ? (_nnz(h.h) - nnzdiag(h.h)) : _nnz(h.h)
     end
     return count
 end
@@ -34,14 +34,20 @@ function nonsites(ham::Hamiltonian)
     return count
 end
 
+_nnz(h::SparseMatrixCSC) = nnz(h)
+_nnz(h::Matrix) = length(h)
+
+Base.Matrix(h::Hamiltonian) = Hamiltonian(Matrix.(h.harmonics))
+Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
+
 Base.show(io::IO, h::HamiltonianHarmonic{L,Tv,A}) where
     {L,Tv,N,A<:AbstractArray{<:SMatrix{N,N,Tv}}} = print(io,
 "HamiltonianHarmonic{$L,$Tv} with dn = $(Tuple(h.dn)) and elements:", h.h)
 
 Base.show(io::IO, ham::Hamiltonian{L,Tv,H}) where
-    {L,Tv,N,H<:HamiltonianHarmonic{L,Tv,<:AbstractArray{<:SMatrix{N,N,Tv}}}} = print(io,
+    {L,Tv,N,A<:AbstractArray{<:SMatrix{N,N,Tv}},H<:HamiltonianHarmonic{L,Tv,A}} = print(io,
 "Hamiltonian{$L,$Tv} : $(L)D Hamiltonian of element type SMatrix{$N,$N,$Tv}
-  Bloch harmonics  : $(length(ham.harmonics))
+  Bloch harmonics  : $(length(ham.harmonics)) $(A isa Type{<:SparseMatrixCSC} ? "(sparse)" : "(dense)")
   Harmonic size    : $((n -> "$n × $n")(nsites(ham)))
   Onsites          : $(nonsites(ham))
   Hoppings         : $(nhoppings(ham))
@@ -50,9 +56,9 @@ Base.show(io::IO, ham::Hamiltonian{L,Tv,H}) where
 # API #
 
 hamiltonian(lat::Lattice, t::TightbindingModelTerm...; kw...) =
-    hamiltonian(lat, TightbindingModel(t))
+    hamiltonian(lat, TightbindingModel(t); kw...)
 hamiltonian(lat::Lattice{E,L,T}, m::TightbindingModel; type::Type = Complex{T}) where {E,L,T} =
-    sparse_hamiltonian(blocktype(lat, type), lat, m.terms...)
+    hamiltonian_sparse(blocktype(lat, type), lat, m.terms...)
 
 #######################################################################
 # auxiliary types
@@ -102,9 +108,9 @@ end
 Base.push!(h::IJV, (i, j, v)) = (push!(h.i, i); push!(h.j, j); push!(h.v, v))
 
 #######################################################################
-# sparse_hamiltonian
+# hamiltonian_sparse
 #######################################################################
-function sparse_hamiltonian(::Type{M}, lat::Lattice{E,L}, terms...) where {E,L,Tv,M<:SMatrix{D,D,Tv} where D}
+function hamiltonian_sparse(::Type{M}, lat::Lattice{E,L}, terms...) where {E,L,Tv,M<:SMatrix{D,D,Tv} where D}
     builder = IJVBuilder{M}(lat)
     applyterms!(builder, terms...)
     HT = HamiltonianHarmonic{L,Tv,SparseMatrixCSC{M,Int}}
