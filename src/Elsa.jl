@@ -3,7 +3,7 @@ module Elsa
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
       FFTW, ProgressMeter, Arpack
 
-import Base: convert, iterate, ==
+import Base: convert, iterate, ==, tail
 import SparseArrays: sparse!, mul!, getcolptr
 
 export sublat, bravais, lattice, hopping, onsite, hamiltonian, randomstate,
