@@ -105,38 +105,38 @@ Base.:*(b::Bravais, factor) = Bravais(b.matrix * factor)
 #######################################################################
 # Supercell
 #######################################################################
-struct Supercell{L,O,A<:AbstractArray{BitVector,L},LO}
+struct Supercell{L,O,LP,LO}
     openbravais::SMatrix{L,O,Int,LO}
-    cellmask::OffsetArray{BitVector,L,A}
+    cellmask::OffsetArray{Bool,LP,BitArray{LP}}
 end
 
 Supercell{L,O}(nsites::Integer,
-            ranges::NTuple{L,AbstractRange} = ntuple(_ -> 0:0, Val(L))) where {L,O} =
+               ranges::NTuple{L,AbstractRange} = ntuple(_ -> 0:0, Val(L))) where {L,O} =
     Supercell(SMatrix{L,O,Int,L*O}(I),
-           OffsetArray([trues(nsites) for _ in CartesianIndices(ranges)], ranges))
+              OffsetArray(trues(1:nsites, length.(ranges)...), 1:nsites, ranges...))
 
 nopenboundaries(::Supercell{L,O}) where {L,O} = O
 
-nsupercellsites(d::Supercell) = sum(sum, d.cellmask)
+nsupercellsites(s::Supercell) = sum(s.cellmask)
 
-function scale(d::Supercell, naxes)
-    a = axes(d.cellmask)
-    newmask = similar(d.cellmask, naxes)
-    bbox = boundingbox(d)
+function scale(s::Supercell, naxes)
+    siterange = first(axes(s.cellmask))
+    newmask = similar(s.cellmask, siterange, naxes...)
+    bbox = boundingbox(s)
     for c in CartesianIndices(newmask)
-        cd, _ = wrap(c, bbox)
-        newmask[c] = copy(d.cellmask[cd])
+        cd, _ = wrap(tail(Tuple(c)), bbox)
+        newmask[c] = s.cellmask[first(Tuple(c)), cd...]
     end
-    return Supercell(d.openbravais, newmask)
+    return Supercell(s.openbravais, newmask)
 end
 
-boundingbox(d::Supercell) = extrema.(axes(d.cellmask))
+boundingbox(s::Supercell) = extrema.(tail(axes(s.cellmask)))
 
-@inline wrap(i::CartesianIndex, bbox) = wrap(Tuple(i), bbox)
+# @inline wrap(i::CartesianIndex, bbox) = wrap(Tuple(i), bbox)
 @inline function wrap(i::Tuple, bbox)
     n = _wrapdiv.(i, bbox)
     j = _wrapmod.(i, bbox)
-    return CartesianIndex(j), SVector(n)
+    return j, SVector(n)
 end
 _wrapdiv(n, (nmin, nmax)) = nmin <= n <= nmax ? 0 : div(n - nmin, 1 + nmax - nmin)
 _wrapmod(n, (nmin, nmax)) = nmin <= n <= nmax ? n : nmin + mod(n - nmin, 1 + nmax - nmin)
@@ -327,17 +327,16 @@ function _grow(lat::Lattice{E,L}, supercell, region) where {E,L}
     end
     c = CartesianIndices(iter)
     ns = nsites(lat)
-    cellmask = OffsetArray([BitVector(undef, ns) for i in c], c.indices...)
-    for dn in c
-        mask = cellmask[dn]
+    cellmask = OffsetArray(BitArray(undef, ns, size(c)...), 1:ns, c.indices...)
+    @inbounds for dn in c
         is_grow_dn = is_grow_dir(SVector(Tuple(dn)))
-        is_grow_dn || (mask .= false; continue)
+        is_grow_dn || (cellmask[:,dn] .= false; continue)
         r0 = bravais * SVector(Tuple(dn))
-        counter = 0
+        counter = 0 # Not threadsafe!
         for s in eachindex(lat.sublats), site in lat.sublats[s].sites
             counter += 1
             r = site + r0
-            mask[counter] = is_grow_dn && region(r)
+            cellmask[counter, Tuple(dn)...] = is_grow_dn && region(r)
         end
     end
     supercell = Supercell(supercell, cellmask)
