@@ -63,6 +63,7 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
     cols = 1:size(first(ham.harmonics).h, 2)
     bbox = boundingbox(s.domain)
     Ninv = pinverse(s.domain.openbravais)
+    # Scale target by β
     if β != 1
         if β != 0
             Threads.@threads for c in C
@@ -74,6 +75,7 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
             end
         end
     end
+    # Add α * blochphase * h * source to target
     Threads.@threads for i in CartesianIndices(B)
         bi = B[i]
         for h in ham.harmonics
@@ -91,8 +93,10 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
             end
         end
     end
-    Threads.@threads for j in eachindex(t.vector)
-        t.vector[j] .*= s.domain.cellmask[j]
+    # Filter out sites not in domain
+    @inbounds Threads.@threads for j in eachindex(t.vector)
+        mask = s.domain.cellmask[j]
+        all(isone, mask) || (t.vector[j] .*= mask)
     end
     return t
 end
