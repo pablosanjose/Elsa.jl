@@ -1,30 +1,30 @@
 #######################################################################
 # State
 #######################################################################
-struct State{L,O,V,T,A<:AbstractArray{<:AbstractVector{V},L},D<:Domain{L,O}}
+struct State{L,O,V,T,A<:AbstractArray{<:AbstractVector{V},L},D<:Supercell{L,O}}
     vector::A
     phases::SVector{O,T}
-    domain::D
+    supercell::D
 end
 
 State(lat::Lattice{E,L,T};
       type::Type{Tv} = Complex{T},
-      vector = Array{Vector{orbitaltype(lat, type)}}(undef, size(lat.domain.cellmask)),
+      vector = Array{Vector{orbitaltype(lat, type)}}(undef, size(lat.supercell.cellmask)),
       phases = zerophases(lat)) where {E,L,T,Tv} =
-    State(vector, phases, lat.domain)
+    State(vector, phases, lat.supercell)
 
 zerophases(lat::Lattice{E,L,T}) where {E,L,T} =
-    zero(SVector{nopenboundaries(lat.domain),T})
+    zero(SVector{nopenboundaries(lat.supercell),T})
 
 Base.show(io::IO, s::State{L,O,V}) where {L,O,N,Tv,V<:SVector{N,Tv}} = print(io,
-"State{$L,$O} : state of an $(L)D lattice in an $(O)D domain
+"State{$L,$O} : state of an $(L)D lattice in an $(O)D supercell
   Element type     : $Tv
   Max orbital size : $N
   Orbtitals        : $(sum(length, s.vector))")
 
-Base.copy!(t::S, s::S) where {S<:State} = State(copy!(t.vector, s.vector), s.phases, s.domain)
-Base.similar(s::State) = State(similar.(s.vector), s.phases, s.domain)
-Base.copy(s::State) = State(copy(s.vector), s.phases, s.domain)
+Base.copy!(t::S, s::S) where {S<:State} = State(copy!(t.vector, s.vector), s.phases, s.supercell)
+Base.similar(s::State) = State(similar.(s.vector), s.phases, s.supercell)
+Base.copy(s::State) = State(copy(s.vector), s.phases, s.supercell)
 
 # API #
 
@@ -32,15 +32,16 @@ function randomstate(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,
     V = orbitaltype(lat, type)
     n, r = divrem(sizeof(eltype(V)), sizeof(T))
     N = length(V)
-    r == 0 || throw(error("Unexpected error: cannot reinterpret orbital type $V as a number of floats"))
-    cellmask = lat.domain.cellmask
+    r == 0 || throw(
+        error("Unexpected error: cannot reinterpret orbital type $V as a number of floats"))
+    cellmask = lat.supercell.cellmask
     masksize = size(cellmask)
     nsites = length(first(cellmask))
     norbs = norbitals.(lat.sublats)
     v = rand(T, n * N, nsites, masksize...) # for performance, use n×N Floats to build an S
     for c in CartesianIndices(masksize)
-        @inbounds for (site, indomain) in enumerate(cellmask.parent[c])
-            norb = norbs[sublat(lat, site)] * indomain
+        @inbounds for (site, insupercell) in enumerate(cellmask.parent[c])
+            norb = norbs[sublat(lat, site)] * insupercell
             for j in 1:N, i in 1:n
                 v[i + (j-1)*n, site, Tuple(c)...] =
                     (v[i + (j-1)*n, site, Tuple(c)...] - T(0.5)) * (j <= norb)
@@ -50,19 +51,18 @@ function randomstate(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,
     normalize!(vec(v)) # rmul!(v, 1/sqrt(sum(abs2, v))) also works, slightly faster
     rv = reinterpret(V, v)
     sv = OffsetArray([rv[1, :, c] for c in CartesianIndices(masksize)], axes(cellmask))
-    return State(sv, zerophases(lat), lat.domain)
+    return State(sv, zerophases(lat), lat.supercell)
 end
 
 #######################################################################
 # mul!
 #######################################################################
-
 function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = false) where {L,O,V,S<:State{L,O,V}}
     C = t.vector
     B = s.vector
     cols = 1:size(first(ham.harmonics).h, 2)
-    bbox = boundingbox(s.domain)
-    Ninv = pinverse(s.domain.openbravais)
+    bbox = boundingbox(s.supercell)
+    Ninv = pinverse(s.supercell.openbravais)
     # Scale target by β
     if β != 1
         if β != 0
@@ -93,9 +93,9 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
             end
         end
     end
-    # Filter out sites not in domain
+    # Filter out sites not in supercell
     @inbounds Threads.@threads for j in eachindex(t.vector)
-        mask = s.domain.cellmask[j]
+        mask = s.supercell.cellmask[j]
         all(isone, mask) || (t.vector[j] .*= mask)
     end
     return t

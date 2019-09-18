@@ -103,23 +103,23 @@ Base.:*(factor, b::Bravais) = Bravais(factor * b.matrix)
 Base.:*(b::Bravais, factor) = Bravais(b.matrix * factor)
 
 #######################################################################
-# Domain
+# Supercell
 #######################################################################
-struct Domain{L,O,A<:AbstractArray{BitVector,L},LO}
+struct Supercell{L,O,A<:AbstractArray{BitVector,L},LO}
     openbravais::SMatrix{L,O,Int,LO}
     cellmask::OffsetArray{BitVector,L,A}
 end
 
-Domain{L,O}(nsites::Integer,
+Supercell{L,O}(nsites::Integer,
             ranges::NTuple{L,AbstractRange} = ntuple(_ -> 0:0, Val(L))) where {L,O} =
-    Domain(SMatrix{L,O,Int,L*O}(I),
+    Supercell(SMatrix{L,O,Int,L*O}(I),
            OffsetArray([trues(nsites) for _ in CartesianIndices(ranges)], ranges))
 
-nopenboundaries(::Domain{L,O}) where {L,O} = O
+nopenboundaries(::Supercell{L,O}) where {L,O} = O
 
-ndomainsites(d::Domain) = sum(sum, d.cellmask)
+nsupercellsites(d::Supercell) = sum(sum, d.cellmask)
 
-function scale(d::Domain, naxes)
+function scale(d::Supercell, naxes)
     a = axes(d.cellmask)
     newmask = similar(d.cellmask, naxes)
     bbox = boundingbox(d)
@@ -127,10 +127,10 @@ function scale(d::Domain, naxes)
         cd, _ = wrap(c, bbox)
         newmask[c] = copy(d.cellmask[cd])
     end
-    return Domain(d.openbravais, newmask)
+    return Supercell(d.openbravais, newmask)
 end
 
-boundingbox(d::Domain) = extrema.(axes(d.cellmask))
+boundingbox(d::Supercell) = extrema.(axes(d.cellmask))
 
 @inline wrap(i::CartesianIndex, bbox) = wrap(Tuple(i), bbox)
 @inline function wrap(i::Tuple, bbox)
@@ -145,15 +145,15 @@ _wrapmod(n, (nmin, nmax)) = nmin <= n <= nmax ? n : nmin + mod(n - nmin, 1 + nma
 #######################################################################
 # Lattice
 #######################################################################
-struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},S<:Tuple{Vararg{Sublat{E,T}}},D<:Domain{L}}
+struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},S<:Tuple{Vararg{Sublat{E,T}}},D<:Supercell{L}}
     bravais::B
     sublats::S
-    domain::D
+    supercell::D
     offsets::Vector{Int}
 end
 Lattice(bravais::Bravais{E2,L}, sublats::Tuple{Vararg{Sublat{E,T}}},
-        domain = Domain{L,L}(sum(nsites, sublats))) where {E,L,T,E2} =
-    Lattice(convert(Bravais{E,L,T}, bravais), sublats, domain, offsets(sublats))
+        supercell = Supercell{L,L}(sum(nsites, sublats))) where {E,L,T,E2} =
+    Lattice(convert(Bravais{E,L,T}, bravais), sublats, supercell, offsets(sublats))
 
 # find SVector type that can hold all orbital amplitudes in any lattice sites
 orbitaltype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
@@ -180,9 +180,9 @@ Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T} = print(io,
     Names         : $(displaynames(lat))
     Orbitals      : $(displayorbitals(lat))
     Sites         : $(nsites.(lat.sublats)) --> $(nsites(lat)) total per unit cell
-  Domain
-    Dimensions    : $(nopenboundaries(lat.domain))
-    Total sites   : $(ndomainsites(lat.domain))")
+  Supercell
+    Dimensions    : $(nopenboundaries(lat.supercell))
+    Total sites   : $(nsupercellsites(lat.supercell))")
 
 # API #
 
@@ -211,12 +211,12 @@ function transform!(lat::Lattice, f::Function; sublats = eachindex(lat.sublats))
         transform!(lat.sublats[sind], f)
     end
     br = transform(lat.bravais, f)
-    return Lattice(br, lat.sublats, lat.domain)
+    return Lattice(br, lat.sublats, lat.supercell)
 end
 
 transform(lat::Lattice, f; kw...) = transform!(deepcopy(lat), f; kw...)
 scale(lat::Lattice, s) =
-    Lattice(lat.bravais, copy.(lat.sublats), scale(lat.domain, s), copy(lat.offsets))
+    Lattice(lat.bravais, copy.(lat.sublats), scale(lat.supercell, s), copy(lat.offsets))
 
 # Auxiliary #
 
@@ -256,3 +256,113 @@ function offsets(sublats)
     end
     return ns
 end
+
+#######################################################################
+# grow
+#######################################################################
+const TOOMANYITERS = 10^8
+
+_truefunc(r) = true
+
+"""
+    grow(lattice::Lattice{E,L}; supercell = SMatrix{L,0,Int}(), region = r -> true)
+
+Modifies the supercell of an `L`-dimensional lattice to match an `L´`-dimensional
+`supercell::SMatrix{L,L´,Int}`. The supercell Bravais matrix `br´` in terms of the `lattice`
+Bravais matrix `br` is `br´ = br * supercell`. Only sites at position `r` such that
+`region(r) == true` will be included in the supercell. Note that in the case of `L´<L`,
+a bounded `region` function must be provided to limit the extension along the non-periodic
+dimensions.
+
+`supercell` can be given as an integer matrix `s::SMatrix{L,L2,Int}`, a single integer
+`s::Int` (`supercell = s * I`), a single `NTuple{L,Int}` (`supercell` diagonal), or a tuple
+of  `NTuple{L,Int}`s (`supercell` columns).
+
+    lattice |> grow(supercell = s, region = f)
+
+Functional syntax, equivalent to `grow(lattice; supercell = s, region = f)
+
+# Examples
+```jldoctest
+julia> grow(LatticePresets.triangular(), supercell = ((10,2),), region = r-> 0 < r[2] < 4)
+Lattice{2,2,Float64} : 2D lattice in 2D space
+  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+  Sublattices     : 1
+    Names         : (:1)
+    Orbitals      : ((:noname))
+    Sites         : (1,) --> 1 total per unit cell
+  Supercell
+    Dimensions    : 1
+    Total sites   : 52
+```
+
+# See also
+
+    'Region`
+"""
+grow(; kw...) = lat -> grow(lat; kw...)
+grow(lat::Lattice{E,L}; supercell = SMatrix{L,0,Int}(), region = _truefunc) where {E,L} =
+    _grow(lat, tosupercell(supercell, Val(L)), region)
+
+function _grow(lat::Lattice{E,L}, supercell, region) where {E,L}
+    bravais = lat.bravais.matrix
+    iter = BoxIterator(zero(SVector{L,Int}))
+    is_grow_dir = is_perp_dir(supercell)
+    foundfirst = false
+    counter = 0
+    for dn in iter   # We first compute the bounding box
+        found = false
+        counter += 1; counter == TOOMANYITERS && @warn "`region` seems unbounded"
+        is_grow_dn = is_grow_dir(SVector(Tuple(dn)))
+        r0 = bravais * SVector(Tuple(dn))
+        for s in eachindex(lat.sublats), site in lat.sublats[s].sites
+            r = r0 + site
+            found = is_grow_dn && region(r)
+            if found || !foundfirst
+                acceptcell!(iter, dn)
+                foundfirst = found
+                break
+            end
+        end
+    end
+    c = CartesianIndices(iter)
+    ns = nsites(lat)
+    cellmask = OffsetArray([BitVector(undef, ns) for i in c], c.indices...)
+    for dn in c
+        mask = cellmask[dn]
+        is_grow_dn = is_grow_dir(SVector(Tuple(dn)))
+        is_grow_dn || (mask .= false; continue)
+        r0 = bravais * SVector(Tuple(dn))
+        counter = 0
+        for s in eachindex(lat.sublats), site in lat.sublats[s].sites
+            counter += 1
+            r = site + r0
+            mask[counter] = is_grow_dn && region(r)
+        end
+    end
+    supercell = Supercell(supercell, cellmask)
+    return Lattice(lat.bravais, lat.sublats, supercell)
+end
+
+tosupercell(s::SMatrix{L,L2,Int}, ::Val{L}) where {L,L2} = s
+tosupercell(s::Number, ::Val{L}) where {L} = SMatrix{L,L,Int}(I)
+tosupercell(s::NTuple{L,Number}, ::Val{L}) where {L} =
+    SMatrix{L,L,Int}(Diagonal(SVector{L,Int}(s)))
+tosupercell(s::NTuple{L2,Tuple}, ::Val{L}) where {L,L2} =
+    convert(SMatrix{L,L2,Int}, toSMatrix(s...))
+
+# pseudoinverse of s times an integer n, so that it is an integer matrix (for accuracy)
+pinvint(s::SMatrix{N,0}) where {N} = (SMatrix{0,0,Int}(), 0)
+function pinvint(s::SMatrix{N,M}) where {N,M}
+    qrfact = qr(s)
+    pinverse = inv(qrfact.R) * qrfact.Q'
+    n = det(qrfact.R)^2
+    iszero(n) && throw(ErrorException("Supercell is singular"))
+    return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
+end
+
+# This is true whenever old ndist is perpendicular to new lattice
+is_perp_dir(supercell) = let invs = pinvint(supercell); dn -> iszero(newndist(dn, invs)); end
+
+newndist(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
+newndist(oldndist, (pinvs, n)::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()

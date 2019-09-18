@@ -14,7 +14,7 @@ square(; a0 = 1, kw...) =
     lattice(a0 * bravais((1., 0.), (0., 1.)), sublat((0., 0.); kw...))
 
 triangular(; a0 = 1, kw...) =
-    battice(a0 * bravais(( cos(pi/3), sin(pi/3)),(-cos(pi/3), sin(pi/3))),
+    lattice(a0 * bravais(( cos(pi/3), sin(pi/3)),(-cos(pi/3), sin(pi/3))),
         sublat((0., 0.); kw...))
 
 honeycomb(; a0 = 1, kw...) =

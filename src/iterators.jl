@@ -34,7 +34,10 @@ Base.IteratorEltype(::BoxIterator) = Base.HasEltype()
 
 Base.eltype(::BoxIterator{N}) where {N} = SVector{N,Int}
 
-boundingboxiter(b::BoxIterator) = (Tuple(b.npos), Tuple(b.ppos))
+Base.CartesianIndices(b::BoxIterator) =
+    CartesianIndices(UnitRange.(Tuple(b.npos), Tuple(b.ppos)))
+
+# boundingboxiter(b::BoxIterator) = Tuple(b.npos), Tuple(b.ppos)
 
 function BoxIterator(seed::SVector{N}; maxiterations::Union{Int,Missing} = missing, nregisters::Int = 0) where {N}
     BoxIterator(seed, maxiterations, MVector(1, 2),
@@ -79,7 +82,7 @@ function Base.iterate(b::BoxIterator{N}, s::BoxIteratorState{N}) where {N}
     facedone = itrange === nothing
     if facedone
         alldone = !any(b.pmoves) && !any(b.nmoves) || isless(b.maxiter, s.iteration)
-        if alldone  # Last shells in all directions were empty, trim from boundingboxiter
+        if alldone  # Last shells in all directions were empty, trim from boundingboxcorners
             b.npos .+= 1
             b.ppos .-= 1
             return nothing
