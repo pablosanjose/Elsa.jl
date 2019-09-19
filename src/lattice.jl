@@ -57,10 +57,6 @@ end
 Bravais{E,T}() where {E,T} = Bravais(SMatrix{E,0,T,0}())
 
 displayvectors(br::Bravais) = displayvectors(br.matrix)
-displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; kw...) where {E,L} =
-    ntuple(l -> round.(Tuple(mat[:,l]); kw...), Val(L))
-displayvectors(mat::SMatrix{E,L,<:Integer}; kw...) where {E,L} =
-    ntuple(l -> mat[:,l], Val(L))
 
 Base.show(io::IO, b::Bravais{E,L,T}) where {E,L,T} = print(io,
 "Bravais{$E,$L,$T} : set of $L Bravais vectors in $(E)D space.
@@ -210,17 +206,17 @@ siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.
 
 displaynames(l::Lattice) = display_as_tuple(l.unitcell.names, ":")
 displayorbitals(l::Lattice) = string(l.unitcell.orbitals)
-displayvectors(lat::Lattice) = displayvectors(lat.bravais.matrix; digits = 6)
 
 Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T} = print(io,
 "Lattice{$E,$L,$T} : $(L)D lattice in $(E)D space
-  Bravais vectors : $(displayvectors(lat))
+  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))
   Sublattices     : $(nsublats(lat))
     Names         : $(displaynames(lat))
     Orbitals      : $(displayorbitals(lat))
     Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell
   Supercell
     Dimensions    : $(dim(lat.supercell))
+    Vectors       : $(displayvectors(lat.supercell.matrix))
     Total sites   : $(nsites(lat.supercell))")
 
 # API #
@@ -268,53 +264,83 @@ sublatindex(lat::Lattice, name::NameType) = findfirst(s -> (s.name == name), lat
 sublatindex(lat::Lattice, i::Integer) = Int(i)
 
 #######################################################################
-# grow
+# superlattice
 #######################################################################
-const TOOMANYITERS = 10^8
-
-_truefunc(r) = true
-
 """
-    grow(lattice::Lattice{E,L}; supercell = SMatrix{L,0,Int}(), region = r -> true)
+    superlattice(lattice::Lattice{E,L}, v::NTuple{N,Integer}...; region = r -> true)
+    superlattice(lattice::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = r -> true)
 
-Modifies the supercell of an `L`-dimensional lattice to match an `L´`-dimensional
-`supercell::SMatrix{L,L´,Int}`. The supercell Bravais matrix `br´` in terms of the `lattice`
-Bravais matrix `br` is `br´ = br * supercell`. Only sites at position `r` such that
-`region(r) == true` will be included in the supercell. Note that in the case of `L´<L`,
-a bounded `region` function must be provided to limit the extension along the non-periodic
-dimensions.
+Modifies the supercell of `L`-dimensional `lattice` to one with Bravais vectors
+`br´= br * supercell`, where `supercell::SMatrix{L,L´,Int}` is the integer supercell matrix
+with the `v`s as columns. Only sites at position `r` such that `region(r) == true` will be
+included in the supercell. Note that in the case of `L´ < L`,a bounded `region` function
+must be provided to limit the extension along the non-periodic dimensions.
 
-`supercell` can be given as an integer matrix `s::SMatrix{L,L2,Int}`, a single integer
-`s::Int` (`supercell = s * I`), a single `NTuple{L,Int}` (`supercell` diagonal), or a tuple
-of  `NTuple{L,Int}`s (`supercell` columns).
+    superlattice(lattice::Lattice{E,L}, factor::Integer; region = r -> true)
 
-    lattice |> grow(supercell = s, region = f)
+Calls `superlattice` with a uniformly scaled `supercell = factor * I`
 
-Functional syntax, equivalent to `grow(lattice; supercell = s, region = f)
+    superlattice(lattice::Lattice{E,L}, factors::Integer...; region = r -> true)
+
+Calls `superlattice` with different scaling along each Bravais vector (supercell with
+factors along the diagonal)
+
+    lattice |> superlattice(v...; kw...)
+
+Functional syntax, equivalent to `superlattice(lattice, v...; kw...)
 
 # Examples
 ```jldoctest
-julia> grow(LatticePresets.triangular(), supercell = ((10,2),), region = r-> 0 < r[2] < 4)
+julia> superlattice(LatticePresets.honeycomb(), region = RegionPresets.circle(300))
+Lattice{2,2,Float64} : 2D lattice in 2D space
+  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Orbitals      : ((:noname,), (:noname,))
+    Sites         : (1, 1) --> 2 total per unit cell
+  Supercell
+    Dimensions    : 0
+    Vectors       : ()
+    Total sites   : 652966
+
+julia> superlattice(LatticePresets.triangular(), (1,1), (1, -1))
 Lattice{2,2,Float64} : 2D lattice in 2D space
   Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
   Sublattices     : 1
-    Names         : (:1)
-    Orbitals      : ((:noname))
-    Sites         : (1,) --> 1 total per unit cell
+    Names         : (:A)
+    Orbitals      : ((:noname,),)
+    Sites         : (1) --> 1 total per unit cell
   Supercell
-    Dimensions    : 1
-    Total sites   : 52
+    Dimensions    : 2
+    Vectors       : ((1, 1), (1, -1))
+    Total sites   : 2
+
+julia> LatticePresets.square() |> superlattice(3)
+Lattice{2,2,Float64} : 2D lattice in 2D space
+  Bravais vectors : ((1.0, 0.0), (0.0, 1.0))
+  Sublattices     : 1
+    Names         : (:A)
+    Orbitals      : ((:noname,),)
+    Sites         : (1) --> 1 total per unit cell
+  Supercell
+    Dimensions    : 2
+    Vectors       : ((3, 0), (0, 3))
+    Total sites   : 9
 ```
 
 # See also
 
     'Region`
 """
-grow(; kw...) = lat -> grow(lat; kw...)
-grow(lat::Lattice{E,L}; supercell = SMatrix{L,0,Int}(), region = _truefunc) where {E,L} =
-    _grow(lat, tosupercell(supercell, Val(L)), region)
-
-function _grow(lat::Lattice{E,L}, supercell, region) where {E,L}
+superlattice(v...; kw...) = lat -> superlattice(lat, v...; kw...)
+superlattice(lat::Lattice{E,L}; kw...) where {E,L} = superlattice(lat, SMatrix{L,0,Int}(); kw...)
+superlattice(lat::Lattice{E,L}, factor::Integer; kw...) where {E,L} =
+    superlattice(lat, SMatrix{L,L,Int}(factor * I); kw...)
+superlattice(lat::Lattice{E,L}, factors::Vararg{Integer,L}; kw...) where {E,L} =
+    superlattice(lat, SMatrix{L,L,Int}(Diagonal(SVector(factors))); kw...)
+superlattice(lat::Lattice{E,L}, vecs::NTuple{L,Int}...; kw...) where {E,L} =
+    superlattice(lat, toSMatrix(Int, vecs...); kw...)
+function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = _truefunc) where {E,L,L´}
     bravais = lat.bravais.matrix
     iter = BoxIterator(zero(SVector{L,Int}))
     is_grow_dir = is_perp_dir(supercell)
@@ -322,10 +348,11 @@ function _grow(lat::Lattice{E,L}, supercell, region) where {E,L}
     counter = 0
     for dn in iter   # We first compute the bounding box
         found = false
-        counter += 1; counter == TOOMANYITERS && @warn "`region` seems unbounded"
+        counter += 1; counter == TOOMANYITERS &&
+            throw(ArgumentError("`region` seems unbounded (after $TOOMANYITERS iterations)"))
         is_grow_dn = is_grow_dir(SVector(Tuple(dn)))
         r0 = bravais * SVector(Tuple(dn))
-        for s in eachindex(lat.sublats), site in lat.sublats[s].sites
+        for site in lat.unitcell.sites
             r = r0 + site
             found = is_grow_dn && region(r)
             if found || !foundfirst
@@ -339,26 +366,23 @@ function _grow(lat::Lattice{E,L}, supercell, region) where {E,L}
     ns = nsites(lat)
     cellmask = OffsetArray(BitArray(undef, ns, size(c)...), 1:ns, c.indices...)
     @inbounds for dn in c
-        is_grow_dn = is_grow_dir(SVector(Tuple(dn)))
-        is_grow_dn || (cellmask[:,dn] .= false; continue)
-        r0 = bravais * SVector(Tuple(dn))
-        counter = 0 # Not threadsafe!
-        for s in eachindex(lat.sublats), site in lat.sublats[s].sites
-            counter += 1
+        dntup = Tuple(dn)
+        dnvec = SVector(dntup)
+        is_grow_dn = is_grow_dir(dnvec)
+        is_grow_dn || (cellmask[:, dntup...] .= false; continue)
+        r0 = bravais * dnvec
+        for (i, site) in enumerate(lat.unitcell.sites)
             r = site + r0
-            cellmask[counter, Tuple(dn)...] = is_grow_dn && region(r)
+            cellmask[i, dntup...] = is_grow_dn && region(r)
         end
     end
     supercell = Supercell(supercell, cellmask)
-    return Lattice(lat.bravais, lat.sublats, supercell)
+    return Lattice(lat.bravais, lat.unitcell, supercell)
 end
 
-tosupercell(s::SMatrix{L,L2,Int}, ::Val{L}) where {L,L2} = s
-tosupercell(s::Number, ::Val{L}) where {L} = SMatrix{L,L,Int}(I)
-tosupercell(s::NTuple{L,Number}, ::Val{L}) where {L} =
-    SMatrix{L,L,Int}(Diagonal(SVector{L,Int}(s)))
-tosupercell(s::NTuple{L2,Tuple}, ::Val{L}) where {L,L2} =
-    convert(SMatrix{L,L2,Int}, toSMatrix(s...))
+const TOOMANYITERS = 10^8
+
+_truefunc(r) = true
 
 # pseudoinverse of s times an integer n, so that it is an integer matrix (for accuracy)
 pinvint(s::SMatrix{N,0}) where {N} = (SMatrix{0,0,Int}(), 0)

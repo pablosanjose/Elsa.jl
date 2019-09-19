@@ -59,6 +59,11 @@ pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')
 display_as_tuple(v, prefix = "") = isempty(v) ? "()" : 
     string("(", prefix, join(v, string(", ", prefix)), ")")
 
+displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; kw...) where {E,L} =
+    ntuple(l -> round.(Tuple(mat[:,l]); kw...), Val(L))
+displayvectors(mat::SMatrix{E,L,<:Integer}; kw...) where {E,L} =
+    ntuple(l -> Tuple(mat[:,l]), Val(L))
+
 # padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
 
 # function padrightbottom(m::Matrix{T}, zeroT::T, im, jm) where T
