@@ -56,6 +56,9 @@ nnzdiag(s::Matrix) = minimum(size(s))
 
 pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')
 
+display_as_tuple(v, prefix = "") = isempty(v) ? "()" : 
+    string("(", prefix, join(v, string(", ", prefix)), ")")
+
 # padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
 
 # function padrightbottom(m::Matrix{T}, zeroT::T, im, jm) where T

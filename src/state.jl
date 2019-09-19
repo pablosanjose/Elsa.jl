@@ -14,7 +14,7 @@ State(lat::Lattice{E,L,T};
     State(vector, phases, lat.supercell)
 
 zerophases(lat::Lattice{E,L,T}) where {E,L,T} =
-    zero(SVector{nopenboundaries(lat.supercell),T})
+    zero(SVector{dim(lat.supercell),T})
 
 Base.show(io::IO, s::State{L,O,V}) where {L,O,N,Tv,V<:SVector{N,Tv}} = print(io,
 "State{$L,$O} : state of an $(L)D lattice with an $(O)D supercell
@@ -62,7 +62,7 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
     celliter = CartesianIndices(tail(axes(B)))
     cols = 1:size(first(ham.harmonics).h, 2)
     bbox = boundingbox(s.supercell)
-    Ninv = pinverse(s.supercell.openbravais)
+    Ninv = pinverse(s.supercell.matrix)
     zeroV = zero(V)
     # Scale target by β
     if β != 1

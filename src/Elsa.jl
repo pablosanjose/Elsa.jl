@@ -7,7 +7,7 @@ import Base: convert, iterate, ==, tail
 import SparseArrays: sparse!, mul!, getcolptr
 
 export sublat, bravais, lattice, hopping, onsite, hamiltonian, randomstate,
-       scale, mul!, grow, combine, transform, transform!, bound,
+       mul!, grow, combine, transform, transform!, bound,
        sitepositions, neighbors, bravaismatrix, marchingmesh
 export MomentaKPM, dosKPM
 export LatticePresets, SystemPresets, RegionPresets

@@ -1,5 +1,5 @@
 #######################################################################
-# Sublattice (Sublat) : a group of identical sites (e.g. same orbitals)
+# Sublat (sublattice)
 #######################################################################
 struct Sublat{E,T,D}
     sites::Vector{SVector{E,T}}
@@ -103,21 +103,59 @@ Base.:*(factor, b::Bravais) = Bravais(factor * b.matrix)
 Base.:*(b::Bravais, factor) = Bravais(b.matrix * factor)
 
 #######################################################################
+# Unitcell
+#######################################################################
+struct Unitcell{E,T,O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}}
+    sites::Vector{SVector{E,T}}
+    names::Vector{NameType}
+    offsets::Vector{Int}
+    orbitals::O
+end
+
+Unitcell(sublats::Sublat...; kw...) = Unitcell(promote(sublats...); kw...)
+function Unitcell(sublats::NTuple{N,Sublat{E,T}};
+    dim::Val{E2} = Val(E),
+    type::Type{T2} = float(T),
+    names::Vector{NameType} = [s.name for s in sublats],
+    orbitals::NTuple{N,Tuple{Vararg{NameType}}} = (s->s.orbitals).(sublats)) where {N,E,E2,T,T2}
+    # Make sublat names unique
+    allnames = NameType[:_]
+    for i in eachindex(names)
+        names[i] in allnames && (names[i] = uniquename(allnames, names[i], i))
+        push!(allnames, names[i])
+    end
+    sites = SVector{E2,T2}[]
+    offsets = [0]  # length(offsets) == lenfth(sublats) + 1
+    for s in eachindex(sublats)
+        append!(sites, sublats[s].sites)
+        push!(offsets, length(sites))
+    end
+    return Unitcell(sites, names, offsets, orbitals)
+end
+
+function uniquename(allnames, name, i)
+    newname = nametype(Char(64+i)) # Lexicographic, starting from Char(65) = 'A'
+    return newname in allnames ? uniquename(allnames, name, i + 1) : newname
+end
+
+nsites(u::Unitcell) = length(u.sites)
+
+#######################################################################
 # Supercell
 #######################################################################
-struct Supercell{L,O,LP,LO}
-    openbravais::SMatrix{L,O,Int,LO}
+struct Supercell{L,L´,LP,LL´} # LP = L+1, L is lattice dim, L´ is supercell dim
+    matrix::SMatrix{L,L´,Int,LL´}
     cellmask::OffsetArray{Bool,LP,BitArray{LP}}
 end
 
-Supercell{L,O}(nsites::Integer,
-               ranges::NTuple{L,AbstractRange} = ntuple(_ -> 0:0, Val(L))) where {L,O} =
-    Supercell(SMatrix{L,O,Int,L*O}(I),
+Supercell{L,L´}(nsites::Integer,
+               ranges::NTuple{L,AbstractRange} = ntuple(_ -> 0:0, Val(L))) where {L,L´} =
+    Supercell(SMatrix{L,L´,Int,L*L´}(I),
               OffsetArray(trues(1:nsites, length.(ranges)...), 1:nsites, ranges...))
 
-nopenboundaries(::Supercell{L,O}) where {L,O} = O
+dim(::Supercell{L,L´}) where {L,L´} = L´
 
-nsupercellsites(s::Supercell) = sum(s.cellmask)
+nsites(s::Supercell) = sum(s.cellmask)
 
 function scale(s::Supercell, naxes)
     siterange = first(axes(s.cellmask))
@@ -127,39 +165,39 @@ function scale(s::Supercell, naxes)
         cd, _ = wrap(tail(Tuple(c)), bbox)
         newmask[c] = s.cellmask[first(Tuple(c)), cd...]
     end
-    return Supercell(s.openbravais, newmask)
+    return Supercell(s.matrix, newmask)
 end
 
 boundingbox(s::Supercell) = extrema.(tail(axes(s.cellmask)))
 
-# @inline wrap(i::CartesianIndex, bbox) = wrap(Tuple(i), bbox)
 @inline function wrap(i::Tuple, bbox)
     n = _wrapdiv.(i, bbox)
     j = _wrapmod.(i, bbox)
     return j, SVector(n)
 end
-_wrapdiv(n, (nmin, nmax)) = nmin <= n <= nmax ? 0 : div(n - nmin, 1 + nmax - nmin)
-_wrapmod(n, (nmin, nmax)) = nmin <= n <= nmax ? n : nmin + mod(n - nmin, 1 + nmax - nmin)
 
+_wrapdiv(n, (nmin, nmax)) = nmin <= n <= nmax ? 0 : div(n - nmin, 1 + nmax - nmin)
+
+_wrapmod(n, (nmin, nmax)) = nmin <= n <= nmax ? n : nmin + mod(n - nmin, 1 + nmax - nmin)
 
 #######################################################################
 # Lattice
 #######################################################################
-struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},S<:Tuple{Vararg{Sublat{E,T}}},D<:Supercell{L}}
+struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T},S<:Supercell{L}}
     bravais::B
-    sublats::S
-    supercell::D
-    offsets::Vector{Int}
+    unitcell::U
+    supercell::S
 end
-Lattice(bravais::Bravais{E2,L}, sublats::Tuple{Vararg{Sublat{E,T}}},
-        supercell = Supercell{L,L}(sum(nsites, sublats))) where {E,L,T,E2} =
-    Lattice(convert(Bravais{E,L,T}, bravais), sublats, supercell, offsets(sublats))
+function Lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,E,T}
+    L = min(E,L2) # L should not exceed E
+    Lattice(convert(Bravais{E,L,T}, bravais), unitcell, Supercell{L,L}(nsites(unitcell)))
+end
 
 # find SVector type that can hold all orbital amplitudes in any lattice sites
 orbitaltype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
-    _orbitaltype(SVector{1,Tv}, lat.sublats...)
-_orbitaltype(::Type{S}, s::Sublat{E,T,D}, ss...) where {N,Tv,E,T,D,S<:SVector{N,Tv}} =
-    (M = max(N,D); _orbitaltype(SVector{M,Tv}, ss...))
+    _orbitaltype(SVector{1,Tv}, lat.unitcell.orbitals...)
+_orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
+    (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
 _orbitaltype(t) = t
 
 # find SMatrix type that can hold all matrix elements between lattice sites
@@ -167,10 +205,11 @@ blocktype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
     _blocktype(orbitaltype(lat, Tv))
 _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
 
-sublat(lat::Lattice, siteidx) = findlast(o -> o < siteidx, lat.offsets)
+sublat(lat::Lattice, siteidx) = findlast(o -> o < siteidx, lat.unitcell.offsets)
+siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.offsets[sublat+1]
 
-displaynames(l::Lattice) = string("(", join(displayname.(l.sublats), ", "), ")")
-displayorbitals(l::Lattice) = string("(", join(displayorbitals.(l.sublats), ", "), ")")
+displaynames(l::Lattice) = display_as_tuple(l.unitcell.names, ":")
+displayorbitals(l::Lattice) = string(l.unitcell.orbitals)
 displayvectors(lat::Lattice) = displayvectors(lat.bravais.matrix; digits = 6)
 
 Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T} = print(io,
@@ -179,10 +218,10 @@ Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T} = print(io,
   Sublattices     : $(nsublats(lat))
     Names         : $(displaynames(lat))
     Orbitals      : $(displayorbitals(lat))
-    Sites         : $(nsites.(lat.sublats)) --> $(nsites(lat)) total per unit cell
+    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell
   Supercell
-    Dimensions    : $(nopenboundaries(lat.supercell))
-    Total sites   : $(nsupercellsites(lat.supercell))")
+    Dimensions    : $(dim(lat.supercell))
+    Total sites   : $(nsites(lat.supercell))")
 
 # API #
 
@@ -202,60 +241,31 @@ Lattice{3,1,Float64}: 1-dimensional lattice with 2 Float64-typed sublattices in
 3-dimensional embedding space
 ```
 """
-lattice(sublats::Sublat...; kw...) = _lattice(promote(sublats...); kw...)
-lattice(br::Bravais, sublats::Sublat...; kw...) = _lattice(br, promote(sublats...); kw...)
+lattice(s::Sublat, ss::Sublat...; kw...) where {E,T} = _lattice(Unitcell(s, ss...; kw...))
+_lattice(u::Unitcell{E,T}) where {E,T} = Lattice(Bravais{E,T}(), u)
+lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = Lattice(br, Unitcell(s, ss...; kw...))
 
-function transform!(lat::Lattice, f::Function; sublats = eachindex(lat.sublats))
-    for s in sublats
-        sind = sublatindex(lat, s)
-        transform!(lat.sublats[sind], f)
-    end
-    br = transform(lat.bravais, f)
-    return Lattice(br, lat.sublats, lat.supercell)
-end
+# function transform!(lat::Lattice, f::Function; sublats = eachindex(lat.sublats))
+#     for s in sublats
+#         sind = sublatindex(lat, s)
+#         transform!(lat.sublats[sind], f)
+#     end
+#     br = transform(lat.bravais, f)
+#     return Lattice(br, lat.sublats, lat.supercell)
+# end
 
-transform(lat::Lattice, f; kw...) = transform!(deepcopy(lat), f; kw...)
-scale(lat::Lattice, s) =
-    Lattice(lat.bravais, copy.(lat.sublats), scale(lat.supercell, s), copy(lat.offsets))
+# transform(lat::Lattice, f; kw...) = transform!(deepcopy(lat), f; kw...)
+# scale(lat::Lattice, s) =
+#     Lattice(lat.bravais, copy.(lat.sublats), scale(lat.supercell, s), copy(lat.offsets))
 
 # Auxiliary #
 
-_lattice(sublats::NTuple{N,Sublat{E,T}}; kw...) where {E,T,N} = _lattice(Bravais{E,T}(), sublats; kw...)
-function _lattice(bravais::Bravais{E,L,T1}, sublats::NTuple{N,Sublat{E,T2}};
-                 dim::Val{E2} = Val(E), type::Type{T} = promote_type(T1,T2),
-                 names::NTuple{N} = (s->s.name).(sublats),
-                 orbitals::NTuple{N,Tuple} = (s->s.orbitals).(sublats)) where {N,T,E,L,T1,T2,E2}
-    allnames = NameType[:_]
-    vecnames = collect(names)
-    for i in eachindex(vecnames)
-        vecnames[i] in allnames && (vecnames[i] = uniquename(allnames, vecnames[i], i))
-        push!(allnames, vecnames[i])
-    end
-    names = ntuple(n -> vecnames[n], Val(N))
-    actualsublats = Sublat{E2,float(T)}.(sublats, nametype.(names), map.(nametype, orbitals))
-    return Lattice(bravais, actualsublats)
-end
-
-function uniquename(allnames, name, i)
-    newname = nametype(i)
-    return newname in allnames ? uniquename(allnames, name, i + 1) : newname
-end
-
-nsites(lat::Lattice) = isempty(lat.sublats) ? 0 : sum(nsites, lat.sublats)
-nsublats(lat) = length(lat.sublats)
+nsites(lat::Lattice) = length(lat.unitcell.sites)
+nsublats(lat) = length(lat.unitcell.names)
+sublatsites(lat::Lattice) = diff(lat.unitcell.offsets)
 
 sublatindex(lat::Lattice, name::NameType) = findfirst(s -> (s.name == name), lat.sublats)
 sublatindex(lat::Lattice, i::Integer) = Int(i)
-
-function offsets(sublats)
-    ns = [nsites.(sublats)...]
-    tot = 0
-    @inbounds for (i, n) in enumerate(ns)
-        ns[i] = tot
-        tot += n
-    end
-    return ns
-end
 
 #######################################################################
 # grow
