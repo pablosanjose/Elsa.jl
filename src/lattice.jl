@@ -20,7 +20,6 @@ Base.show(io::IO, s::Sublat{E,T,D}) where {E,T,D} = print(io,
 displayname(s::Sublat) = s.name == nametype(:_) ? "pending" : string(":", s.name)
 displayorbitals(s::Sublat) = string("(", join(string.(":", s.orbitals), ", "), ")")
 nsites(s::Sublat) = length(s.sites)
-norbitals(s::Sublat{E,T,D}) where {E,T,D} = D
 
 # API #
 
@@ -144,27 +143,22 @@ struct Supercell{L,L´,LP,LL´} # LP = L+1, L is lattice dim, L´ is supercell d
     cellmask::OffsetArray{Bool,LP,BitArray{LP}}
 end
 
-# Supercell{L,L´}(nsites::Integer,
-#                ranges::NTuple{L,AbstractRange} = ntuple(_ -> 0:0, Val(L))) where {L,L´} =
-#     Supercell(SMatrix{L,L´,Int,L*L´}(I),
-#               OffsetArray(trues(1:nsites, length.(ranges)...), 1:nsites, ranges...))
-
 dim(::Supercell{L,L´}) where {L,L´} = L´
 
 nsites(s::Supercell) = sum(s.cellmask)
 
-function scale(s::Supercell, naxes)
-    siterange = first(axes(s.cellmask))
-    newmask = similar(s.cellmask, siterange, naxes...)
-    bbox = boundingbox(s)
-    for c in CartesianIndices(newmask)
-        cd, _ = wrap(tail(Tuple(c)), bbox)
-        newmask[c] = s.cellmask[first(Tuple(c)), cd...]
-    end
-    return Supercell(s.matrix, newmask)
-end
+# function scale(s::Supercell, naxes)
+#     siterange = first(axes(s.cellmask))
+#     newmask = similar(s.cellmask, siterange, naxes...)
+#     bbox = boundingbox(s)
+#     for c in CartesianIndices(newmask)
+#         cd, _ = wrap(tail(Tuple(c)), bbox)
+#         newmask[c] = s.cellmask[first(Tuple(c)), cd...]
+#     end
+#     return Supercell(s.matrix, newmask)
+# end
 
-boundingbox(s::Supercell) = extrema.(tail(axes(s.cellmask)))
+# boundingbox(s::Supercell) = extrema.(tail(axes(s.cellmask)))
 
 @inline function wrap(i::Tuple, bbox)
     n = _wrapdiv.(i, bbox)
@@ -187,7 +181,7 @@ end
 #######################################################################
 # Lattice
 #######################################################################
-struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T},S<:Union{Missing,Supercell{L}}}
+struct Lattice{E,L,T<:AbstractFloat,S<:Union{Missing,Supercell{L}},B<:Bravais{E,L,T},U<:Unitcell{E,T}}
     bravais::B
     unitcell::U
     supercell::S
@@ -214,6 +208,17 @@ siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.
 
 displaynames(l::Lattice) = display_as_tuple(l.unitcell.names, ":")
 displayorbitals(l::Lattice) = string(l.unitcell.orbitals)
+
+function Supercell(lat::Lattice{E,L},
+    ranges::NTuple{L,AbstractRange} = ntuple(_->0:0, Val(L))) where {E,L}
+    ns = nsites(lat)
+    sc = Supercell(SMatrix{L,L,Int,L*L}(Diagonal(SVector(length.(ranges)))),
+                   OffsetArray(trues(1:ns, length.(ranges)...), 1:ns, ranges...))
+    return sc
+end
+
+hassupercell(lat::Lattice{E,L,T,Missing}) where {E,L,T} = false
+hassupercell(lat::Lattice{E,L,T}) where {E,L,T} = true
 
 function Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T}
     ioindent = IOContext(io, :indent => "  ")
