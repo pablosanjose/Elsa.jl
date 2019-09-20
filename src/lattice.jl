@@ -144,10 +144,10 @@ struct Supercell{L,L´,LP,LL´} # LP = L+1, L is lattice dim, L´ is supercell d
     cellmask::OffsetArray{Bool,LP,BitArray{LP}}
 end
 
-Supercell{L,L´}(nsites::Integer,
-               ranges::NTuple{L,AbstractRange} = ntuple(_ -> 0:0, Val(L))) where {L,L´} =
-    Supercell(SMatrix{L,L´,Int,L*L´}(I),
-              OffsetArray(trues(1:nsites, length.(ranges)...), 1:nsites, ranges...))
+# Supercell{L,L´}(nsites::Integer,
+#                ranges::NTuple{L,AbstractRange} = ntuple(_ -> 0:0, Val(L))) where {L,L´} =
+#     Supercell(SMatrix{L,L´,Int,L*L´}(I),
+#               OffsetArray(trues(1:nsites, length.(ranges)...), 1:nsites, ranges...))
 
 dim(::Supercell{L,L´}) where {L,L´} = L´
 
@@ -176,17 +176,25 @@ _wrapdiv(n, (nmin, nmax)) = nmin <= n <= nmax ? 0 : div(n - nmin, 1 + nmax - nmi
 
 _wrapmod(n, (nmin, nmax)) = nmin <= n <= nmax ? n : nmin + mod(n - nmin, 1 + nmax - nmin)
 
+function Base.show(io::IO, s::Supercell{L,L´}) where {L,L´}
+    i = get(io, :indent, "")
+    print(io,
+"$(i)Supercell{$L,$(L´)} for $(L´)D superlattice of the base $(L)D lattice
+$(i)  Dimensions    : $(dim(s))
+$(i)  Vectors       : $(displayvectors(s.matrix))
+$(i)  Total sites   : $(nsites(s))")
+end
 #######################################################################
 # Lattice
 #######################################################################
-struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T},S<:Supercell{L}}
+struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T},S<:Union{Missing,Supercell{L}}}
     bravais::B
     unitcell::U
     supercell::S
 end
 function Lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,E,T}
     L = min(E,L2) # L should not exceed E
-    Lattice(convert(Bravais{E,L,T}, bravais), unitcell, Supercell{L,L}(nsites(unitcell)))
+    Lattice(convert(Bravais{E,L,T}, bravais), unitcell, missing)
 end
 
 # find SVector type that can hold all orbital amplitudes in any lattice sites
@@ -207,17 +215,18 @@ siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.
 displaynames(l::Lattice) = display_as_tuple(l.unitcell.names, ":")
 displayorbitals(l::Lattice) = string(l.unitcell.orbitals)
 
-Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T} = print(io,
+function Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T}
+    ioindent = IOContext(io, :indent => "  ")
+    print(io,
 "Lattice{$E,$L,$T} : $(L)D lattice in $(E)D space
   Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))
   Sublattices     : $(nsublats(lat))
     Names         : $(displaynames(lat))
     Orbitals      : $(displayorbitals(lat))
-    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell
-  Supercell
-    Dimensions    : $(dim(lat.supercell))
-    Vectors       : $(displayvectors(lat.supercell.matrix))
-    Total sites   : $(nsites(lat.supercell))")
+    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell",
+    "\n")
+    lat.supercell === missing || print(ioindent, lat.supercell)
+end
 
 # API #
 
@@ -260,8 +269,8 @@ nsites(lat::Lattice) = length(lat.unitcell.sites)
 nsublats(lat) = length(lat.unitcell.names)
 sublatsites(lat::Lattice) = diff(lat.unitcell.offsets)
 
-sublatindex(lat::Lattice, name::NameType) = findfirst(s -> (s.name == name), lat.sublats)
-sublatindex(lat::Lattice, i::Integer) = Int(i)
+# sublatindex(lat::Lattice, name::NameType) = findfirst(s -> (s.name == name), lat.sublats)
+# sublatindex(lat::Lattice, i::Integer) = Int(i)
 
 #######################################################################
 # superlattice

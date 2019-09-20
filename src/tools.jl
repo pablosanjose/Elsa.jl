@@ -33,10 +33,7 @@ padright(sv::StaticVector{E,T}, x::T2, ::Val{E2}) where {E,T,E2,T2} =
 padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
 
 @inline pad(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,T2,S<:SMatrix{E2,L2,T2}} =
-    S(ntuple(k -> _pad((k - 1) % E2 + 1, (k - 1) ÷ E2 + 1, zero(T2), s), Val(E2 * L2)))
-
-@inline _pad(i, j, zero, s::SMatrix{E,L}) where {E,L} =
-    i > E || j > L ? zero : s[i,j]
+    S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
 
 ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
 negative(s::SVector{L,<:Number}) where {L} = -s
