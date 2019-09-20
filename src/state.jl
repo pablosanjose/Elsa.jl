@@ -22,9 +22,6 @@ cellmaskaxes(lat::Lattice{E,L}) where {E,L} = axes(lat.supercell.cellmask)
 nsites(s::State{L,V,T,Missing}) where {L,V,T} = length(s.vector)
 nsites(s::State) = nsites(s.supercell)
 
-supercellinverse(s::State{L,V,T,Missing}) where {L,V,T} = SMatrix{L,L,T}(I)
-supercellinverse(s::State{L,V,T}) where {L,V,T} = pinverse(s.supercell.matrix)
-
 isemptycell(s::State{L,V,T,Missing}, cell) where {L,V,T} = false
 function isemptycell(s::State{L,V,T}, cell) where {L,V,T}
     @inbounds for i in size(s.supercell.cellmask, 1)
@@ -80,7 +77,6 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
     celliter = CartesianIndices(tail(axes(B)))
     cols = 1:size(first(ham.harmonics).h, 2)
     bbox = boundingbox(s)
-    Ninv = supercellinverse(s)
     zeroV = zero(V)
     # Scale target by β
     if β != 1
@@ -93,7 +89,7 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
         for h in ham.harmonics
             dn = Tuple(h.dn)
             j, dN = wrap(i .+ dn, bbox)
-            α´ = α * cis(s.phases' * Ninv * dN)
+            α´ = α * cis(s.phases' * dN)
             nzv = nonzeros(h.h)
             rv = rowvals(h.h)
             for col in cols
