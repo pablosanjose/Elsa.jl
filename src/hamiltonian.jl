@@ -6,16 +6,9 @@ struct HamiltonianHarmonic{L,Tv,A<:AbstractMatrix{<:SMatrix{N,N,Tv} where N}}
     h::A
 end
 
-struct Field{F<:Union{Missing,Function},N<:NamedTuple}
-    f::F
-    args::N
-end
-
-Field(f) = Field(f, NamedTuple())
-
-struct Hamiltonian{L,Tv,F,H<:HamiltonianHarmonic{L,Tv},X<:Field{F}}
+struct Hamiltonian{L,Tv,H<:HamiltonianHarmonic{L,Tv},F<:Union{Missing,Field}}
     harmonics::Vector{H}
-    field::X
+    field::F
 end
 
 nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : size(first(h.harmonics).h, 1)
@@ -50,7 +43,7 @@ displaytype(A::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC, sparse"
 displaytype(A::Type{<:Array}) = "Matrix, dense"
 displaytype(A::Type) = string(A)
 
-Base.show(io::IO, ham::Hamiltonian{L,Tv,F,H}) where
+Base.show(io::IO, ham::Hamiltonian{L,Tv,H,F}) where
     {L,Tv,N,F,A<:AbstractArray{<:SMatrix{N,N,Tv}},H<:HamiltonianHarmonic{L,Tv,A}} = print(io,
 "Hamiltonian{$L,$Tv} : $(L)D Hamiltonian of element type SMatrix{$N,$N,$Tv}
   Bloch harmonics  : $(length(ham.harmonics)) ($(displaytype(A)))
@@ -123,7 +116,7 @@ function hamiltonian_sparse(::Type{M}, lat::Lattice{E,L}, model; field = missing
     n = nsites(lat)
     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n, (x, xc) -> 0.5 * (x + xc)))
                    for e in builder.ijvs if !isempty(e)]
-    return Hamiltonian(harmonics, Field(field))
+    return Hamiltonian(harmonics, Field(field, lat))
 end
 
 applyterms!(builder, terms...) = foreach(term -> applyterm!(builder, term), terms)

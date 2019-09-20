@@ -95,7 +95,7 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
             for col in cols
                 αxj = B[col, i...] * α´
                 for p in nzrange(h.h, col)
-                    C[rv[p], j...] += nzv[p] * αxj
+                    C[rv[p], j...] += applyfield(ham.field, nzv[p], rv[p], col, h.dn) * αxj
                 end
             end
         end
@@ -107,4 +107,4 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
         end
     end
     return t
-end 
+end
