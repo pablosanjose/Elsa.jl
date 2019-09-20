@@ -1,26 +1,45 @@
 #######################################################################
 # State
 #######################################################################
-struct State{L,O,V,T,LP,A<:AbstractArray{V,LP},D<:Supercell{L,O,LP}}
+struct State{L,V,T,S<:Union{Missing,Supercell{L}},A<:OffsetArray{V}}
     vector::A
-    phases::SVector{O,T}
-    supercell::D
+    phases::SVector{L,T}
+    supercell::S
 end
 
 State(lat::Lattice{E,L,T};
       type::Type{Tv} = Complex{T},
-      vector = OffsetArray{orbitaltype(lat, type)}(undef, axes(lat.supercell.cellmask)),
+      vector = OffsetArray{orbitaltype(lat, Tv)}(undef, cellmaskaxes(lat)),
       phases = zerophases(lat)) where {E,L,T,Tv} =
     State(vector, phases, lat.supercell)
 
-zerophases(lat::Lattice{E,L,T}) where {E,L,T} =
-    zero(SVector{nopenboundaries(lat.supercell),T})
+zerophases(lat::Lattice{E,L,T,Missing}) where {E,L,T} = zero(SVector{L,T})
+zerophases(lat::Lattice{E,L,T}) where {E,L,T} = zero(SVector{dim(lat.supercell),T})
 
-Base.show(io::IO, s::State{L,O,V}) where {L,O,N,Tv,V<:SVector{N,Tv}} = print(io,
-"State{$L,$O} : state of an $(L)D lattice with an $(O)D supercell
+cellmaskaxes(lat::Lattice{E,L,T,Missing}) where {E,L,T} = (1:nsites(lat), ntuple(_->0:0, Val(L))...)
+cellmaskaxes(lat::Lattice{E,L}) where {E,L} = axes(lat.supercell.cellmask)
+
+nsites(s::State{L,V,T,Missing}) where {L,V,T} = length(s.vector)
+nsites(s::State) = nsites(s.supercell)
+
+supercellinverse(s::State{L,V,T,Missing}) where {L,V,T} = SMatrix{L,L,T}(I)
+supercellinverse(s::State{L,V,T}) where {L,V,T} = pinverse(s.supercell.matrix)
+
+isemptycell(s::State{L,V,T,Missing}, cell) where {L,V,T} = false
+function isemptycell(s::State{L,V,T}, cell) where {L,V,T}
+    @inbounds for i in size(s.supercell.cellmask, 1)
+        s.supercell.cellmask[i, cell...] && return false
+    end
+    return true
+end
+
+boundingbox(s::State) = extrema.(tail(axes(s.vector)))
+
+Base.show(io::IO, s::State{L,V}) where {L,N,Tv,V<:SVector{N,Tv}} = print(io,
+"State{$L} : state of an $(L)D lattice or superlattice
   Element type     : $Tv
   Max orbital size : $N
-  Orbitals        : $(sum(s.supercell.cellmask))")
+  Sites            : $(nsites(s))")
 
 Base.copy!(t::S, s::S) where {S<:State} = State(copy!(t.vector, s.vector), s.phases, s.supercell)
 Base.copy(s::State) = State(copy(s.vector), s.phases, s.supercell)
@@ -34,35 +53,34 @@ function randomstate(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,
     N = length(V)
     r == 0 || throw(
         error("Unexpected error: cannot reinterpret orbital type $V as a number of floats"))
-    cellmask = lat.supercell.cellmask
-    masksize = size(cellmask)
-    norbs = norbitals.(lat.sublats)
+    masksize = length.(cellmaskaxes(lat))
+    norbs = length.(lat.unitcell.orbitals)
     v = rand(T, n * N, masksize...) # for performance, use n×N Floats to build an S
     @inbounds for c in CartesianIndices(masksize)
         site = first(Tuple(c))
-        insupercell = cellmask.parent[c]
+        insupercell = !hassupercell(lat) || lat.supercell.cellmask.parent[c]
         norb = norbs[sublat(lat, site)] * insupercell
         for j in 1:N, i in 1:n
             v[i + (j-1)*n, Tuple(c)...] =
                 (v[i + (j-1)*n, Tuple(c)...] - T(0.5)) * (j <= norb)
         end
     end
-    normalize!(vec(v)) # rmul!(v, 1/sqrt(sum(abs2, v))) also works, slightly faster
+    rmul!(v, inv(norm(v))) # normalize! without needing to cast v as vector
     rv = reinterpret(V, v)
-    sv = OffsetArray([rv[1, c] for c in CartesianIndices(masksize)], axes(cellmask))
+    sv = OffsetArray([rv[1, c] for c in CartesianIndices(masksize)], cellmaskaxes(lat))
     return State(sv, zerophases(lat), lat.supercell)
 end
 
 #######################################################################
 # mul!
 #######################################################################
-function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = false) where {L,O,V,S<:State{L,O,V}}
+function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = false) where {L,V,S<:State{L,V}}
     C = t.vector
     B = s.vector
     celliter = CartesianIndices(tail(axes(B)))
     cols = 1:size(first(ham.harmonics).h, 2)
-    bbox = boundingbox(s.supercell)
-    Ninv = pinverse(s.supercell.openbravais)
+    bbox = boundingbox(s)
+    Ninv = supercellinverse(s)
     zeroV = zero(V)
     # Scale target by β
     if β != 1
@@ -71,6 +89,7 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
     # Add α * blochphase * h * source to target
     @inbounds Threads.@threads for ic in celliter
         i = Tuple(ic)
+        # isemptycell(s, i) && continue # good for performance?
         for h in ham.harmonics
             dn = Tuple(h.dn)
             j, dN = wrap(i .+ dn, bbox)
@@ -86,8 +105,10 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
         end
     end
     # Filter out sites not in supercell
-    @simd for j in eachindex(t.vector)
-        @inbounds s.supercell.cellmask[j] || (t.vector[j] = zeroV)
+    if s.supercell !== missing
+        @simd for j in eachindex(t.vector)
+            @inbounds s.supercell.cellmask[j] || (t.vector[j] = zeroV)
+        end
     end
     return t
-end
+end 

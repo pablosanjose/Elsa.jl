@@ -6,14 +6,16 @@ struct HamiltonianHarmonic{L,Tv,A<:AbstractMatrix{<:SMatrix{N,N,Tv} where N}}
     h::A
 end
 
-struct Hamiltonian{L,Tv,H<:HamiltonianHarmonic{L,Tv}}
-    harmonics::Vector{H}
+struct Field{F<:Union{Missing,Function},N<:NamedTuple}
+    f::F
+    args::N
 end
 
-struct HamiltonianBuilder{L,Tv,H<:Hamiltonian{L,Tv},F<:Function,P<:NamedTuple}
-    h::H
-    field::F
-    parameters::P
+Field(f) = Field(f, NamedTuple())
+
+struct Hamiltonian{L,Tv,F,H<:HamiltonianHarmonic{L,Tv},X<:Field{F}}
+    harmonics::Vector{H}
+    field::X
 end
 
 nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : size(first(h.harmonics).h, 1)
@@ -37,17 +39,21 @@ end
 _nnz(h::SparseMatrixCSC) = nnz(h)
 _nnz(h::Matrix) = length(h)
 
-Base.Matrix(h::Hamiltonian) = Hamiltonian(Matrix.(h.harmonics))
+Base.Matrix(h::Hamiltonian) = Hamiltonian(Matrix.(h.harmonics), h.field, h.lattice)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
 Base.show(io::IO, h::HamiltonianHarmonic{L,Tv,A}) where
     {L,Tv,N,A<:AbstractArray{<:SMatrix{N,N,Tv}}} = print(io,
 "HamiltonianHarmonic{$L,$Tv} with dn = $(Tuple(h.dn)) and elements:", h.h)
 
-Base.show(io::IO, ham::Hamiltonian{L,Tv,H}) where
-    {L,Tv,N,A<:AbstractArray{<:SMatrix{N,N,Tv}},H<:HamiltonianHarmonic{L,Tv,A}} = print(io,
+displaytype(A::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC, sparse"
+displaytype(A::Type{<:Array}) = "Matrix, dense"
+displaytype(A::Type) = string(A)
+
+Base.show(io::IO, ham::Hamiltonian{L,Tv,F,H}) where
+    {L,Tv,N,F,A<:AbstractArray{<:SMatrix{N,N,Tv}},H<:HamiltonianHarmonic{L,Tv,A}} = print(io,
 "Hamiltonian{$L,$Tv} : $(L)D Hamiltonian of element type SMatrix{$N,$N,$Tv}
-  Bloch harmonics  : $(length(ham.harmonics)) $(A isa Type{<:SparseMatrixCSC} ? "(sparse)" : "(dense)")
+  Bloch harmonics  : $(length(ham.harmonics)) ($(displaytype(A)))
   Harmonic size    : $((n -> "$n × $n")(nsites(ham)))
   Onsites          : $(nonsites(ham))
   Hoppings         : $(nhoppings(ham))
@@ -57,8 +63,8 @@ Base.show(io::IO, ham::Hamiltonian{L,Tv,H}) where
 
 hamiltonian(lat::Lattice, t::TightbindingModelTerm...; kw...) =
     hamiltonian(lat, TightbindingModel(t); kw...)
-hamiltonian(lat::Lattice{E,L,T}, m::TightbindingModel; type::Type = Complex{T}) where {E,L,T} =
-    hamiltonian_sparse(blocktype(lat, type), lat, m.terms...)
+hamiltonian(lat::Lattice{E,L,T}, m::TightbindingModel; type::Type = Complex{T}, kw...) where {E,L,T} =
+    hamiltonian_sparse(blocktype(lat, type), lat, m; kw...)
 
 #######################################################################
 # auxiliary types
@@ -110,26 +116,28 @@ Base.push!(h::IJV, (i, j, v)) = (push!(h.i, i); push!(h.j, j); push!(h.v, v))
 #######################################################################
 # hamiltonian_sparse
 #######################################################################
-function hamiltonian_sparse(::Type{M}, lat::Lattice{E,L}, terms...) where {E,L,Tv,M<:SMatrix{D,D,Tv} where D}
+function hamiltonian_sparse(::Type{M}, lat::Lattice{E,L}, model; field = missing) where {E,L,Tv,M<:SMatrix{D,D,Tv} where D}
     builder = IJVBuilder{M}(lat)
-    applyterms!(builder, terms...)
+    applyterms!(builder, model.terms...)
     HT = HamiltonianHarmonic{L,Tv,SparseMatrixCSC{M,Int}}
     n = nsites(lat)
     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n, (x, xc) -> 0.5 * (x + xc)))
                    for e in builder.ijvs if !isempty(e)]
-    return Hamiltonian(harmonics)
+    return Hamiltonian(harmonics, Field(field))
 end
 
 applyterms!(builder, terms...) = foreach(term -> applyterm!(builder, term), terms)
 
 function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm) where {L,M}
-    for s in sublats(term, builder.lat)
+    lat = builder.lat
+    for s in sublats(term, lat)
+        is = siterange(lat, s)
         dn0 = zero(SVector{L,Int})
         ijv = builder[dn0]
-        offset = builder.lat.offsets[s]
-        for (n, r) in enumerate(builder.lat.sublats[s].sites)
-            i = offset + n
-            vs = orbsized(term(r), builder.lat.sublats[s])
+        offset = lat.unitcell.offsets[s]
+        for i in is
+            r = lat.unitcell.sites[r]
+            vs = orbsized(term(r), lat.unitcell.orbitals[s])
             v = pad(vs, M)
             term.forcehermitian ? push!(ijv, (i, i, v)) : push!(ijv, (i, i, 0.5 * (v + v')))
         end
@@ -139,27 +147,28 @@ end
 
 function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
     checkinfinite(term)
-    for (s1, s2) in sublats(term, builder.lat)
-        sublat1, sublat2 = builder.lat.sublats[s1], builder.lat.sublats[s2]
-        offset1, offset2 = builder.lat.offsets[s1], builder.lat.offsets[s2]
+    lat = builder.lat
+    for (s1, s2) in sublats(term, lat)
+        is, js = siterange(lat, s1), siterange(lat, s2)
         dns = dniter(term.dns, Val(L))
         for dn in dns
             addadjoint = term.forcehermitian
             foundlink = false
             ijv = builder[dn]
             addadjoint && (ijvc = builder[negative(dn)])
-            for (j, site) in enumerate(sublat2.sites)
-                rsource = site - builder.lat.bravais.matrix * dn
+            for j in js
+                sitej = lat.unitcell.sites[j]
+                rsource = sitej - lat.bravais.matrix * dn
                 itargets = targets(builder, term.range, rsource, s1)
                 for i in itargets
                     isselfhopping((i, j), (s1, s2), dn) && continue
                     foundlink = true
-                    rtarget = sublat1.sites[i]
+                    rtarget = lat.unitcell.sites[i]
                     r, dr = _rdr(rsource, rtarget)
-                    vs = orbsized(term(r, dr), sublat1, sublat2)
+                    vs = orbsized(term(r, dr), lat.unitcell.orbitals[s1], lat.unitcell.orbitals[s2])
                     v = pad(vs, M)
-                    push!(ijv, (offset1 + i, offset2 + j, v))
-                    addadjoint && push!(ijvc, (offset2 + j, offset1 + i, v'))
+                    push!(ijv, (i, j, v))
+                    addadjoint && push!(ijvc, (j, i, v'))
                 end
             end
             foundlink && acceptcell!(dns, dn)
@@ -168,16 +177,21 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
     return nothing
 end
 
-orbsized(m, sublat) = orbsized(m, sublat, sublat)
-orbsized(m, s1::Sublat{E1,T1,D1}, s2::Sublat{E2,T2,D2}) where {E1,T1,D1,E2,T2,D2} =
+orbsized(m, orbs) = orbsized(m, orbs, orbs)
+orbsized(m, o1::NTuple{D1}, o2::NTuple{D2}) where {D1,D2} =
     SMatrix{D1,D2}(m)
 
 dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
 dniter(dns, ::Val) = dns
 
 function targets(builder, range::Real, rsource, s1)
-    isassigned(builder.kdtrees, s1) || (builder.kdtrees[s1] = KDTree(builder.lat.sublats[s1].sites))
-    return inrange(builder.kdtrees[s1], rsource, range)
+    if !isassigned(builder.kdtrees, s1)
+        sites = view(builder.lat.unitcell.sites, siterange(builder.lat, s1))
+        (builder.kdtrees[s1] = KDTree(sites))
+    end
+    targets = inrange(builder.kdtrees[s1], rsource, range)
+    targets .+= builder.lat.unitcell.offsets[s1]
+    return targets
 end
 
 targets(builder, range::Missing, rsource, s1) = eachindex(builder.lat.sublats[s1].sites)
