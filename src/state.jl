@@ -16,8 +16,8 @@ State(lat::Lattice{E,L,T};
 zerophases(lat::Lattice{E,L,T,Missing}) where {E,L,T} = zero(SVector{L,T})
 zerophases(lat::Lattice{E,L,T}) where {E,L,T} = zero(SVector{dim(lat.supercell),T})
 
-cellmaskaxes(lat::Lattice{E,L,T,Missing}) where {E,L,T} = axes(lat.supercell.cellmask)
-cellmaskaxes(lat::Lattice{E,L}) where {E,L} = (1:nsites(lat), ntuple(_->0:0, Val(L))...)
+cellmaskaxes(lat::Lattice{E,L,T,Missing}) where {E,L,T} = (1:nsites(lat), ntuple(_->0:0, Val(L))...)
+cellmaskaxes(lat::Lattice{E,L}) where {E,L} = axes(lat.supercell.cellmask)
 
 nsites(s::State{L,V,T,Missing}) where {L,V,T} = length(s.vector)
 nsites(s::State) = nsites(s.supercell)
@@ -27,7 +27,7 @@ supercellinverse(s::State{L,V,T}) where {L,V,T} = pinverse(s.supercell.matrix)
 
 isemptycell(s::State{L,V,T,Missing}, cell) where {L,V,T} = false
 function isemptycell(s::State{L,V,T}, cell) where {L,V,T}
-    for i in size(s.supercell.cellmask, 1)
+    @inbounds for i in size(s.supercell.cellmask, 1)
         s.supercell.cellmask[i, cell...] && return false
     end
     return true
@@ -87,9 +87,9 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
         β != 0 ? rmul!(C, β) : fill!(C, zeroV)
     end
     # Add α * blochphase * h * source to target
-    @inbounds for ic in celliter
+    @inbounds Threads.@threads for ic in celliter
         i = Tuple(ic)
-        isemptycell(s, i) && continue # for performance
+        # isemptycell(s, i) && continue # good for performance?
         for h in ham.harmonics
             dn = Tuple(h.dn)
             j, dN = wrap(i .+ dn, bbox)
@@ -111,4 +111,4 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
         end
     end
     return t
-end
+end 
