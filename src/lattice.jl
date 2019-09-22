@@ -283,20 +283,20 @@ sublatsites(lat::Lattice) = diff(lat.unitcell.offsets)
 const TOOMANYITERS = 10^8
 
 """
-    superlattice(lattice::Lattice{E,L}, v::NTuple{N,Integer}...; region = r -> true)
-    superlattice(lattice::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = r -> true)
+    superlattice(lattice::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing)
+    superlattice(lattice::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing)
 
 Modifies the supercell of `L`-dimensional `lattice` to one with Bravais vectors
 `br´= br * supercell`, where `supercell::SMatrix{L,L´,Int}` is the integer supercell matrix
-with the `v`s as columns. Only sites at position `r` such that `region(r) == true` will be
-included in the supercell. Note that in the case of `L´ < L`,a bounded `region` function
-must be provided to limit the extension along the non-periodic dimensions.
+with the `L´` `v`s as columns. Only sites at position `r` such that `region(r) == true` will
+be included in the supercell. If `region` is missing, a Bravais unit cell perpendicular to
+the `v` axes will be selected for the `L-L´` non-periodic directions.
 
-    superlattice(lattice::Lattice{E,L}, factor::Integer; region = r -> true)
+    superlattice(lattice::Lattice{E,L}, factor::Integer; region = missing)
 
 Calls `superlattice` with a uniformly scaled `supercell = factor * I`
 
-    superlattice(lattice::Lattice{E,L}, factors::Integer...; region = r -> true)
+    superlattice(lattice::Lattice{E,L}, factors::Integer...; region = missing)
 
 Calls `superlattice` with different scaling along each Bravais vector (supercell with
 factors along the diagonal)
@@ -352,7 +352,7 @@ superlattice(lat::Lattice{E,L}, factors::Vararg{Integer,L}; kw...) where {E,L} =
     superlattice(lat, SMatrix{L,L,Int}(Diagonal(SVector(factors))); kw...)
 superlattice(lat::Lattice{E,L}, vecs::NTuple{L,Int}...; kw...) where {E,L} =
     superlattice(lat, toSMatrix(Int, vecs...); kw...)
-function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; 
+function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int};
                       region = ribbonfunc(lat, supercell)) where {E,L,L´}
     bravais = lat.bravais.matrix
     iter = BoxIterator(zero(SVector{L,Int}))
@@ -396,10 +396,10 @@ end
 # pseudoinverse of s times an integer n, so that it is an integer matrix (for accuracy)
 pinvmultiple(s::SMatrix{N,0}) where {N} = (SMatrix{0,0,Int}(), 0)
 function pinvmultiple(s::SMatrix{N,M}) where {N,M}
-    det(s) ≈ 0 && throw(ErrorException("Supercell is singular"))
     qrfact = qr(s)
-    pinverse = inv(qrfact.R) * qrfact.Q'
     n = det(qrfact.R)
+    abs(n) < sqrt(eps(n)) && throw(ErrorException("Supercell appears to be singular"))
+    pinverse = inv(qrfact.R) * qrfact.Q'
     return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
 end
 
@@ -408,3 +408,21 @@ is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(newndi
 
 newndist(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
 newndist(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
+
+function ribbonfunc(lat::Lattice{E,L,T}, supercell::SMatrix{L,L´}) where {E,L,T,L´}
+    L == L´ && return truefunc
+    sites = lat.unitcell.sites
+    bravais = lat.bravais.matrix
+    # real-space supercell axes + all space
+    s = hcat(bravais * supercell, SMatrix{E,E,T}(I))
+    q = qr(s).Q
+    # last vecs in Q are orthogonal to axes
+    os = ntuple(i -> SVector(q[:,i+L´]), Val(E-L´))
+    # range of projected bravais, including zero
+    ranges = (o -> extrema(vcat(SVector(zero(T)), bravais' * o))).(os)
+    # projector * r gives the projection of r on orthogonal vectors
+    projector = hcat(os...)'
+    # ribbon defined by r's with projection within ranges for all orthogonal vectors
+    return r -> all(first.(ranges) .<= Tuple(projector * r) .<= last.(ranges))
+end
+truefunc = r -> true
