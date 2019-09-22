@@ -352,8 +352,8 @@ superlattice(lat::Lattice{E,L}, factors::Vararg{Integer,L}; kw...) where {E,L} =
     superlattice(lat, SMatrix{L,L,Int}(Diagonal(SVector(factors))); kw...)
 superlattice(lat::Lattice{E,L}, vecs::NTuple{L,Int}...; kw...) where {E,L} =
     superlattice(lat, toSMatrix(Int, vecs...); kw...)
-function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int};
-                      region = ribbonfunc(lat, supercell)) where {E,L,L´}
+function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing) where {E,L,L´}
+    regionfunc = region === missing ? ribbonfunc(lat, supercell) : region
     bravais = lat.bravais.matrix
     iter = BoxIterator(zero(SVector{L,Int}))
     is_grow_dir = is_perp_dir(supercell)
@@ -367,7 +367,7 @@ function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int};
         r0 = bravais * SVector(Tuple(dn))
         for site in lat.unitcell.sites
             r = r0 + site
-            found = is_grow_dn && region(r)
+            found = is_grow_dn && regionfunc(r)
             if found || !foundfirst
                 acceptcell!(iter, dn)
                 foundfirst = found
@@ -386,7 +386,7 @@ function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int};
         r0 = bravais * dnvec
         for (i, site) in enumerate(lat.unitcell.sites)
             r = site + r0
-            cellmask[i, dntup...] = is_grow_dn && region(r)
+            cellmask[i, dntup...] = is_grow_dn && regionfunc(r)
         end
     end
     supercell = Supercell(supercell, cellmask)
