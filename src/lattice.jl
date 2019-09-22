@@ -280,6 +280,8 @@ sublatsites(lat::Lattice) = diff(lat.unitcell.offsets)
 #######################################################################
 # superlattice
 #######################################################################
+const TOOMANYITERS = 10^8
+
 """
     superlattice(lattice::Lattice{E,L}, v::NTuple{N,Integer}...; region = r -> true)
     superlattice(lattice::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = r -> true)
@@ -341,10 +343,6 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
     Vectors       : ((3, 0), (0, 3))
     Total sites   : 9
 ```
-
-# See also
-
-    'Region`
 """
 superlattice(v...; kw...) = lat -> superlattice(lat, v...; kw...)
 superlattice(lat::Lattice{E,L}; kw...) where {E,L} = superlattice(lat, SMatrix{L,0,Int}(); kw...)
@@ -354,7 +352,8 @@ superlattice(lat::Lattice{E,L}, factors::Vararg{Integer,L}; kw...) where {E,L} =
     superlattice(lat, SMatrix{L,L,Int}(Diagonal(SVector(factors))); kw...)
 superlattice(lat::Lattice{E,L}, vecs::NTuple{L,Int}...; kw...) where {E,L} =
     superlattice(lat, toSMatrix(Int, vecs...); kw...)
-function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = _truefunc) where {E,L,L´}
+function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; 
+                      region = ribbonfunc(lat, supercell)) where {E,L,L´}
     bravais = lat.bravais.matrix
     iter = BoxIterator(zero(SVector{L,Int}))
     is_grow_dir = is_perp_dir(supercell)
@@ -394,17 +393,13 @@ function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region =
     return Lattice(lat.bravais, lat.unitcell, supercell)
 end
 
-const TOOMANYITERS = 10^8
-
-_truefunc(r) = true
-
 # pseudoinverse of s times an integer n, so that it is an integer matrix (for accuracy)
 pinvmultiple(s::SMatrix{N,0}) where {N} = (SMatrix{0,0,Int}(), 0)
 function pinvmultiple(s::SMatrix{N,M}) where {N,M}
+    det(s) ≈ 0 && throw(ErrorException("Supercell is singular"))
     qrfact = qr(s)
     pinverse = inv(qrfact.R) * qrfact.Q'
     n = det(qrfact.R)
-    iszero(n) && throw(ErrorException("Supercell is singular"))
     return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
 end
 
@@ -412,4 +407,4 @@ end
 is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(newndist(dn, invs)); end
 
 newndist(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
-newndist(oldndist, (pinvs, n)::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
+newndist(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
