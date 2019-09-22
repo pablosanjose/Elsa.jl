@@ -353,8 +353,8 @@ superlattice(lat::Lattice{E,L}, factors::Vararg{Integer,L}; kw...) where {E,L} =
 superlattice(lat::Lattice{E,L}, vecs::NTuple{L,Int}...; kw...) where {E,L} =
     superlattice(lat, toSMatrix(Int, vecs...); kw...)
 function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing) where {E,L,L´}
-    regionfunc = region === missing ? ribbonfunc(lat, supercell) : region
     bravais = lat.bravais.matrix
+    regionfunc = region === missing ? ribbonfunc(bravais, supercell) : region
     iter = BoxIterator(zero(SVector{L,Int}))
     is_grow_dir = is_perp_dir(supercell)
     foundfirst = false
@@ -410,10 +410,8 @@ is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(newndi
 newndist(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
 newndist(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
 
-function ribbonfunc(lat::Lattice{E,L,T}, supercell::SMatrix{L,L´}) where {E,L,T,L´}
+function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E,L,T,L´}
     L <= L´ && return truefunc
-    sites = lat.unitcell.sites
-    bravais = lat.bravais.matrix
     # real-space supercell axes + all space
     s = hcat(bravais * supercell, SMatrix{E,E,T}(I))
     q = qr(s).Q
@@ -424,6 +422,8 @@ function ribbonfunc(lat::Lattice{E,L,T}, supercell::SMatrix{L,L´}) where {E,L,T
     # projector * r gives the projection of r on orthogonal vectors
     projector = hcat(os...)'
     # ribbon defined by r's with projection within ranges for all orthogonal vectors
-    return r -> all(first.(ranges) .<= Tuple(projector * r) .<= last.(ranges))
+    regionfunc(r) = all(first.(ranges) .<= Tuple(projector * r) .<= last.(ranges))
+    # return r -> all(first.(ranges) .<= Tuple(projector * r) .<= last.(ranges))
+    return regionfunc
 end
-truefunc = r -> true
+truefunc(r) = true
