@@ -356,18 +356,18 @@ function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region =
     bravais = lat.bravais.matrix
     regionfunc = region === missing ? ribbonfunc(bravais, supercell) : region
     iter = BoxIterator(zero(SVector{L,Int}))
-    is_grow_dir = is_perp_dir(supercell)
+    in_supercell_func = is_perp_dir(supercell)
     foundfirst = false
     counter = 0
     for dn in iter   # We first compute the bounding box
         found = false
         counter += 1; counter == TOOMANYITERS &&
             throw(ArgumentError("`region` seems unbounded (after $TOOMANYITERS iterations)"))
-        is_grow_dn = is_grow_dir(SVector(Tuple(dn)))
+        in_supercell = in_supercell_func(SVector(Tuple(dn)))
         r0 = bravais * SVector(Tuple(dn))
         for site in lat.unitcell.sites
             r = r0 + site
-            found = is_grow_dn && regionfunc(r)
+            found = in_supercell && regionfunc(r)
             if found || !foundfirst
                 acceptcell!(iter, dn)
                 foundfirst = found
@@ -381,12 +381,12 @@ function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region =
     @inbounds for dn in c
         dntup = Tuple(dn)
         dnvec = SVector(dntup)
-        is_grow_dn = is_grow_dir(dnvec)
-        is_grow_dn || (cellmask[:, dntup...] .= false; continue)
+        in_supercell = in_supercell_func(dnvec)
+        in_supercell || (cellmask[:, dntup...] .= false; continue)
         r0 = bravais * dnvec
         for (i, site) in enumerate(lat.unitcell.sites)
             r = site + r0
-            cellmask[i, dntup...] = is_grow_dn && regionfunc(r)
+            cellmask[i, dntup...] = in_supercell && regionfunc(r)
         end
     end
     supercell = Supercell(supercell, cellmask)
