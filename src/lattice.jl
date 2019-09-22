@@ -394,8 +394,9 @@ function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int};
 end
 
 # pseudoinverse of s times an integer n, so that it is an integer matrix (for accuracy)
-pinvmultiple(s::SMatrix{N,0}) where {N} = (SMatrix{0,0,Int}(), 0)
-function pinvmultiple(s::SMatrix{N,M}) where {N,M}
+pinvmultiple(s::SMatrix{L,0}) where {L} = (SMatrix{0,0,Int}(), 0)
+function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
+    L < L´ && throw(DimensionMismatch("Supercell dimensions $(L´) cannot exceed lattice dimensions $L"))
     qrfact = qr(s)
     n = det(qrfact.R)
     abs(n) < sqrt(eps(n)) && throw(ErrorException("Supercell appears to be singular"))
@@ -410,7 +411,7 @@ newndist(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
 newndist(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
 
 function ribbonfunc(lat::Lattice{E,L,T}, supercell::SMatrix{L,L´}) where {E,L,T,L´}
-    L == L´ && return truefunc
+    L <= L´ && return truefunc
     sites = lat.unitcell.sites
     bravais = lat.bravais.matrix
     # real-space supercell axes + all space
