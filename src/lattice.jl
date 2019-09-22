@@ -403,7 +403,7 @@ pinvmultiple(s::SMatrix{N,0}) where {N} = (SMatrix{0,0,Int}(), 0)
 function pinvmultiple(s::SMatrix{N,M}) where {N,M}
     qrfact = qr(s)
     pinverse = inv(qrfact.R) * qrfact.Q'
-    n = det(qrfact.R)^2
+    n = det(qrfact.R)
     iszero(n) && throw(ErrorException("Supercell is singular"))
     return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
 end
