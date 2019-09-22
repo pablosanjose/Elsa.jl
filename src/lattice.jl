@@ -399,8 +399,8 @@ const TOOMANYITERS = 10^8
 _truefunc(r) = true
 
 # pseudoinverse of s times an integer n, so that it is an integer matrix (for accuracy)
-pinvint(s::SMatrix{N,0}) where {N} = (SMatrix{0,0,Int}(), 0)
-function pinvint(s::SMatrix{N,M}) where {N,M}
+pinvmultiple(s::SMatrix{N,0}) where {N} = (SMatrix{0,0,Int}(), 0)
+function pinvmultiple(s::SMatrix{N,M}) where {N,M}
     qrfact = qr(s)
     pinverse = inv(qrfact.R) * qrfact.Q'
     n = det(qrfact.R)^2
@@ -409,7 +409,7 @@ function pinvint(s::SMatrix{N,M}) where {N,M}
 end
 
 # This is true whenever old ndist is perpendicular to new lattice
-is_perp_dir(supercell) = let invs = pinvint(supercell); dn -> iszero(newndist(dn, invs)); end
+is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(newndist(dn, invs)); end
 
 newndist(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
 newndist(oldndist, (pinvs, n)::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
