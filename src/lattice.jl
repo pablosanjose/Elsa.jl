@@ -145,6 +145,9 @@ struct Supercell{L,L´,LP,LL´} # LP = L+1, L is lattice dim, L´ is supercell d
     cellmask::OffsetArray{Bool,LP,BitArray{LP}}
 end
 
+Supercell{L}(ns::Integer) where {L} =
+    Supercell(SMatrix{L,L,Int,L*L}(I), trues(1:ns, ntuple(_->0:0, Val(L))...))
+
 dim(::Supercell{L,L´}) where {L,L´} = L´
 
 nsites(s::Supercell) = sum(s.cellmask)
@@ -160,10 +163,10 @@ nsites(s::Supercell) = sum(s.cellmask)
 #     return Supercell(s.matrix, newmask)
 # end
 
-supercelliter(s::Supercell) = CartesianIndices(tail(axes(s.cellmask)))
-supercelliter(lat::Lattice{E,L,T,Missing}) where {E,L,T} =
-    (CartesianIndex(Tuple(zero(SVector{L,Int}))), )
-supercelliter(lat::Lattice{E,L,T,S}) where {E,L,T,S} = supercelliter(lat.supercell)
+Base.CartesianIndices(s::Supercell) = CartesianIndices(tail(axes(s.cellmask)))
+# supercelliter(lat::Lattice{E,L,T,Missing}) where {E,L,T} =
+#     (CartesianIndex(Tuple(zero(SVector{L,Int}))), )
+# supercelliter(lat::Lattice{E,L,T,S}) where {E,L,T,S} = supercelliter(lat.supercell)
 # boundingbox(s::Supercell) = extrema.(tail(axes(s.cellmask)))
 
 # @inline function wrap(i::Tuple, bbox)
@@ -188,23 +191,23 @@ end
 #######################################################################
 # Lattice
 #######################################################################
-struct Lattice{E,L,T<:AbstractFloat,S<:Union{Missing,Supercell{L}},B<:Bravais{E,L,T},U<:Unitcell{E,T}}
+struct Lattice{E,L,T<:AbstractFloat,S<:Supercell{L},B<:Bravais{E,L,T},U<:Unitcell{E,T}}
     bravais::B
     unitcell::U
     supercell::S
 end
 function Lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,E,T}
     L = min(E,L2) # L should not exceed E
-    Lattice(convert(Bravais{E,L,T}, bravais), unitcell, missing)
+    Lattice(convert(Bravais{E,L,T}, bravais), unitcell, Supercell{L}(nsites(unitcell)))
 end
 
-function Supercell(lat::Lattice{E,L},
-    ranges::NTuple{L,AbstractRange} = ntuple(_->0:0, Val(L))) where {E,L}
-    ns = nsites(lat)
-    sc = Supercell(SMatrix{L,L,Int,L*L}(Diagonal(SVector(length.(ranges)))),
-                   OffsetArray(trues(1:ns, length.(ranges)...), 1:ns, ranges...))
-    return sc
-end
+# function Supercell(lat::Lattice{E,L},
+#     ranges::NTuple{L,AbstractRange} = ntuple(_->0:0, Val(L))) where {E,L}
+#     ns = nsites(lat)
+#     sc = Supercell(SMatrix{L,L,Int,L*L}(Diagonal(SVector(length.(ranges)))),
+#                    OffsetArray(trues(1:ns, length.(ranges)...), 1:ns, ranges...))
+#     return sc
+# end
 
 displaynames(l::Lattice) = display_as_tuple(l.unitcell.names, ":")
 displayorbitals(l::Lattice) = string(l.unitcell.orbitals)
@@ -219,7 +222,7 @@ function Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T}
     Orbitals      : $(displayorbitals(lat))
     Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell",
     "\n")
-    lat.supercell === missing || print(ioindent, lat.supercell)
+    isminimalsupercell(lat) || print(ioindent, lat.supercell)
 end
 
 # API #
@@ -279,7 +282,8 @@ end
 function supercell_sites(lat::Lattice)
     newsites = similar(lat.unitcell.sites, nsites(lat.supercell))
     oldsites = lat.unitcell.sites
-    foreach_supersite((s, oldi, dn, newi) -> newsites[newi] = oldsites[oldi], lat)
+    bravais = lat.bravais.matrix
+    foreach_supersite((s, oldi, dn, newi) -> newsites[newi] = bravais * dn + oldsites[oldi], lat)
     return newsites
 end
 
@@ -313,8 +317,8 @@ _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
 sublat(lat::Lattice, siteidx) = findlast(o -> o < siteidx, lat.unitcell.offsets)
 siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.offsets[sublat+1]
 
-hassupercell(lat::Lattice{E,L,T,Missing}) where {E,L,T} = false
-hassupercell(lat::Lattice{E,L,T}) where {E,L,T} = true
+# hassupercell(lat::Lattice{E,L,T,Missing}) where {E,L,T} = false
+# hassupercell(lat::Lattice{E,L,T}) where {E,L,T} = true
 
 sublatsites(lat::Lattice) = diff(lat.unitcell.offsets)
 
@@ -327,16 +331,19 @@ nsublats(lat) = length(lat.unitcell.names)
 function foreach_supersite(f::F, lat::Lattice) where {F<:Function}
     newi = 0
     for s in 1:nsublats(lat), oldi in siterange(lat, s)
-        for dn in supercelliter(lat)
+        for dn in CartesianIndices(lat.supercell)
             if lat.supercell.cellmask[oldi, Tuple(dn)...]
                 newi += 1
-                f(s, oldi, Tuple(dn), newi)
+                f(s, oldi, SVector(Tuple(dn)), newi)
             end
         end
     end
     return nothing
 end
 
+isminimalsupercell(lat::Lattice{E,L,T,S}) where {E,L,T,S<:Supercell{L,L}} =
+    all(r -> r == 0:0, tail(cellmaskaxes(lat))) && all(lat.supercell.cellmask)
+isminimalsupercell(lat::Lattice{E,L,T,S}) where {E,L,T,S} = false
 
 # sublatindex(lat::Lattice, name::NameType) = findfirst(s -> (s.name == name), lat.sublats)
 # sublatindex(lat::Lattice, i::Integer) = Int(i)
@@ -459,18 +466,8 @@ function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region =
     return Lattice(lat.bravais, lat.unitcell, supercell)
 end
 
-# pseudoinverse of s times an integer n, so that it is an integer matrix (for accuracy)
-pinvmultiple(s::SMatrix{L,0}) where {L} = (SMatrix{0,0,Int}(), 0)
-function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
-    L < L´ && throw(DimensionMismatch("Supercell dimensions $(L´) cannot exceed lattice dimensions $L"))
-    qrfact = qr(s)
-    n = det(qrfact.R)
-    abs(n) < sqrt(eps(n)) && throw(ErrorException("Supercell appears to be singular"))
-    pinverse = inv(qrfact.R) * qrfact.Q'
-    return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
-end
-pinvmultiple(::Missing) = (I, 1)
-pinvmultiple(s::Supercell) = pinvmultiple(s.matrix)
+# pinvmultiple(::Missing) = (I, 1)
+# pinvmultiple(s::Supercell) = pinvmultiple(s.matrix)
 
 # This is true whenever old ndist is perpendicular to new lattice
 is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(new_dn(dn, invs)); end
@@ -478,8 +475,8 @@ is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(new_dn
 new_dn(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
 new_dn(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
 
-wrap_dn(olddn::SVector, newdn::SVector, supercell::Supercell) = olddn - supercell.matrix * newdn
-wrap_dn(olddn::SVector, newdn::SVector, ::Missing) = zero(olddn)
+wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell * newdn
+# wrap_dn(olddn::SVector, newdn::SVector, ::Missing) = zero(olddn)
 
 # @inline function wrap(i::Tuple, bbox)
 #     n = _wrapdiv.(i, bbox)

@@ -213,18 +213,20 @@ function hamiltonian(lat::Lattice{E,L,T,S}, ham::Hamiltonian{L,Tv}) where {L,Tv,
     dim = nsites(lat.supercell)
     B = blocktype(ham)
     harmonic_builders = HamiltonianHarmonic{L´,Tv,SparseMatrixBuilder{B}}[]
-    pinvint = pinvmultiple(lat.supercell)
-    foreach_supersite(lat) do s, oldcol, dncol, newcol
+    pinvint = pinvmultiple(lat.supercell.matrix)
+    foreach_supersite(lat) do s, source_i, source_dn, newcol
         for oldh in ham.harmonics
             rows = rowvals(oldh.h)
             vals = nonzeros(oldh.h)
-            newdn = new_dn(dnrow, pinvint)
-            dnrow = wrap_dn(dncol .+ Tuple(oldh.dn), newdn, lat.supercell)
-            newh = get_or_push!(harmonic_builders, newdn, dim)
-            for p in nzrange(oldh.h, oldcol)
-                oldrow = rows[p]
-                newrow = mapping[oldrow, Tuple(dnrow)...]
-                val = applyfield(ham.field, vals[p], oldrow, oldcol, oldh.dn)
+            target_dn = source_dn + oldh.dn
+            super_dn = new_dn(target_dn, pinvint)
+            wrapped_dn = wrap_dn(target_dn, super_dn, lat.supercell.matrix)
+            newh = get_or_push!(harmonic_builders, super_dn, dim)
+            for p in nzrange(oldh.h, source_i)
+                target_i = rows[p]
+                checkbounds(Bool, mapping, target_i, Tuple(wrapped_dn)...) || continue
+                newrow = mapping[target_i, Tuple(wrapped_dn)...]
+                val = applyfield(ham.field, vals[p], target_i, source_i, source_dn)
                 iszero(newrow) || pushtocolumn!(newh.h, newrow, val)
             end
         end

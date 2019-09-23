@@ -13,16 +13,16 @@ State(lat::Lattice{E,L,T};
       phases = zerophases(lat)) where {E,L,T,Tv} =
     State(vector, phases, lat.supercell)
 
-zerophases(lat::Lattice{E,L,T,Missing}) where {E,L,T} = zero(SVector{L,T})
+# zerophases(lat::Lattice{E,L,T,Missing}) where {E,L,T} = zero(SVector{L,T})
 zerophases(lat::Lattice{E,L,T}) where {E,L,T} = zero(SVector{dim(lat.supercell),T})
 
-cellmaskaxes(lat::Lattice{E,L,T,Missing}) where {E,L,T} = (1:nsites(lat), ntuple(_->0:0, Val(L))...)
+# cellmaskaxes(lat::Lattice{E,L,T,Missing}) where {E,L,T} = (1:nsites(lat), ntuple(_->0:0, Val(L))...)
 cellmaskaxes(lat::Lattice{E,L}) where {E,L} = axes(lat.supercell.cellmask)
 
-nsites(s::State{L,V,T,Missing}) where {L,V,T} = length(s.vector)
+# nsites(s::State{L,V,T,Missing}) where {L,V,T} = length(s.vector)
 nsites(s::State) = nsites(s.supercell)
 
-isemptycell(s::State{L,V,T,Missing}, cell) where {L,V,T} = false
+# isemptycell(s::State{L,V,T,Missing}, cell) where {L,V,T} = false
 function isemptycell(s::State{L,V,T}, cell) where {L,V,T}
     @inbounds for i in size(s.supercell.cellmask, 1)
         s.supercell.cellmask[i, cell...] && return false
@@ -55,7 +55,7 @@ function randomstate(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,
     v = rand(T, n * N, masksize...) # for performance, use n×N Floats to build an S
     @inbounds for c in CartesianIndices(masksize)
         site = first(Tuple(c))
-        insupercell = !hassupercell(lat) || lat.supercell.cellmask.parent[c]
+        insupercell = lat.supercell.cellmask.parent[c]
         norb = norbs[sublat(lat, site)] * insupercell
         for j in 1:N, i in 1:n
             v[i + (j-1)*n, Tuple(c)...] =
@@ -89,7 +89,7 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
         for h in ham.harmonics
             olddn = h.dn + SVector(i)
             newdn = new_dn(olddn, pinvint)
-            j = Tuple(wrap_dn(olddn, newdn, s.supercell))
+            j = Tuple(wrap_dn(olddn, newdn, s.supercell.matrix))
             α´ = α * cis(s.phases' * newdn)
             nzv = nonzeros(h.h)
             rv = rowvals(h.h)
@@ -102,10 +102,8 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
         end
     end
     # Filter out sites not in supercell
-    if s.supercell !== missing
-        @simd for j in eachindex(t.vector)
-            @inbounds s.supercell.cellmask[j] || (t.vector[j] = zeroV)
-        end
+    @simd for j in eachindex(t.vector)
+        @inbounds s.supercell.cellmask[j] || (t.vector[j] = zeroV)
     end
     return t
 end
