@@ -35,6 +35,11 @@ _nnz(h::Matrix) = length(h)
 Base.Matrix(h::Hamiltonian) = Hamiltonian(Matrix.(h.harmonics), h.field, h.lattice)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
+iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L,Tv,HamiltonianHarmonic{L,Tv,A}}) where {E,L,Tv,A} =
+    blocktype(lat, Tv) == eltype(A)
+iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L2,Tv,HamiltonianHarmonic{L,Tv,A}}) where {E,L,L2,Tv,A} =
+    false
+
 Base.show(io::IO, h::HamiltonianHarmonic{L,Tv,A}) where
     {L,Tv,N,A<:AbstractArray{<:SMatrix{N,N,Tv}}} = print(io,
 "HamiltonianHarmonic{$L,$Tv} with dn = $(Tuple(h.dn)) and elements:", h.h)
@@ -58,6 +63,10 @@ hamiltonian(lat::Lattice, t::TightbindingModelTerm...; kw...) =
     hamiltonian(lat, TightbindingModel(t); kw...)
 hamiltonian(lat::Lattice{E,L,T}, m::TightbindingModel; type::Type = Complex{T}, kw...) where {E,L,T} =
     hamiltonian_sparse(blocktype(lat, type), lat, m; kw...)
+
+function hamiltonian(lat::Lattice, h::Hamiltonian)
+
+end
 
 #######################################################################
 # auxiliary types
@@ -129,7 +138,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm) where {L,M}
         ijv = builder[dn0]
         offset = lat.unitcell.offsets[s]
         for i in is
-            r = lat.unitcell.sites[r]
+            r = lat.unitcell.sites[i]
             vs = orbsized(term(r), lat.unitcell.orbitals[s])
             v = pad(vs, M)
             term.forcehermitian ? push!(ijv, (i, i, v)) : push!(ijv, (i, i, 0.5 * (v + v')))
