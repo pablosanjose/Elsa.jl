@@ -152,32 +152,7 @@ dim(::Supercell{L,L´}) where {L,L´} = L´
 
 nsites(s::Supercell) = sum(s.cellmask)
 
-# function scale(s::Supercell, naxes)
-#     siterange = first(axes(s.cellmask))
-#     newmask = similar(s.cellmask, siterange, naxes...)
-#     bbox = boundingbox(s)
-#     for c in CartesianIndices(newmask)
-#         cd, _ = wrap(tail(Tuple(c)), bbox)
-#         newmask[c] = s.cellmask[first(Tuple(c)), cd...]
-#     end
-#     return Supercell(s.matrix, newmask)
-# end
-
 Base.CartesianIndices(s::Supercell) = CartesianIndices(tail(axes(s.cellmask)))
-# supercelliter(lat::Lattice{E,L,T,Missing}) where {E,L,T} =
-#     (CartesianIndex(Tuple(zero(SVector{L,Int}))), )
-# supercelliter(lat::Lattice{E,L,T,S}) where {E,L,T,S} = supercelliter(lat.supercell)
-# boundingbox(s::Supercell) = extrema.(tail(axes(s.cellmask)))
-
-# @inline function wrap(i::Tuple, bbox)
-#     n = _wrapdiv.(i, bbox)
-#     j = _wrapmod.(i, bbox)
-#     return j, SVector(n)
-# end
-
-# _wrapdiv(n, (nmin, nmax)) = nmin <= n <= nmax ? 0 : div(n - nmin, 1 + nmax - nmin)
-
-# _wrapmod(n, (nmin, nmax)) = nmin <= n <= nmax ? n : nmin + mod(n - nmin, 1 + nmax - nmin)
 
 function Base.show(io::IO, s::Supercell{L,L´}) where {L,L´}
     i = get(io, :indent, "")
@@ -200,14 +175,6 @@ function Lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,
     L = min(E,L2) # L should not exceed E
     Lattice(convert(Bravais{E,L,T}, bravais), unitcell, Supercell{L}(nsites(unitcell)))
 end
-
-# function Supercell(lat::Lattice{E,L},
-#     ranges::NTuple{L,AbstractRange} = ntuple(_->0:0, Val(L))) where {E,L}
-#     ns = nsites(lat)
-#     sc = Supercell(SMatrix{L,L,Int,L*L}(Diagonal(SVector(length.(ranges)))),
-#                    OffsetArray(trues(1:ns, length.(ranges)...), 1:ns, ranges...))
-#     return sc
-# end
 
 displaynames(l::Lattice) = display_as_tuple(l.unitcell.names, ":")
 displayorbitals(l::Lattice) = string(l.unitcell.orbitals)
@@ -287,19 +254,6 @@ function supercell_sites(lat::Lattice)
     return newsites
 end
 
-# function transform!(lat::Lattice, f::Function; sublats = eachindex(lat.sublats))
-#     for s in sublats
-#         sind = sublatindex(lat, s)
-#         transform!(lat.sublats[sind], f)
-#     end
-#     br = transform(lat.bravais, f)
-#     return Lattice(br, lat.sublats, lat.supercell)
-# end
-
-# transform(lat::Lattice, f; kw...) = transform!(deepcopy(lat), f; kw...)
-# scale(lat::Lattice, s) =
-#     Lattice(lat.bravais, copy.(lat.sublats), scale(lat.supercell, s), copy(lat.offsets))
-
 # Auxiliary #
 
 # find SVector type that can hold all orbital amplitudes in any lattice sites
@@ -316,9 +270,6 @@ _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
 
 sublat(lat::Lattice, siteidx) = findlast(o -> o < siteidx, lat.unitcell.offsets)
 siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.offsets[sublat+1]
-
-# hassupercell(lat::Lattice{E,L,T,Missing}) where {E,L,T} = false
-# hassupercell(lat::Lattice{E,L,T}) where {E,L,T} = true
 
 sublatsites(lat::Lattice) = diff(lat.unitcell.offsets)
 

@@ -13,24 +13,18 @@ State(lat::Lattice{E,L,T};
       phases = zerophases(lat)) where {E,L,T,Tv} =
     State(vector, phases, lat.supercell)
 
-# zerophases(lat::Lattice{E,L,T,Missing}) where {E,L,T} = zero(SVector{L,T})
 zerophases(lat::Lattice{E,L,T}) where {E,L,T} = zero(SVector{dim(lat.supercell),T})
 
-# cellmaskaxes(lat::Lattice{E,L,T,Missing}) where {E,L,T} = (1:nsites(lat), ntuple(_->0:0, Val(L))...)
 cellmaskaxes(lat::Lattice{E,L}) where {E,L} = axes(lat.supercell.cellmask)
 
-# nsites(s::State{L,V,T,Missing}) where {L,V,T} = length(s.vector)
 nsites(s::State) = nsites(s.supercell)
 
-# isemptycell(s::State{L,V,T,Missing}, cell) where {L,V,T} = false
 function isemptycell(s::State{L,V,T}, cell) where {L,V,T}
     @inbounds for i in size(s.supercell.cellmask, 1)
         s.supercell.cellmask[i, cell...] && return false
     end
     return true
 end
-
-# boundingbox(s::State) = extrema.(tail(axes(s.vector)))
 
 Base.show(io::IO, s::State{L,V}) where {L,N,Tv,V<:SVector{N,Tv}} = print(io,
 "State{$L} : state of an $(L)D lattice or superlattice

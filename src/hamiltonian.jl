@@ -204,7 +204,6 @@ isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero(dn)
 #######################################################################
 # hamiltonian(lattice, hamiltonian)
 #######################################################################
-
 function hamiltonian(lat::Lattice{E,L,T,S}, ham::Hamiltonian{L,Tv}) where {L,Tv,E,T,L´,S<:Supercell{L,L´}}
     iscompatible(lat, ham) || throw(ArgumentError("Lattice and Hamiltonian are incompatible"))
     mapping = similar(lat.supercell.cellmask, Int) # store supersite indices newi
@@ -224,6 +223,7 @@ function hamiltonian(lat::Lattice{E,L,T,S}, ham::Hamiltonian{L,Tv}) where {L,Tv,
             newh = get_or_push!(harmonic_builders, super_dn, dim)
             for p in nzrange(oldh.h, source_i)
                 target_i = rows[p]
+                # wrapped_dn could exit bounding box along non-periodic direction
                 checkbounds(Bool, mapping, target_i, Tuple(wrapped_dn)...) || continue
                 newrow = mapping[target_i, Tuple(wrapped_dn)...]
                 val = applyfield(ham.field, vals[p], target_i, source_i, source_dn)
