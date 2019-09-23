@@ -1,7 +1,7 @@
 module Elsa
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      FFTW, ProgressMeter, Arpack
+      FFTW, ProgressMeter
 
 import Base: convert, iterate, ==, tail
 import SparseArrays: sparse!, mul!, getcolptr

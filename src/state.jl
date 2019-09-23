@@ -30,7 +30,7 @@ function isemptycell(s::State{L,V,T}, cell) where {L,V,T}
     return true
 end
 
-boundingbox(s::State) = extrema.(tail(axes(s.vector)))
+# boundingbox(s::State) = extrema.(tail(axes(s.vector)))
 
 Base.show(io::IO, s::State{L,V}) where {L,N,Tv,V<:SVector{N,Tv}} = print(io,
 "State{$L} : state of an $(L)D lattice or superlattice
@@ -76,7 +76,7 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
     B = s.vector
     celliter = CartesianIndices(tail(axes(B)))
     cols = 1:size(first(ham.harmonics).h, 2)
-    bbox = boundingbox(s)
+    pinvint = pinvmultiple(s.supercell.matrix)
     zeroV = zero(V)
     # Scale target by β
     if β != 1
@@ -85,11 +85,12 @@ function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = f
     # Add α * blochphase * h * source to target
     @inbounds Threads.@threads for ic in celliter
         i = Tuple(ic)
-        # isemptycell(s, i) && continue # good for performance?
+        # isemptycell(s, i) && continue # good for performance? Check
         for h in ham.harmonics
-            dn = Tuple(h.dn)
-            j, dN = wrap(i .+ dn, bbox)
-            α´ = α * cis(s.phases' * dN)
+            olddn = h.dn + SVector(i)
+            newdn = new_dn(olddn, pinvint)
+            j = Tuple(wrap_dn(olddn, newdn, s.supercell))
+            α´ = α * cis(s.phases' * newdn)
             nzv = nonzeros(h.h)
             rv = rowvals(h.h)
             for col in cols

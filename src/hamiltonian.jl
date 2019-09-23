@@ -66,11 +66,6 @@ hamiltonian(lat::Lattice, t::TightbindingModelTerm...; kw...) =
 hamiltonian(lat::Lattice{E,L,T}, m::TightbindingModel; type::Type = Complex{T}, kw...) where {E,L,T} =
     hamiltonian_sparse(blocktype(lat, type), lat, m; kw...)
 
-# function hamiltonian(lat::Lattice, h::Hamiltonian)
-#     iscompatible(lat, h) || throw(ArgumentError("Lattice and Hamiltonian are incompatible"))
-#     addcolumn = (col)
-# end
-
 #######################################################################
 # auxiliary types
 #######################################################################
@@ -205,3 +200,46 @@ checkinfinite(term) = term.dns === missing && (term.range === missing || !isfini
     throw(ErrorException("Tried to implement an infinite-range hopping on an unbounded lattice"))
 
 isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero(dn)
+
+#######################################################################
+# hamiltonian(lattice, hamiltonian)
+#######################################################################
+
+function hamiltonian(lat::Lattice{E,L,T,S}, ham::Hamiltonian{L,Tv}) where {L,Tv,E,T,L´,S<:Supercell{L,L´}}
+    iscompatible(lat, ham) || throw(ArgumentError("Lattice and Hamiltonian are incompatible"))
+    mapping = similar(lat.supercell.cellmask, Int) # store supersite indices newi
+    mapping .= 0
+    foreach_supersite((s, oldi, olddn, newi) -> mapping[oldi, olddn...] = newi, lat)
+    dim = nsites(lat.supercell)
+    B = blocktype(ham)
+    harmonic_builders = HamiltonianHarmonic{L´,Tv,SparseMatrixBuilder{B}}[]
+    pinvint = pinvmultiple(lat.supercell)
+    foreach_supersite(lat) do s, oldcol, dncol, newcol
+        for oldh in ham.harmonics
+            rows = rowvals(oldh.h)
+            vals = nonzeros(oldh.h)
+            newdn = new_dn(dnrow, pinvint)
+            dnrow = wrap_dn(dncol .+ Tuple(oldh.dn), newdn, lat.supercell)
+            newh = get_or_push!(harmonic_builders, newdn, dim)
+            for p in nzrange(oldh.h, oldcol)
+                oldrow = rows[p]
+                newrow = mapping[oldrow, Tuple(dnrow)...]
+                val = applyfield(ham.field, vals[p], oldrow, oldcol, oldh.dn)
+                iszero(newrow) || pushtocolumn!(newh.h, newrow, val)
+            end
+        end
+        foreach(h -> finalisecolumn!(h.h), harmonic_builders)
+    end
+    harmonics = [HamiltonianHarmonic(h.dn, sparse(h.h)) for h in harmonic_builders]
+    field = ham.field
+    return Hamiltonian(harmonics, field)
+end
+
+function get_or_push!(hs::Vector{HamiltonianHarmonic{L,Tv,SparseMatrixBuilder{B}}}, dn, dim) where {L,Tv,B}
+    for h in hs
+        h.dn == dn && return h
+    end
+    newh = HamiltonianHarmonic(dn, SparseMatrixBuilder{B}(dim, dim))
+    push!(hs, newh)
+    return newh
+end

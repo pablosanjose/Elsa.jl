@@ -160,18 +160,21 @@ nsites(s::Supercell) = sum(s.cellmask)
 #     return Supercell(s.matrix, newmask)
 # end
 
-boundingbox(s::Supercell) = extrema.(tail(axes(s.cellmask)))
-Base.CartesianIndices(s::Supercell) = CartesianIndices(tail(axes(s.cellmask)))
+supercelliter(s::Supercell) = CartesianIndices(tail(axes(s.cellmask)))
+supercelliter(lat::Lattice{E,L,T,Missing}) where {E,L,T} =
+    (CartesianIndex(Tuple(zero(SVector{L,Int}))), )
+supercelliter(lat::Lattice{E,L,T,S}) where {E,L,T,S} = supercelliter(lat.supercell)
+# boundingbox(s::Supercell) = extrema.(tail(axes(s.cellmask)))
 
-@inline function wrap(i::Tuple, bbox)
-    n = _wrapdiv.(i, bbox)
-    j = _wrapmod.(i, bbox)
-    return j, SVector(n)
-end
+# @inline function wrap(i::Tuple, bbox)
+#     n = _wrapdiv.(i, bbox)
+#     j = _wrapmod.(i, bbox)
+#     return j, SVector(n)
+# end
 
-_wrapdiv(n, (nmin, nmax)) = nmin <= n <= nmax ? 0 : div(n - nmin, 1 + nmax - nmin)
+# _wrapdiv(n, (nmin, nmax)) = nmin <= n <= nmax ? 0 : div(n - nmin, 1 + nmax - nmin)
 
-_wrapmod(n, (nmin, nmax)) = nmin <= n <= nmax ? n : nmin + mod(n - nmin, 1 + nmax - nmin)
+# _wrapmod(n, (nmin, nmax)) = nmin <= n <= nmax ? n : nmin + mod(n - nmin, 1 + nmax - nmin)
 
 function Base.show(io::IO, s::Supercell{L,L´}) where {L,L´}
     i = get(io, :indent, "")
@@ -268,7 +271,7 @@ end
 
 function supercell_offsets(lat::Lattice)
     sitecounts = zeros(Int, nsublats(lat) + 1)
-    foreach_supercell((s, oldi, newi) -> sitecounts[s + 1] += 1, lat)
+    foreach_supersite((s, oldi, dn, newi) -> sitecounts[s + 1] += 1, lat)
     newoffsets = cumsum!(sitecounts, sitecounts)
     return newoffsets
 end
@@ -276,7 +279,7 @@ end
 function supercell_sites(lat::Lattice)
     newsites = similar(lat.unitcell.sites, nsites(lat.supercell))
     oldsites = lat.unitcell.sites
-    foreach_supercell((s, oldi, newi) -> newsites[newi] = oldsites[oldi], lat)
+    foreach_supersite((s, oldi, dn, newi) -> newsites[newi] = oldsites[oldi], lat)
     return newsites
 end
 
@@ -313,20 +316,21 @@ siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.
 hassupercell(lat::Lattice{E,L,T,Missing}) where {E,L,T} = false
 hassupercell(lat::Lattice{E,L,T}) where {E,L,T} = true
 
+sublatsites(lat::Lattice) = diff(lat.unitcell.offsets)
+
 nsites(lat::Lattice) = length(lat.unitcell.sites)
+nsites(lat::Lattice, sublat) = sublatsites(lat)[sublat]
 
 nsublats(lat) = length(lat.unitcell.names)
 
-sublatsites(lat::Lattice) = diff(lat.unitcell.offsets)
-
 # apply f to trues in cellmask. Arguments are oldi = old site index, s = sublat index
-function foreach_supercell(f::F, lat::Lattice) where {F<:Function}
+function foreach_supersite(f::F, lat::Lattice) where {F<:Function}
     newi = 0
     for s in 1:nsublats(lat), oldi in siterange(lat, s)
-        for dn in CartesianIndices(lat.supercell)
+        for dn in supercelliter(lat)
             if lat.supercell.cellmask[oldi, Tuple(dn)...]
                 newi += 1
-                f(s, oldi, newi)
+                f(s, oldi, Tuple(dn), newi)
             end
         end
     end
@@ -465,12 +469,28 @@ function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
     pinverse = inv(qrfact.R) * qrfact.Q'
     return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
 end
+pinvmultiple(::Missing) = (I, 1)
+pinvmultiple(s::Supercell) = pinvmultiple(s.matrix)
 
 # This is true whenever old ndist is perpendicular to new lattice
-is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(newndist(dn, invs)); end
+is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(new_dn(dn, invs)); end
 
-newndist(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
-newndist(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
+new_dn(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
+new_dn(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
+
+wrap_dn(olddn::SVector, newdn::SVector, supercell::Supercell) = olddn - supercell.matrix * newdn
+wrap_dn(olddn::SVector, newdn::SVector, ::Missing) = zero(olddn)
+
+# @inline function wrap(i::Tuple, bbox)
+#     n = _wrapdiv.(i, bbox)
+#     j = _wrapmod.(i, bbox)
+#     return j, SVector(n)
+# end
+
+# _wrapdiv(n, (nmin, nmax)) = nmin <= n <= nmax ? 0 : div(n - nmin, 1 + nmax - nmin)
+
+# _wrapmod(n, (nmin, nmax)) = nmin <= n <= nmax ? n : nmin + mod(n - nmin, 1 + nmax - nmin)
+
 
 function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E,L,T,L´}
     L <= L´ && return truefunc

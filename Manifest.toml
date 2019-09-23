@@ -6,12 +6,6 @@ git-tree-sha1 = "380e36c66edfa099cd90116b24c1ce8cafccac40"
 uuid = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 version = "0.4.1"
 
-[[Arpack]]
-deps = ["BinaryProvider", "Libdl", "LinearAlgebra"]
-git-tree-sha1 = "07a2c077bdd4b6d23a40342a8a108e2ee5e58ab6"
-uuid = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
-version = "0.3.1"
-
 [[Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
@@ -96,8 +90,8 @@ uuid = "a63ad114-7e13-5084-954f-fe012c677804"
 [[NearestNeighbors]]
 deps = ["Distances", "StaticArrays"]
 git-tree-sha1 = "ac4946123a800e0f9dbcef98422552b55568cb73"
-repo-rev = "abstractarray"
-repo-url = "https://github.com/pablosanjose/NearestNeighbors.jl"
+repo-rev = "master"
+repo-url = "https://github.com/KristofferC/NearestNeighbors.jl.git"
 uuid = "b8a86587-4115-5ab1-83bc-aa920d37bbce"
 version = "0.4.3"
 

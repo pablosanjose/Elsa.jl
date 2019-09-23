@@ -190,7 +190,7 @@ Base.Sort.defalg(v::C) where {T<:Union{Number, Missing}, C<:CoSort{T}} = Base.DE
 # SparseMatrixBuilder
 #######################################################################
 
-mutable struct SparseMatrixBuilder{T}
+mutable struct SparseMatrixBuilder{T} <: AbstractMatrix{T}
     m::Int
     n::Int
     colptr::Vector{Int}
