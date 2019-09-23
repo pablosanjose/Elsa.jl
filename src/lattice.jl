@@ -259,16 +259,25 @@ _lattice(u::Unitcell{E,T}) where {E,T} = Lattice(Bravais{E,T}(), u)
 lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = Lattice(br, Unitcell(s, ss...; kw...))
 
 function lattice(lat::Lattice)
-    sitecounts = zeros(Int, nsublats(lat) + 1)
-    foreach_supercell((i,s) -> sitecounts[s + 1] += 1, lat)
-    newoffsets = cumsum!(sitecounts, sitecounts)
-    oldoffsets = lat.unitcell.offsets
-    oldsites = lat.unitcell.sites
-    newsites = similar(lat.unitcell.sites, nsites(lat.supercell))
-    foreach_supercell((i,s) -> newsites[i + newoffsets[s] - oldoffsets[s]] = oldsites[i], lat)
+    newoffsets = supercell_offsets(lat)
+    newsites = supercell_sites(lat)
     unitcell = Unitcell(newsites, lat.unitcell.names, newoffsets, lat.unitcell.orbitals)
     bravais = lat.bravais * lat.supercell.matrix
     return Lattice(bravais, unitcell)
+end
+
+function supercell_offsets(lat::Lattice)
+    sitecounts = zeros(Int, nsublats(lat) + 1)
+    foreach_supercell((s, oldi, newi) -> sitecounts[s + 1] += 1, lat)
+    newoffsets = cumsum!(sitecounts, sitecounts)
+    return newoffsets
+end
+
+function supercell_sites(lat::Lattice)
+    newsites = similar(lat.unitcell.sites, nsites(lat.supercell))
+    oldsites = lat.unitcell.sites
+    foreach_supercell((s, oldi, newi) -> newsites[newi] = oldsites[oldi], lat)
+    return newsites
 end
 
 # function transform!(lat::Lattice, f::Function; sublats = eachindex(lat.sublats))
@@ -310,10 +319,15 @@ nsublats(lat) = length(lat.unitcell.names)
 
 sublatsites(lat::Lattice) = diff(lat.unitcell.offsets)
 
+# apply f to trues in cellmask. Arguments are oldi = old site index, s = sublat index
 function foreach_supercell(f::F, lat::Lattice) where {F<:Function}
-    for dn in CartesianIndices(lat.supercell)
-        for s in 1:nsublats(lat), i in siterange(lat, s)
-            lat.supercell.cellmask[i, Tuple(dn)...] && f(i, s)
+    newi = 0
+    for s in 1:nsublats(lat), oldi in siterange(lat, s)
+        for dn in CartesianIndices(lat.supercell)
+            if lat.supercell.cellmask[oldi, Tuple(dn)...]
+                newi += 1
+                f(s, oldi, newi)
+            end
         end
     end
     return nothing

@@ -66,9 +66,10 @@ hamiltonian(lat::Lattice, t::TightbindingModelTerm...; kw...) =
 hamiltonian(lat::Lattice{E,L,T}, m::TightbindingModel; type::Type = Complex{T}, kw...) where {E,L,T} =
     hamiltonian_sparse(blocktype(lat, type), lat, m; kw...)
 
-function hamiltonian(lat::Lattice, h::Hamiltonian)
-
-end
+# function hamiltonian(lat::Lattice, h::Hamiltonian)
+#     iscompatible(lat, h) || throw(ArgumentError("Lattice and Hamiltonian are incompatible"))
+#     addcolumn = (col)
+# end
 
 #######################################################################
 # auxiliary types
