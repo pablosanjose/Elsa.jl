@@ -2,30 +2,22 @@
 # BoxIterator
 #######################################################################
 
-struct BoxRegister{N}
-    cellinds::Vector{Tuple{SVector{N,Int}, Int}}
-end
-
-BoxRegister{N}() where N = BoxRegister(Tuple{NTuple{N,Int}, Int}[])
-
 """
-    BoxIterator(seed::SVector{N,Int}; maxiterations = missing, nregisters = 0)
+    BoxIterator(seed::SVector{N,Int}; maxiterations = missing)
 
 Cartesian iterator `iter` over `SVector{N,Int}`s (`cell`s) that starts at `seed` and
 grows outwards in the form of a box of increasing sides (not necesarily equal) until
 it encompasses a certain N-dimensional region. To signal that a cell is in the desired
-region the user calls `acceptcell!(iter, cell)`.  The option `nregisters = n` creates `n`
-`BoxRegister`s that store `(cell, index)`
+region the user calls `acceptcell!(iter, cell)`.
 """
-struct BoxIterator{N}
+struct BoxIterator{N,MI<:Union{Int,Missing}}
     seed::SVector{N,Int}
-    maxiter::Union{Int, Missing}
+    maxiter::MI
     dimdir::MVector{2,Int}
     nmoves::MVector{N,Bool}
     pmoves::MVector{N,Bool}
     npos::MVector{N,Int}
     ppos::MVector{N,Int}
-    registers::Vector{BoxRegister{N}}
 end
 
 Base.IteratorSize(::BoxIterator) = Base.SizeUnknown()
@@ -37,12 +29,9 @@ Base.eltype(::BoxIterator{N}) where {N} = SVector{N,Int}
 Base.CartesianIndices(b::BoxIterator) =
     CartesianIndices(UnitRange.(Tuple(b.npos), Tuple(b.ppos)))
 
-# boundingboxiter(b::BoxIterator) = Tuple(b.npos), Tuple(b.ppos)
-
-function BoxIterator(seed::SVector{N}; maxiterations::Union{Int,Missing} = missing, nregisters::Int = 0) where {N}
+function BoxIterator(seed::SVector{N}; maxiterations = missing) where {N}
     BoxIterator(seed, maxiterations, MVector(1, 2),
-        ones(MVector{N,Bool}), ones(MVector{N,Bool}), MVector{N,Int}(seed), MVector{N,Int}(seed),
-        nregisters > 0 ? [BoxRegister{N}() for i in 1:nregisters] : BoxRegister{N}[])
+        ones(MVector{N,Bool}), ones(MVector{N,Bool}), MVector{N,Int}(seed), MVector{N,Int}(seed))
 end
 
 function iteratorreset!(b::BoxIterator{N}) where {N}
@@ -52,8 +41,6 @@ function iteratorreset!(b::BoxIterator{N}) where {N}
     b.pmoves .= ones(MVector{N,Bool})
     b.npos   .= MVector(b.seed)
     b.ppos   .= MVector(b.seed)
-    nregisters = length(b.registers)
-    nregisters > 0 && (b.registers .= [BoxRegister{N}() for i in 1:nregisters])
     return nothing
 end
 
@@ -73,7 +60,7 @@ function Base.iterate(b::BoxIterator{N}) where {N}
         return nothing
     else
         (cell, rangestate) = itrange
-        return (SVector(cell.I), BoxIteratorState(range, rangestate, 1))
+        return (SVector(Tuple(cell)), BoxIteratorState(range, rangestate, 1))
     end
 end
 
@@ -92,11 +79,11 @@ function Base.iterate(b::BoxIterator{N}, s::BoxIteratorState{N}) where {N}
             itrange = iterate(newrange)
             # itrange === nothing && return nothing
             (cell, rangestate) = itrange
-            return (SVector(cell.I), BoxIteratorState(newrange, rangestate, s.iteration + 1))
+            return (SVector(Tuple(cell)), BoxIteratorState(newrange, rangestate, s.iteration + 1))
         end
     else
         (cell, rangestate) = itrange
-        return (SVector(cell.I), BoxIteratorState(s.range, rangestate, s.iteration + 1))
+        return (SVector(Tuple(cell)), BoxIteratorState(s.range, rangestate, s.iteration + 1))
     end
 end
 
@@ -121,7 +108,7 @@ function nextface!(b::BoxIterator{N}) where {N}
     return nothing
 end
 
-@inline function nextdimdir!(b::BoxIterator{N}) where {N}
+function nextdimdir!(b::BoxIterator{N}) where {N}
     dim, dir = Tuple(b.dimdir)
     if dim < N
         dim += 1
@@ -134,15 +121,15 @@ end
     return nothing
 end
 
-function newrangeneg(b::BoxIterator{N}, dim) where {N}
+@inline function newrangeneg(b::BoxIterator{N}, dim) where {N}
     return CartesianIndices(ntuple(
-        i -> ifelse(i == dim, b.npos[i]:b.npos[i], b.npos[i]:b.ppos[i]),
+        i -> b.npos[i]:(i == dim ? b.npos[i] : b.ppos[i]),
         Val(N)))
 end
 
-function newrangepos(b::BoxIterator{N}, dim) where {N}
+@inline function newrangepos(b::BoxIterator{N}, dim) where {N}
     return CartesianIndices(ntuple(
-        i -> ifelse(i == dim, b.ppos[i]:b.ppos[i], b.npos[i]:b.ppos[i]),
+        i -> (i == dim ? b.ppos[i] : b.npos[i]):b.ppos[i],
         Val(N)))
 end
 
@@ -164,11 +151,6 @@ end
 
 # Fallback for non-BoxIterators
 acceptcell!(b, cell) = nothing
-
-function registersite!(iter, cell, sublat, idx)
-    push!(iter.registers[sublat].cellinds, (cell, idx))
-    return nothing
-end
 
 #######################################################################
 # CoSort
