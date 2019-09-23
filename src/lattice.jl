@@ -122,7 +122,9 @@ function Unitcell(sublats::NTuple{N,Sublat{E,T}};
     sites = SVector{E2,T2}[]
     offsets = [0]  # length(offsets) == lenfth(sublats) + 1
     for s in eachindex(sublats)
-        append!(sites, sublats[s].sites)
+        for site in sublats[s].sites
+            push!(sites, padright(site, Val(E2)))
+        end
         push!(offsets, length(sites))
     end
     return Unitcell(sites, names, offsets, orbitals)
