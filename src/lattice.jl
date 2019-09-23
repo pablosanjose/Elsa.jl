@@ -120,7 +120,7 @@ function Unitcell(sublats::NTuple{N,Sublat{E,T}};
         push!(allnames, names[i])
     end
     sites = SVector{E2,T2}[]
-    offsets = [0]  # length(offsets) == lenfth(sublats) + 1
+    offsets = [0]  # length(offsets) == length(sublats) + 1
     for s in eachindex(sublats)
         for site in sublats[s].sites
             push!(sites, padright(site, Val(E2)))
@@ -181,6 +181,7 @@ $(i)  Dimensions    : $(dim(s))
 $(i)  Vectors       : $(displayvectors(s.matrix))
 $(i)  Total sites   : $(nsites(s))")
 end
+
 #######################################################################
 # Lattice
 #######################################################################
@@ -236,9 +237,21 @@ See also `superlattice` for information on building superlattices.
 
 # Examples
 ```jldoctest
-julia> lattice(bravais((1, 0)), Sublat((0, 0.)), Sublat((0, Float32(1))); dim = Val(3))
-Lattice{3,1,Float64}: 1-dimensional lattice with 2 Float64-typed sublattices in
-3-dimensional embedding space
+julia> lattice(bravais((1, 0)), sublat((0, 0)), sublat((0, Float32(1))); dim = Val(3))
+Lattice{3,1,Float32} : 1D lattice in 3D space
+  Bravais vectors : ((1.0, 0.0, 0.0),)
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Orbitals      : ((:noname,), (:noname,))
+    Sites         : (1, 1) --> 2 total per unit cell
+
+julia> lattice(superlattice(LatticePresets.honeycomb(), 100))
+Lattice{2,2,Float64} : 2D lattice in 2D space
+  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Orbitals      : ((:noname,), (:noname,))
+    Sites         : (10000, 10000) --> 20000 total per unit cell
 ```
 """
 lattice(s::Sublat, ss::Sublat...; kw...) where {E,T} = _lattice(Unitcell(s, ss...; kw...))
