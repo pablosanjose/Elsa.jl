@@ -122,7 +122,9 @@ function Unitcell(sublats::NTuple{N,Sublat{E,T}};
     sites = SVector{E2,T2}[]
     offsets = [0]  # length(offsets) == lenfth(sublats) + 1
     for s in eachindex(sublats)
-        append!(sites, sublats[s].sites)
+        for site in sublats[s].sites
+            push!(sites, padright(site, Val(E2)))
+        end
         push!(offsets, length(sites))
     end
     return Unitcell(sites, names, offsets, orbitals)
@@ -158,7 +160,8 @@ nsites(s::Supercell) = sum(s.cellmask)
 #     return Supercell(s.matrix, newmask)
 # end
 
-# boundingbox(s::Supercell) = extrema.(tail(axes(s.cellmask)))
+boundingbox(s::Supercell) = extrema.(tail(axes(s.cellmask)))
+Base.CartesianIndices(s::Supercell) = CartesianIndices(tail(axes(s.cellmask)))
 
 @inline function wrap(i::Tuple, bbox)
     n = _wrapdiv.(i, bbox)
@@ -191,24 +194,6 @@ function Lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,
     Lattice(convert(Bravais{E,L,T}, bravais), unitcell, missing)
 end
 
-# find SVector type that can hold all orbital amplitudes in any lattice sites
-orbitaltype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
-    _orbitaltype(SVector{1,Tv}, lat.unitcell.orbitals...)
-_orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
-    (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
-_orbitaltype(t) = t
-
-# find SMatrix type that can hold all matrix elements between lattice sites
-blocktype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
-    _blocktype(orbitaltype(lat, Tv))
-_blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
-
-sublat(lat::Lattice, siteidx) = findlast(o -> o < siteidx, lat.unitcell.offsets)
-siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.offsets[sublat+1]
-
-displaynames(l::Lattice) = display_as_tuple(l.unitcell.names, ":")
-displayorbitals(l::Lattice) = string(l.unitcell.orbitals)
-
 function Supercell(lat::Lattice{E,L},
     ranges::NTuple{L,AbstractRange} = ntuple(_->0:0, Val(L))) where {E,L}
     ns = nsites(lat)
@@ -217,8 +202,8 @@ function Supercell(lat::Lattice{E,L},
     return sc
 end
 
-hassupercell(lat::Lattice{E,L,T,Missing}) where {E,L,T} = false
-hassupercell(lat::Lattice{E,L,T}) where {E,L,T} = true
+displaynames(l::Lattice) = display_as_tuple(l.unitcell.names, ":")
+displayorbitals(l::Lattice) = string(l.unitcell.orbitals)
 
 function Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T}
     ioindent = IOContext(io, :indent => "  ")
@@ -238,11 +223,16 @@ end
 """
     lattice([bravais::Bravais,] sublats::Sublat...; dim::Val{E}, type::T, names, orbitals)
 
-Create a `Lattice{E,L,T}` with `Bravais` matrix `bravais` and sublattices `sublats`
+Create a `Lattice{E,L,T}` with Bravais matrix `bravais` and sublattices `sublats`
 converted to a common  `E`-dimensional embedding space and type `T`. To override the
 embedding  dimension `E`, use keyword `dim = Val(E)`. Similarly, override type `T` with
 `type = T`. The keywords `names::Tuple` and `orbitals::Tuple{Tuple}` can be used to rename
 `sublats` or redefine their orbitals per site.
+
+    lattice(superlat)
+
+Create a lattice with a unitcell equal to the supercell of superlattice `superlat`.
+See also `superlattice` for information on building superlattices.
 
 # Examples
 ```jldoctest
@@ -254,6 +244,19 @@ Lattice{3,1,Float64}: 1-dimensional lattice with 2 Float64-typed sublattices in
 lattice(s::Sublat, ss::Sublat...; kw...) where {E,T} = _lattice(Unitcell(s, ss...; kw...))
 _lattice(u::Unitcell{E,T}) where {E,T} = Lattice(Bravais{E,T}(), u)
 lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = Lattice(br, Unitcell(s, ss...; kw...))
+
+function lattice(lat::Lattice)
+    sitecounts = zeros(Int, nsublats(lat) + 1)
+    foreach_supercell((i,s) -> sitecounts[s + 1] += 1, lat)
+    newoffsets = cumsum!(sitecounts, sitecounts)
+    oldoffsets = lat.unitcell.offsets
+    oldsites = lat.unitcell.sites
+    newsites = similar(lat.unitcell.sites, nsites(lat.supercell))
+    foreach_supercell((i,s) -> newsites[i + newoffsets[s] - oldoffsets[s]] = oldsites[i], lat)
+    unitcell = Unitcell(newsites, lat.unitcell.names, newoffsets, lat.unitcell.orbitals)
+    bravais = lat.bravais
+    return Lattice(bravais, unitcell)
+end
 
 # function transform!(lat::Lattice, f::Function; sublats = eachindex(lat.sublats))
 #     for s in sublats
@@ -270,9 +273,39 @@ lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = Lattice(br, Unitcell(s, 
 
 # Auxiliary #
 
+# find SVector type that can hold all orbital amplitudes in any lattice sites
+orbitaltype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
+    _orbitaltype(SVector{1,Tv}, lat.unitcell.orbitals...)
+_orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
+    (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
+_orbitaltype(t) = t
+
+# find SMatrix type that can hold all matrix elements between lattice sites
+blocktype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
+    _blocktype(orbitaltype(lat, Tv))
+_blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
+
+sublat(lat::Lattice, siteidx) = findlast(o -> o < siteidx, lat.unitcell.offsets)
+siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.offsets[sublat+1]
+
+hassupercell(lat::Lattice{E,L,T,Missing}) where {E,L,T} = false
+hassupercell(lat::Lattice{E,L,T}) where {E,L,T} = true
+
 nsites(lat::Lattice) = length(lat.unitcell.sites)
+
 nsublats(lat) = length(lat.unitcell.names)
+
 sublatsites(lat::Lattice) = diff(lat.unitcell.offsets)
+
+function foreach_supercell(f::F, lat::Lattice) where {F<:Function}
+    for dn in CartesianIndices(lat.supercell)
+        for s in 1:nsublats(lat), i in siterange(lat, s)
+            lat.supercell.cellmask[i, Tuple(dn)...] && f(i, s)
+        end
+    end
+    return nothing
+end
+
 
 # sublatindex(lat::Lattice, name::NameType) = findfirst(s -> (s.name == name), lat.sublats)
 # sublatindex(lat::Lattice, i::Integer) = Int(i)
@@ -280,24 +313,28 @@ sublatsites(lat::Lattice) = diff(lat.unitcell.offsets)
 #######################################################################
 # superlattice
 #######################################################################
+const TOOMANYITERS = 10^8
+
 """
-    superlattice(lattice::Lattice{E,L}, v::NTuple{N,Integer}...; region = r -> true)
-    superlattice(lattice::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = r -> true)
+    superlattice(lattice::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing)
+    superlattice(lattice::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing)
 
 Modifies the supercell of `L`-dimensional `lattice` to one with Bravais vectors
 `br´= br * supercell`, where `supercell::SMatrix{L,L´,Int}` is the integer supercell matrix
-with the `v`s as columns. Only sites at position `r` such that `region(r) == true` will be
-included in the supercell. Note that in the case of `L´ < L`,a bounded `region` function
-must be provided to limit the extension along the non-periodic dimensions.
+with the `L´` `v`s as columns.
 
-    superlattice(lattice::Lattice{E,L}, factor::Integer; region = r -> true)
+Only sites at position `r` such that `region(r) == true` will be included in the supercell.
+If `region` is missing, a Bravais unit cell perpendicular to the `v` axes will be selected
+for the `L-L´` non-periodic directions.
 
-Calls `superlattice` with a uniformly scaled `supercell = factor * I`
+    superlattice(lattice::Lattice{E,L}, factor::Integer; region = missing)
 
-    superlattice(lattice::Lattice{E,L}, factors::Integer...; region = r -> true)
+Calls `superlattice` with a uniformly scaled `supercell = SMatrix{L,L}(factor * I)`
 
-Calls `superlattice` with different scaling along each Bravais vector (supercell with
-factors along the diagonal)
+    superlattice(lattice::Lattice{E,L}, factors::Integer...; region = missing)
+
+Calls `superlattice` with different scaling along each Bravais vector (diagonal supercell
+with factors along the diagonal)
 
     lattice |> superlattice(v...; kw...)
 
@@ -341,10 +378,6 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
     Vectors       : ((3, 0), (0, 3))
     Total sites   : 9
 ```
-
-# See also
-
-    'Region`
 """
 superlattice(v...; kw...) = lat -> superlattice(lat, v...; kw...)
 superlattice(lat::Lattice{E,L}; kw...) where {E,L} = superlattice(lat, SMatrix{L,0,Int}(); kw...)
@@ -354,21 +387,22 @@ superlattice(lat::Lattice{E,L}, factors::Vararg{Integer,L}; kw...) where {E,L} =
     superlattice(lat, SMatrix{L,L,Int}(Diagonal(SVector(factors))); kw...)
 superlattice(lat::Lattice{E,L}, vecs::NTuple{L,Int}...; kw...) where {E,L} =
     superlattice(lat, toSMatrix(Int, vecs...); kw...)
-function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = _truefunc) where {E,L,L´}
+function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing) where {E,L,L´}
     bravais = lat.bravais.matrix
+    regionfunc = region === missing ? ribbonfunc(bravais, supercell) : region
     iter = BoxIterator(zero(SVector{L,Int}))
-    is_grow_dir = is_perp_dir(supercell)
+    in_supercell_func = is_perp_dir(supercell)
     foundfirst = false
     counter = 0
     for dn in iter   # We first compute the bounding box
         found = false
         counter += 1; counter == TOOMANYITERS &&
             throw(ArgumentError("`region` seems unbounded (after $TOOMANYITERS iterations)"))
-        is_grow_dn = is_grow_dir(SVector(Tuple(dn)))
+        in_supercell = in_supercell_func(SVector(Tuple(dn)))
         r0 = bravais * SVector(Tuple(dn))
         for site in lat.unitcell.sites
             r = r0 + site
-            found = is_grow_dn && region(r)
+            found = in_supercell && regionfunc(r)
             if found || !foundfirst
                 acceptcell!(iter, dn)
                 foundfirst = found
@@ -382,29 +416,26 @@ function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region =
     @inbounds for dn in c
         dntup = Tuple(dn)
         dnvec = SVector(dntup)
-        is_grow_dn = is_grow_dir(dnvec)
-        is_grow_dn || (cellmask[:, dntup...] .= false; continue)
+        in_supercell = in_supercell_func(dnvec)
+        in_supercell || (cellmask[:, dntup...] .= false; continue)
         r0 = bravais * dnvec
         for (i, site) in enumerate(lat.unitcell.sites)
             r = site + r0
-            cellmask[i, dntup...] = is_grow_dn && region(r)
+            cellmask[i, dntup...] = in_supercell && regionfunc(r)
         end
     end
     supercell = Supercell(supercell, cellmask)
     return Lattice(lat.bravais, lat.unitcell, supercell)
 end
 
-const TOOMANYITERS = 10^8
-
-_truefunc(r) = true
-
 # pseudoinverse of s times an integer n, so that it is an integer matrix (for accuracy)
-pinvmultiple(s::SMatrix{N,0}) where {N} = (SMatrix{0,0,Int}(), 0)
-function pinvmultiple(s::SMatrix{N,M}) where {N,M}
+pinvmultiple(s::SMatrix{L,0}) where {L} = (SMatrix{0,0,Int}(), 0)
+function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
+    L < L´ && throw(DimensionMismatch("Supercell dimensions $(L´) cannot exceed lattice dimensions $L"))
     qrfact = qr(s)
-    pinverse = inv(qrfact.R) * qrfact.Q'
     n = det(qrfact.R)
-    iszero(n) && throw(ErrorException("Supercell is singular"))
+    abs(n) < sqrt(eps(n)) && throw(ErrorException("Supercell appears to be singular"))
+    pinverse = inv(qrfact.R) * qrfact.Q'
     return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
 end
 
@@ -412,4 +443,22 @@ end
 is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(newndist(dn, invs)); end
 
 newndist(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
-newndist(oldndist, (pinvs, n)::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
+newndist(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
+
+function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E,L,T,L´}
+    L <= L´ && return truefunc
+    # real-space supercell axes + all space
+    s = hcat(bravais * supercell, SMatrix{E,E,T}(I))
+    q = qr(s).Q
+    # last vecs in Q are orthogonal to axes
+    os = ntuple(i -> SVector(q[:,i+L´]), Val(E-L´))
+    # range of projected bravais, including zero
+    ranges = (o -> extrema(vcat(SVector(zero(T)), bravais' * o))).(os)
+    # projector * r gives the projection of r on orthogonal vectors
+    projector = hcat(os...)'
+    # ribbon defined by r's with projection within ranges for all orthogonal vectors
+    regionfunc(r) = all(first.(ranges) .<= Tuple(projector * r) .<= last.(ranges))
+    # return r -> all(first.(ranges) .<= Tuple(projector * r) .<= last.(ranges))
+    return regionfunc
+end
+truefunc(r) = true

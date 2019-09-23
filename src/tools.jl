@@ -31,6 +31,7 @@ padright(sv::StaticVector{E,T}, x::T, ::Val{E}) where {E,T} = sv
 padright(sv::StaticVector{E,T}, x::T2, ::Val{E2}) where {E,T,E2,T2} =
     SVector{E2, T2}(ntuple(i -> i > E ? x : T2(sv[i]), Val(E2)))
 padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
+padright(sv::StaticVector{E,T}, ::Val{E}) where {E,T} = sv
 
 @inline pad(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,T2,S<:SMatrix{E2,L2,T2}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
