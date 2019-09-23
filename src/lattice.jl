@@ -267,7 +267,7 @@ function lattice(lat::Lattice)
     newsites = similar(lat.unitcell.sites, nsites(lat.supercell))
     foreach_supercell((i,s) -> newsites[i + newoffsets[s] - oldoffsets[s]] = oldsites[i], lat)
     unitcell = Unitcell(newsites, lat.unitcell.names, newoffsets, lat.unitcell.orbitals)
-    bravais = lat.bravais
+    bravais = lat.bravais * lat.supercell.matrix
     return Lattice(bravais, unitcell)
 end
 

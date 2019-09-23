@@ -35,9 +35,11 @@ _nnz(h::Matrix) = length(h)
 Base.Matrix(h::Hamiltonian) = Hamiltonian(Matrix.(h.harmonics), h.field, h.lattice)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
-iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L,Tv,HamiltonianHarmonic{L,Tv,A}}) where {E,L,Tv,A} =
-    blocktype(lat, Tv) == eltype(A)
-iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L2,Tv,HamiltonianHarmonic{L,Tv,A}}) where {E,L,L2,Tv,A} =
+blocktype(h::Hamiltonian{L,Tv,HamiltonianHarmonic{L,Tv,A}}) where {L,Tv,A} = eltype(A)
+
+iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L,Tv}) where {E,L,Tv} =
+    blocktype(lat, Tv) == blocktype(h)
+iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L2,Tv}) where {E,L,L2,Tv} =
     false
 
 Base.show(io::IO, h::HamiltonianHarmonic{L,Tv,A}) where
