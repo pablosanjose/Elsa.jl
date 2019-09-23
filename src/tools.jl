@@ -60,6 +60,17 @@ displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; kw...) where {E,L} =
 displayvectors(mat::SMatrix{E,L,<:Integer}; kw...) where {E,L} =
     ntuple(l -> Tuple(mat[:,l]), Val(L))
 
+# pseudoinverse of s times an integer n, so that it is an integer matrix (for accuracy)
+pinvmultiple(s::SMatrix{L,0}) where {L} = (SMatrix{0,0,Int}(), 0)
+function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
+    L < L´ && throw(DimensionMismatch("Supercell dimensions $(L´) cannot exceed lattice dimensions $L"))
+    qrfact = qr(s)
+    n = det(qrfact.R)
+    abs(n) < sqrt(eps(n)) && throw(ErrorException("Supercell appears to be singular"))
+    pinverse = inv(qrfact.R) * qrfact.Q'
+    return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
+end
+
 # pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')
 
 # padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
