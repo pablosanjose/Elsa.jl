@@ -69,9 +69,9 @@ hamiltonian(lat::Lattice, t::TightbindingModelTerm...; kw...) =
 hamiltonian(lat::Lattice{E,L,T}, m::TightbindingModel; type::Type = Complex{T}, kw...) where {E,L,T} =
     hamiltonian_sparse(blocktype(lat, type), lat, m; kw...)
 
-hamiltonian(t::TightbindingModelTerm...; kw...) = lat -> hamiltonian(lat, t; kw...)
-hamiltonian(m::TightbindingModel; kw...) = lat -> hamiltonian(lat, m; kw...)
-hamiltonian(h::Hamiltonian) = slat -> hamiltonian(slat, h)
+hamiltonian(t::TightbindingModelTerm...; kw...) = z -> hamiltonian(z, t...; kw...)
+hamiltonian(m::TightbindingModel; kw...) = z -> hamiltonian(z, m; kw...)
+hamiltonian(h::Hamiltonian) = z -> hamiltonian(z, h)
 
 #######################################################################
 # auxiliary types
