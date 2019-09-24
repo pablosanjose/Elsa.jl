@@ -50,14 +50,17 @@ displaytype(A::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC, sparse"
 displaytype(A::Type{<:Array}) = "Matrix, dense"
 displaytype(A::Type) = string(A)
 
-Base.show(io::IO, ham::Hamiltonian{L,Tv,H,F}) where
-    {L,Tv,N,F,A<:AbstractArray{<:SMatrix{N,N,Tv}},H<:HamiltonianHarmonic{L,Tv,A}} = print(io,
-"Hamiltonian{$L,$Tv} : $(L)D Hamiltonian of element type SMatrix{$N,$N,$Tv}
-  Bloch harmonics  : $(length(ham.harmonics)) ($(displaytype(A)))
-  Harmonic size    : $((n -> "$n × $n")(nsites(ham)))
-  Onsites          : $(nonsites(ham))
-  Hoppings         : $(nhoppings(ham))
-  Coordination     : $(nhoppings(ham) / nsites(ham))")
+function Base.show(io::IO, ham::Hamiltonian{L,Tv,H,F}) where
+    {L,Tv,N,F,A<:AbstractArray{<:SMatrix{N,N,Tv}},H<:HamiltonianHarmonic{L,Tv,A}}
+    i = get(io, :indent, "")
+    print(io,
+"$(i)Hamiltonian{$L,$Tv} : $(L)D Hamiltonian of $N × $N blocks
+$(i)  Bloch harmonics  : $(length(ham.harmonics)) ($(displaytype(A)))
+$(i)  Harmonic size    : $((n -> "$n × $n")(nsites(ham)))
+$(i)  Onsites          : $(nonsites(ham))
+$(i)  Hoppings         : $(nhoppings(ham))
+$(i)  Coordination     : $(nhoppings(ham) / nsites(ham))")
+end
 
 # API #
 
@@ -65,6 +68,10 @@ hamiltonian(lat::Lattice, t::TightbindingModelTerm...; kw...) =
     hamiltonian(lat, TightbindingModel(t); kw...)
 hamiltonian(lat::Lattice{E,L,T}, m::TightbindingModel; type::Type = Complex{T}, kw...) where {E,L,T} =
     hamiltonian_sparse(blocktype(lat, type), lat, m; kw...)
+
+hamiltonian(t::TightbindingModelTerm...; kw...) = lat -> hamiltonian(lat, t; kw...)
+hamiltonian(m::TightbindingModel; kw...) = lat -> hamiltonian(lat, m; kw...)
+hamiltonian(h::Hamiltonian) = slat -> hamiltonian(slat, h)
 
 #######################################################################
 # auxiliary types

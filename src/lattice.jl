@@ -180,14 +180,15 @@ displaynames(l::Lattice) = display_as_tuple(l.unitcell.names, ":")
 displayorbitals(l::Lattice) = string(l.unitcell.orbitals)
 
 function Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T}
-    ioindent = IOContext(io, :indent => "  ")
+    i = get(io, :indent, "")
+    ioindent = IOContext(io, :indent => "$(i)  ")
     print(io,
-"Lattice{$E,$L,$T} : $(L)D lattice in $(E)D space
-  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))
-  Sublattices     : $(nsublats(lat))
-    Names         : $(displaynames(lat))
-    Orbitals      : $(displayorbitals(lat))
-    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell",
+"$(i)Lattice{$E,$L,$T} : $(L)D lattice in $(E)D space
+$(i)  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))
+$(i)  Sublattices     : $(nsublats(lat))
+$(i)    Names         : $(displaynames(lat))
+$(i)    Orbitals      : $(displayorbitals(lat))
+$(i)    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell",
     "\n")
     isminimalsupercell(lat) || print(ioindent, lat.supercell)
 end
@@ -368,7 +369,7 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
     Total sites   : 9
 ```
 """
-superlattice(v...; kw...) = lat -> superlattice(lat, v...; kw...)
+superlattice(v::Union{SMatrix,Tuple,SVector}...; kw...) = lat -> superlattice(lat, v...; kw...)
 superlattice(lat::Lattice{E,L}; kw...) where {E,L} = superlattice(lat, SMatrix{L,0,Int}(); kw...)
 superlattice(lat::Lattice{E,L}, factor::Integer; kw...) where {E,L} =
     superlattice(lat, SMatrix{L,L,Int}(factor * I); kw...)
