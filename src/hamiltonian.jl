@@ -208,7 +208,7 @@ function hamiltonian(lat::Lattice{E,L,T,S}, ham::Hamiltonian{L,Tv}) where {L,Tv,
     iscompatible(lat, ham) || throw(ArgumentError("Lattice and Hamiltonian are incompatible"))
     mapping = similar(lat.supercell.cellmask, Int) # store supersite indices newi
     mapping .= 0
-    foreach_supersite((s, oldi, olddn, newi) -> mapping[oldi, olddn...] = newi, lat)
+    foreach_supersite((s, oldi, olddn, newi) -> mapping[oldi, Tuple(olddn)...] = newi, lat)
     dim = nsites(lat.supercell)
     B = blocktype(ham)
     harmonic_builders = HamiltonianHarmonic{L´,Tv,SparseMatrixBuilder{B}}[]
