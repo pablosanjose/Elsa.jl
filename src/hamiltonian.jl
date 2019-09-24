@@ -252,3 +252,6 @@ function get_or_push!(hs::Vector{HamiltonianHarmonic{L,Tv,SparseMatrixBuilder{B}
     push!(hs, newh)
     return newh
 end
+
+hamiltonian(lat::Lattice{E,L,T,S}, ham::Hamiltonian{L2,Tv}) where {E,L,T,S,L2,Tv} =
+    throw(DimensionMismatch("Lattice dimensions $L does not match the Hamiltonian's $L2"))

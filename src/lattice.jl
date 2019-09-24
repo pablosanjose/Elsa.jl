@@ -188,9 +188,8 @@ $(i)  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))
 $(i)  Sublattices     : $(nsublats(lat))
 $(i)    Names         : $(displaynames(lat))
 $(i)    Orbitals      : $(displayorbitals(lat))
-$(i)    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell",
-    "\n")
-    isminimalsupercell(lat) || print(ioindent, lat.supercell)
+$(i)    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell")
+    isminimalsupercell(lat) || print(ioindent, "\n", lat.supercell)
 end
 
 # API #
