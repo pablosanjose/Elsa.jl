@@ -67,8 +67,12 @@ end
 
 hamiltonian(lat::Lattice, t::AbstractTightbindingModel...; kw...) =
     hamiltonian(lat, TightbindingModel(t...); kw...)
-hamiltonian(lat::Lattice, m::TightbindingModel; type::Type = Complex{sitetype(lat)}, kw...) =
+hamiltonian(lat::Lattice, m::TightbindingModel; type::Type = Complex{numbertype(lat)}, kw...) =
     hamiltonian_sparse(blocktype(lat, type), lat, m; kw...)
+
+hamiltonian(lat::Lattice, f::Function, ts::AbstractTightbindingModel...;
+            type::Type = Complex{numbertype(lat)}, kw...) =
+    parametric_hamiltonian(blocktype(lat, type), lat, f, TightbindingModel(ts...); kw...)
 
 hamiltonian(t::AbstractTightbindingModel...; kw...) = z -> hamiltonian(z, t...; kw...)
 hamiltonian(h::Hamiltonian) = z -> hamiltonian(z, h)
@@ -110,6 +114,7 @@ end
 
 Base.length(h::IJV) = length(h.i)
 Base.isempty(h::IJV) = length(h) == 0
+Base.copy(h::IJV) = IJV(h.dn, copy(h.i), copy(h.j), copy(h.v))
 
 function Base.resize!(h::IJV, n)
     resize!(h.i, n)
@@ -125,11 +130,10 @@ Base.push!(h::IJV, (i, j, v)) = (push!(h.i, i); push!(h.j, j); push!(h.v, v))
 #######################################################################
 function hamiltonian_sparse(::Type{M}, lat::Lattice{E,L}, model; field = missing) where {E,L,M}
     builder = IJVBuilder{M}(lat)
-    applyterms!(builder, model.terms...)
+    applyterms!(builder, terms(model)...)
     HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
     n = nsites(lat)
-    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v))#, n, n, (x, xc) -> 0.5 * (x + xc)))
-                   for e in builder.ijvs if !isempty(e)]
+    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
     return Hamiltonian(harmonics, Field(field, lat))
 end
 
@@ -214,7 +218,7 @@ checkinfinite(term) = term.dns === missing && (term.range === missing || !isfini
 
 isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero(dn)
 
-# If all sublats are scanned, avoid doubling hoppings when adding adjoint
+# Avoid double-counting hoppings when adding adjoint
 redundancyfactor(dn, ss, term) =
     isnotredundant(dn, term) || isnotredundant(ss, term) ? 1.0 : 0.5
 # (i,j,dn) and (j,i,-dn) will not both be added if any of the following is true
@@ -243,7 +247,7 @@ function hamiltonian(lat::Lattice{E,L,T,S}, ham::Hamiltonian{L,Tv}) where {L,Tv,
             newh = get_or_push!(harmonic_builders, super_dn, dim)
             for p in nzrange(oldh.h, source_i)
                 target_i = rows[p]
-                # wrapped_dn could exit bounding box along non-periodic direction
+                # check: wrapped_dn could exit bounding box along non-periodic direction
                 checkbounds(Bool, mapping, target_i, Tuple(wrapped_dn)...) || continue
                 newrow = mapping[target_i, Tuple(wrapped_dn)...]
                 val = applyfield(ham.field, vals[p], target_i, source_i, source_dn)
@@ -268,3 +272,96 @@ end
 
 hamiltonian(lat::Lattice{E,L,T,S}, ham::Hamiltonian{L2,Tv}) where {E,L,T,S,L2,Tv} =
     throw(DimensionMismatch("Lattice dimensions $L does not match the Hamiltonian's $L2"))
+
+#######################################################################
+# parametric hamiltonian
+#######################################################################
+struct ParametricHamiltonian{H,F,E,T}
+    base::H
+    hamiltonian::H
+    pointers::Vector{Vector{Tuple{Int,SVector{E,T},SVector{E,T}}}}
+    f::F
+end
+
+Base.eltype(::ParametricHamiltonian{H}) where {L,M,H<:Hamiltonian{L,M}} = M
+
+Base.show(io::IO, pham::ParametricHamiltonian) = print(io, "Parametric ", pham.hamiltonian)
+
+function parametric_hamiltonian(::Type{M}, lat::Lattice{E,L,T}, f::F, model; field = missing) where {M,E,L,T,F}
+    builder = IJVBuilder{M}(lat)
+    applyterms!(builder, terms(model)...)
+    nels = length.(builder.ijvs) # element counters for each harmonic
+    model_f = f()
+    applyterms!(builder, terms(model_f)...)
+    padright!(nels, 0, length(builder.ijvs)) # in case new harmonics where added
+    nels_f = length.(builder.ijvs) # element counters after adding f model
+    empties = isempty.(builder.ijvs) # remove empty harmonics, element counters
+    deleteat!(builder.ijvs, empties)
+    deleteat!(nels, empties)
+    deleteat!(nels_f, empties)
+
+    base_ijvs = copy.(builder.ijvs) # ijvs for ham without f, but with structural zeros
+    zeroM = zero(M)
+    for (ijv, nel, nel_f) in zip(base_ijvs, nels, nels_f), p in nel+1:nel_f
+        ijv.v[p] = zeroM
+    end
+
+    HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
+    n = nsites(lat)
+    base_harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in base_ijvs]
+    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs]
+    pointers = [getpointers(harmonics[k].h, builder.ijvs[k], nels[k], lat) for k in eachindex(harmonics)]
+    base_h = Hamiltonian(base_harmonics, missing)
+    h = Hamiltonian(harmonics, Field(field, lat))
+    return ParametricHamiltonian(base_h, h, pointers, f)
+end
+
+function getpointers(h::SparseMatrixCSC, ijv, eloffset, lat::Lattice{E,L,T}) where {E,L,T}
+    rows = rowvals(h)
+    sites = lat.unitcell.sites
+    pointers = Tuple{Int,SVector{E,T},SVector{E,T}}[] # (pointer, r, dr)
+    nelements = length(ijv)
+    for k in eloffset+1:nelements
+        row = ijv.i[k]
+        col = ijv.j[k]
+        for ptr in nzrange(h, col)
+            if row == rows[ptr]
+                r, dr = _rdr(sites[col], sites[row]) # _rdr(source, target)
+                push!(pointers, (ptr, r, dr))
+                break
+            end
+        end
+    end
+    unique!(first, pointers) # adjoint duplicates lead to repeated pointers... remove.
+    return pointers
+end
+
+function (ph::ParametricHamiltonian)(;kw...)
+    isempty(kw) && return ph.hamiltonian
+    model = ph.f(;kw...)
+    initialize!(ph)
+    foreach(term -> applyterm!(ph, term), terms(model))
+    return ph.hamiltonian
+end
+
+function initialize!(ph::ParametricHamiltonian)
+    for (bh, h, prdrs) in zip(ph.base.harmonics, ph.hamiltonian.harmonics, ph.pointers)
+        vals = nonzeros(h.h)
+        vals_base = nonzeros(bh.h)
+        for (p,_,_) in prdrs
+            vals[p] = vals_base[p]
+        end
+    end
+    return nothing
+end
+
+function applyterm!(ph::ParametricHamiltonian{H}, term::TightbindingModelTerm) where {L,M,H<:Hamiltonian{L,M}}
+    for (h, prdrs) in zip(ph.hamiltonian.harmonics, ph.pointers)
+        vals = nonzeros(h.h)
+        for (p, r, dr) in prdrs
+            v = term(r, dr) # v = orbsized(term(r, dr), lat.unitcell.orbitals[s1], lat.unitcell.orbitals[s2])
+            vals[p] += pad(v, M)
+        end
+    end
+    return nothing
+end

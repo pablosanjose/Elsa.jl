@@ -270,7 +270,7 @@ blocktype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
 _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
 _blocktype(::Type{S}) where {S<:Number} = S
 
-sitetype(::Lattice{E,L,T}) where {E,L,T} = T
+numbertype(::Lattice{E,L,T}) where {E,L,T} = T
 
 sublat(lat::Lattice, siteidx) = findlast(o -> o < siteidx, lat.unitcell.offsets)
 siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.offsets[sublat+1]

@@ -186,6 +186,8 @@ Base.isless(a::CoSortTup, b::CoSortTup) = isless(a.x, b.x)
 
 Base.Sort.defalg(v::C) where {T<:Union{Number, Missing}, C<:CoSort{T}} = Base.DEFAULT_UNSTABLE
 
+isgrowing(c::CoSort) = isgrowing(c.sortvector, c.offset + 1)
+
 #######################################################################
 # SparseMatrixBuilder
 #######################################################################
@@ -255,6 +257,7 @@ function finalisecolumn!(s::SparseMatrixBuilder, sortcol::Bool = true)
     if sortcol
         s.cosorter.offset = s.colptr[s.colcounter] - 1
         sort!(s.cosorter)
+        isgrowing(s.cosorter) || throw(error("Internal error: repeated rows"))
     end
     s.colcounter += 1
     s.colptr[s.colcounter] = s.rowvalcounter
