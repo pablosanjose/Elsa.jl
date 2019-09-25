@@ -128,7 +128,7 @@ function hamiltonian_sparse(::Type{M}, lat::Lattice{E,L}, model; field = missing
     applyterms!(builder, model.terms...)
     HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
     n = nsites(lat)
-    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n, (x, xc) -> 0.5 * (x + xc)))
+    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v))#, n, n, (x, xc) -> 0.5 * (x + xc)))
                    for e in builder.ijvs if !isempty(e)]
     return Hamiltonian(harmonics, Field(field, lat))
 end
@@ -146,7 +146,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm) where {L,M}
             r = lat.unitcell.sites[i]
             vs = orbsized(term(r), lat.unitcell.orbitals[s])
             v = pad(vs, M)
-            term.forcehermitian ? push!(ijv, (i, i, v)) : push!(ijv, (i, i, 0.5 * (v + v')))
+            term.forcehermitian ? push!(ijv, (i, i, 0.5 * (v + v'))) : push!(ijv, (i, i, v))
         end
     end
     return nothing
@@ -174,8 +174,13 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
                     r, dr = _rdr(rsource, rtarget)
                     vs = orbsized(term(r, dr), lat.unitcell.orbitals[s1], lat.unitcell.orbitals[s2])
                     v = pad(vs, M)
-                    push!(ijv, (i, j, v))
-                    addadjoint && push!(ijvc, (j, i, v'))
+                    if addadjoint
+                        v *= redundancyfactor(dn, (s1, s2), term)
+                        push!(ijv, (i, j, v))
+                        push!(ijvc, (j, i, v'))
+                    else
+                        push!(ijv, (i, j, v))
+                    end
                 end
             end
             foundlink && acceptcell!(dns, dn)
@@ -208,6 +213,13 @@ checkinfinite(term) = term.dns === missing && (term.range === missing || !isfini
     throw(ErrorException("Tried to implement an infinite-range hopping on an unbounded lattice"))
 
 isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero(dn)
+
+# If all sublats are scanned, avoid doubling hoppings when adding adjoint
+redundancyfactor(dn, ss, term) =
+    isnotredundant(dn, term) || isnotredundant(ss, term) ? 1.0 : 0.5
+# (i,j,dn) and (j,i,-dn) will not both be added if any of the following is true
+isnotredundant(dn::SVector, term) = term.dns !== missing && !iszero(dn)
+isnotredundant((s1, s2)::Tuple{Int,Int}, term) = term.sublats !== missing && s1 != s2
 
 #######################################################################
 # hamiltonian(lattice, hamiltonian)

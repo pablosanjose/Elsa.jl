@@ -452,11 +452,11 @@ function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E
     # last vecs in Q are orthogonal to axes
     os = ntuple(i -> SVector(q[:,i+L´]), Val(E-L´))
     # range of projected bravais, including zero
-    ranges = (o -> extrema(vcat(SVector(zero(T)), bravais' * o))).(os)
+    ranges = (o -> extrema(vcat(SVector(zero(T)), bravais' * o)) .- sqrt(eps(T))).(os)
     # projector * r gives the projection of r on orthogonal vectors
     projector = hcat(os...)'
     # ribbon defined by r's with projection within ranges for all orthogonal vectors
-    regionfunc(r) = all(first.(ranges) .<= Tuple(projector * r) .<= last.(ranges))
+    regionfunc(r) = all(first.(ranges) .<= Tuple(projector * r) .< last.(ranges))
     # return r -> all(first.(ranges) .<= Tuple(projector * r) .<= last.(ranges))
     return regionfunc
 end
