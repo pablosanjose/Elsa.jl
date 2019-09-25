@@ -82,9 +82,9 @@ end
 #     [i <= i0 && j<= j0 ? m[i,j] : zeroT for i in 1:im, j in 1:jm]
 # end
 
-# @inline tuplejoin(x) = x
-# @inline tuplejoin(x, y) = (x..., y...)
-# @inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
+@inline tuplejoin(x) = x
+@inline tuplejoin(x, y) = (x..., y...)
+@inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
 # tuplesort((a,b)::Tuple{<:Number,<:Number}) = a > b ? (b, a) : (a, b)
 # tuplesort(t::Tuple) = t
 # tuplesort(::Missing) = missing

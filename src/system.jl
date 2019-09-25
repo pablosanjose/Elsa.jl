@@ -16,19 +16,15 @@ end
 
 # API #
 
-system(lat::Lattice, t::TightbindingModelTerm...; kw...) =
+system(lat::Lattice, t::AbstractTightbindingModel...; kw...) =
     System(lat, hamiltonian(lat, t...; kw...))
-system(lat::Lattice, m::TightbindingModel; kw...) =
-    System(lat, hamiltonian(lat, m; kw...))
 
 superlattice(sys::System, v...; kw...) =
     System(superlattice(sys.lattice, v...; kw...), sys.hamiltonian)
 hamiltonian(sys::System) =
     System(sys.lattice, hamiltonian(sys.lattice, sys.hamiltonian))
-hamiltonian(sys::System, t::TightbindingModelTerm...; kw...) =
+hamiltonian(sys::System, t::AbstractTightbindingModel...; kw...) =
     System(sys.lattice, hamiltonian(sys.lattice, t...; kw...))
-hamiltonian(sys::System, m::TightbindingModel; kw...) =
-    System(sys.lattice, hamiltonian(sys.lattice, m; kw...))
 lattice(sys::System) =
     System(lattice(sys.lattice), sys.hamiltonian)
 

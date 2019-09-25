@@ -270,6 +270,7 @@ blocktype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
 _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
 _blocktype(::Type{S}) where {S<:Number} = S
 
+sitetype(::Lattice{E,L,T}) where {E,L,T} = T
 
 sublat(lat::Lattice, siteidx) = findlast(o -> o < siteidx, lat.unitcell.offsets)
 siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.offsets[sublat+1]
@@ -451,11 +452,11 @@ function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E
     # last vecs in Q are orthogonal to axes
     os = ntuple(i -> SVector(q[:,i+L´]), Val(E-L´))
     # range of projected bravais, including zero
-    ranges = (o -> extrema(vcat(SVector(zero(T)), bravais' * o))).(os)
+    ranges = (o -> extrema(vcat(SVector(zero(T)), bravais' * o)) .- sqrt(eps(T))).(os)
     # projector * r gives the projection of r on orthogonal vectors
     projector = hcat(os...)'
     # ribbon defined by r's with projection within ranges for all orthogonal vectors
-    regionfunc(r) = all(first.(ranges) .<= Tuple(projector * r) .<= last.(ranges))
+    regionfunc(r) = all(first.(ranges) .<= Tuple(projector * r) .< last.(ranges))
     # return r -> all(first.(ranges) .<= Tuple(projector * r) .<= last.(ranges))
     return regionfunc
 end

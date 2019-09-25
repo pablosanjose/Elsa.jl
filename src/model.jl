@@ -1,8 +1,8 @@
 #######################################################################
 # TightbindingModelTerm
 #######################################################################
-abstract type AbstractModelTerm end
-abstract type TightbindingModelTerm <: AbstractModelTerm end
+abstract type AbstractTightbindingModel end
+abstract type TightbindingModelTerm <: AbstractTightbindingModel end
 
 struct OnsiteTerm{F,
                   S<:Union{Missing,Tuple{Vararg{Int}}},
@@ -103,9 +103,14 @@ Base.:-(t1::TightbindingModelTerm, t2::TightbindingModelTerm) = TightbindingMode
 #######################################################################
 # TightbindingModel
 #######################################################################
-struct TightbindingModel{N,T<:Tuple{Vararg{TightbindingModelTerm,N}}}
+struct TightbindingModel{N,T<:Tuple{Vararg{TightbindingModelTerm,N}}} <: AbstractTightbindingModel
     terms::T
 end
+
+terms(t::TightbindingModel) = t.terms
+terms(t::TightbindingModelTerm) = (t,)
+
+TightbindingModel(t::AbstractTightbindingModel...) = TightbindingModel(tuplejoin(terms.(t)...))
 
 # API #
 
