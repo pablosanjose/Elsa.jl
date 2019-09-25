@@ -38,7 +38,7 @@ Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 blocktype(h::Hamiltonian{L,Tv,HamiltonianHarmonic{L,Tv,A}}) where {L,Tv,A} = eltype(A)
 
 iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L,Tv}) where {E,L,Tv} =
-    blocktype(lat, Tv) == blocktype(h)
+    blocktype(lat, Tv) == blocktype(h) && nsites(h) == nsites(lat)
 iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L2,Tv}) where {E,L,L2,Tv} =
     false
 

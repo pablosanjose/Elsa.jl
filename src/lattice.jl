@@ -158,9 +158,8 @@ function Base.show(io::IO, s::Supercell{L,L´}) where {L,L´}
     i = get(io, :indent, "")
     print(io,
 "$(i)Supercell{$L,$(L´)} for $(L´)D superlattice of the base $(L)D lattice
-$(i)  Dimensions    : $(dim(s))
-$(i)  Vectors       : $(displayvectors(s.matrix))
-$(i)  Total sites   : $(nsites(s))")
+$(i)  Supervectors  : $(displayvectors(s.matrix))
+$(i)  Supersites    : $(nsites(s))")
 end
 
 #######################################################################

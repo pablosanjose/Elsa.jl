@@ -8,7 +8,8 @@ end
 
 function Base.show(io::IO, sys::System)
     ioindent = IOContext(io, :indent => "  ")
-    print(io, "System : a combined Lattice + Hamiltonian\n")
+    print(io, "System : bundled Lattice and Hamiltonian $(iscompatible(sys.lattice, sys.hamiltonian) ? 
+        "(compatible)" : "(incompatible)")\n")
     print(ioindent, sys.lattice, "\n")
     print(ioindent, sys.hamiltonian)
 end
