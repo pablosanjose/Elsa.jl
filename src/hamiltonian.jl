@@ -65,13 +65,12 @@ end
 
 # API #
 
-hamiltonian(lat::Lattice, t::TightbindingModelTerm...; kw...) =
-    hamiltonian(lat, TightbindingModel(t); kw...)
-hamiltonian(lat::Lattice{E,L,T}, m::TightbindingModel; type::Type = Complex{T}, kw...) where {E,L,T} =
+hamiltonian(lat::Lattice, t::AbstractTightbindingModel...; kw...) =
+    hamiltonian(lat, TightbindingModel(t...); kw...)
+hamiltonian(lat::Lattice, m::TightbindingModel; type::Type = Complex{sitetype(lat)}, kw...) =
     hamiltonian_sparse(blocktype(lat, type), lat, m; kw...)
 
-hamiltonian(t::TightbindingModelTerm...; kw...) = z -> hamiltonian(z, t...; kw...)
-hamiltonian(m::TightbindingModel; kw...) = z -> hamiltonian(z, m; kw...)
+hamiltonian(t::AbstractTightbindingModel...; kw...) = z -> hamiltonian(z, t...; kw...)
 hamiltonian(h::Hamiltonian) = z -> hamiltonian(z, h)
 
 #######################################################################
