@@ -112,7 +112,7 @@ function Unitcell(sublats::NTuple{N,Sublat{E,T}};
     dim::Val{E2} = Val(E),
     type::Type{T2} = float(T),
     names::Vector{NameType} = [s.name for s in sublats],
-    orbitals::NTuple{N,Tuple{Vararg{NameType}}} = (s->s.orbitals).(sublats)) where {N,E,E2,T,T2}
+    orbitals::NTuple{N,Tuple} = (s->s.orbitals).(sublats)) where {N,E,E2,T,T2}
     # Make sublat names unique
     allnames = NameType[:_]
     for i in eachindex(names)
@@ -127,7 +127,7 @@ function Unitcell(sublats::NTuple{N,Sublat{E,T}};
         end
         push!(offsets, length(sites))
     end
-    return Unitcell(sites, names, offsets, orbitals)
+    return Unitcell(sites, names, offsets, (n -> nametype.(n)).(orbitals))
 end
 
 function uniquename(allnames, name, i)
@@ -176,7 +176,8 @@ function Lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,
 end
 
 displaynames(l::Lattice) = display_as_tuple(l.unitcell.names, ":")
-displayorbitals(l::Lattice) = string(l.unitcell.orbitals)
+displayorbitals(l::Lattice) =
+    replace(replace(string(l.unitcell.orbitals), "Symbol(\"" => ":"), "\")" => "")
 
 function Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T}
     i = get(io, :indent, "")
@@ -260,12 +261,15 @@ orbitaltype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
     _orbitaltype(SVector{1,Tv}, lat.unitcell.orbitals...)
 _orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
     (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
-_orbitaltype(t) = t
+_orbitaltype(t::Type{SVector{N,Tv}}) where {N,Tv} = t
+_orbitaltype(t::Type{SVector{1,Tv}}) where {Tv} = Tv
 
 # find SMatrix type that can hold all matrix elements between lattice sites
 blocktype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
     _blocktype(orbitaltype(lat, Tv))
 _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
+_blocktype(::Type{S}) where {S<:Number} = S
+
 
 sublat(lat::Lattice, siteidx) = findlast(o -> o < siteidx, lat.unitcell.offsets)
 siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.offsets[sublat+1]

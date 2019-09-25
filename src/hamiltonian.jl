@@ -1,12 +1,12 @@
 #######################################################################
 # Hamiltonian
 #######################################################################
-struct HamiltonianHarmonic{L,Tv,A<:AbstractMatrix{<:SMatrix{N,N,Tv} where N}}
+struct HamiltonianHarmonic{L,M,A<:AbstractMatrix{M}}
     dn::SVector{L,Int}
     h::A
 end
 
-struct Hamiltonian{L,Tv,H<:HamiltonianHarmonic{L,Tv},F<:Union{Missing,Field}}
+struct Hamiltonian{L,M,H<:HamiltonianHarmonic{L,M},F<:Union{Missing,Field}}
     harmonics::Vector{H}
     field::F
 end
@@ -35,26 +35,27 @@ _nnz(h::Matrix) = length(h)
 Base.Matrix(h::Hamiltonian) = Hamiltonian(Matrix.(h.harmonics), h.field, h.lattice)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
-blocktype(h::Hamiltonian{L,Tv,HamiltonianHarmonic{L,Tv,A}}) where {L,Tv,A} = eltype(A)
+blocktype(h::Hamiltonian{L,M}) where {L,M} = M
 
-iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L,Tv}) where {E,L,Tv} =
-    blocktype(lat, Tv) == blocktype(h) && nsites(h) == nsites(lat)
-iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L2,Tv}) where {E,L,L2,Tv} =
+iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L,M}) where {E,L,M} =
+    blocktype(lat, eltype(M)) == blocktype(h) && nsites(h) == nsites(lat)
+iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L2,M}) where {E,L,L2,M} =
     false
 
-Base.show(io::IO, h::HamiltonianHarmonic{L,Tv,A}) where
-    {L,Tv,N,A<:AbstractArray{<:SMatrix{N,N,Tv}}} = print(io,
-"HamiltonianHarmonic{$L,$Tv} with dn = $(Tuple(h.dn)) and elements:", h.h)
+Base.show(io::IO, h::HamiltonianHarmonic{L,M}) where {L,M} = print(io,
+"HamiltonianHarmonic{$L,$(eltype(M))} with dn = $(Tuple(h.dn)) and elements:", h.h)
 
 displaytype(A::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC, sparse"
 displaytype(A::Type{<:Array}) = "Matrix, dense"
 displaytype(A::Type) = string(A)
 
-function Base.show(io::IO, ham::Hamiltonian{L,Tv,H,F}) where
-    {L,Tv,N,F,A<:AbstractArray{<:SMatrix{N,N,Tv}},H<:HamiltonianHarmonic{L,Tv,A}}
+displayblock(::Type{<:SMatrix{N,N}}) where {N} = "$N × $N block elements"
+displayblock(::Type{<:Number}) = "scalar elements"
+
+function Base.show(io::IO, ham::Hamiltonian{L,M,H}) where {L,M,A,H<:HamiltonianHarmonic{L,M,A}}
     i = get(io, :indent, "")
     print(io,
-"$(i)Hamiltonian{$L,$Tv} : $(L)D Hamiltonian of $N × $N blocks
+"$(i)Hamiltonian{$L,$(eltype(M))} : $(L)D Hamiltonian ($(displayblock(M)))
 $(i)  Bloch harmonics  : $(length(ham.harmonics)) ($(displaytype(A)))
 $(i)  Harmonic size    : $((n -> "$n × $n")(nsites(ham)))
 $(i)  Onsites          : $(nonsites(ham))
@@ -123,10 +124,10 @@ Base.push!(h::IJV, (i, j, v)) = (push!(h.i, i); push!(h.j, j); push!(h.v, v))
 #######################################################################
 # hamiltonian_sparse
 #######################################################################
-function hamiltonian_sparse(::Type{M}, lat::Lattice{E,L}, model; field = missing) where {E,L,Tv,M<:SMatrix{D,D,Tv} where D}
+function hamiltonian_sparse(::Type{M}, lat::Lattice{E,L}, model; field = missing) where {E,L,M}
     builder = IJVBuilder{M}(lat)
     applyterms!(builder, model.terms...)
-    HT = HamiltonianHarmonic{L,Tv,SparseMatrixCSC{M,Int}}
+    HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
     n = nsites(lat)
     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n, (x, xc) -> 0.5 * (x + xc)))
                    for e in builder.ijvs if !isempty(e)]
@@ -187,6 +188,7 @@ end
 orbsized(m, orbs) = orbsized(m, orbs, orbs)
 orbsized(m, o1::NTuple{D1}, o2::NTuple{D2}) where {D1,D2} =
     SMatrix{D1,D2}(m)
+orbsized(m::Number, o1::NTuple{1}, o2::NTuple{1}) = m
 
 dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
 dniter(dns, ::Val) = dns
