@@ -6,18 +6,41 @@ struct System{LA<:Lattice,HA<:Hamiltonian}
     hamiltonian::HA
 end
 
+struct ParametricSystem{LA<:Lattice,HA<:ParametricHamiltonian}
+    lattice::LA
+    hamiltonian::HA
+end
+
+displaycompatible(lat, ham) = iscompatible(lat, ham) ? "compatible" : "incompatible"
+
 function Base.show(io::IO, sys::System)
     ioindent = IOContext(io, :indent => "  ")
-    print(io, "System : bundled Lattice and Hamiltonian $(iscompatible(sys.lattice, sys.hamiltonian) ? 
-        "(compatible)" : "(incompatible)")\n")
+    print(io,
+        "System : bundled Lattice and Hamiltonian ($(displaycompatible(
+            sys.lattice, sys.hamiltonian)))",
+        "\n")
     print(ioindent, sys.lattice, "\n")
     print(ioindent, sys.hamiltonian)
 end
+
+function Base.show(io::IO, sys::ParametricSystem)
+    ioindent = IOContext(io, :indent => "  ")
+    print(io,
+        "Parametric System : bundled Lattice and Hamiltonian ($(displaycompatible(
+            sys.lattice, sys.hamiltonian.hamiltonian)))",
+        "\n")
+    print(ioindent, sys.lattice, "\n")
+    print(ioindent, sys.hamiltonian.hamiltonian)
+end
+
+(ps::ParametricSystem)(;kw...) = System(ps.lattice, ps.hamiltonian(;kw...))
 
 # API #
 
 system(lat::Lattice, t::AbstractTightbindingModel...; kw...) =
     System(lat, hamiltonian(lat, t...; kw...))
+system(lat::Lattice, f::Function, t::AbstractTightbindingModel...; kw...) =
+    ParametricSystem(lat, hamiltonian(lat, f, t...; kw...))
 
 superlattice(sys::System, v...; kw...) =
     System(superlattice(sys.lattice, v...; kw...), sys.hamiltonian)

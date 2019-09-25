@@ -25,7 +25,15 @@ toSVector(v::AbstractVector) = SVector(Tuple(v))
 
 _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
-zerotuple(::Type{T}, ::Val{L}) where {T,L} = ntuple(_ -> zero(T), Val(L))
+# zerotuple(::Type{T}, ::Val{L}) where {T,L} = ntuple(_ -> zero(T), Val(L))
+function padright!(v::Vector, x, n::Integer)
+    n0 = length(v)
+    resize!(v, max(n, n0))
+    for i in (n0 + 1):n
+        v[i] = x
+    end
+    return v
+end
 
 padright(sv::StaticVector{E,T}, x::T, ::Val{E}) where {E,T} = sv
 padright(sv::StaticVector{E,T}, x::T2, ::Val{E2}) where {E,T,E2,T2} =
@@ -73,6 +81,20 @@ function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
     return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
 end
 
+@inline tuplejoin(x) = x
+@inline tuplejoin(x, y) = (x..., y...)
+@inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
+
+function isgrowing(vs::AbstractVector, i0 = 1)
+    vprev = vs[i0]
+    for i in i0 + 1:length(vs)
+        v = vs[i]
+        v <= vprev && return false
+        vprev = v
+    end
+    return true
+end
+
 # pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')
 
 # padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
@@ -82,9 +104,7 @@ end
 #     [i <= i0 && j<= j0 ? m[i,j] : zeroT for i in 1:im, j in 1:jm]
 # end
 
-@inline tuplejoin(x) = x
-@inline tuplejoin(x, y) = (x..., y...)
-@inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
+
 # tuplesort((a,b)::Tuple{<:Number,<:Number}) = a > b ? (b, a) : (a, b)
 # tuplesort(t::Tuple) = t
 # tuplesort(::Missing) = missing
