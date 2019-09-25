@@ -64,7 +64,48 @@ $(i)  Coordination     : $(nhoppings(ham) / nsites(ham))")
 end
 
 # API #
+"""
+    hamiltonian(lat::Lattice{E,L,T}, models...; type = Complex{T}, field = missing)
 
+Create a `Hamiltonian` by additively applying `models` to the lattice `lat`` (see `hopping`
+and `onsite` for details on building tightbinding models).
+
+The elements of the Hamiltonian are of type `type`, or `SMatrix{N,N,type}`, depending on the
+orbitals in `lat`. The `model` must match said orbitals.
+
+Advanced use: if a `field = f(r,dr,h)` function is given, it will affect how the hamiltonian
+operates on a `State`, and in combination with `superlattice` allows to include matrix-free
+perturbations (e.g. disorder, gauge fields) when acting on a `State` (see documentation for
+details).
+
+    hamiltonian(lat, func::Function, models...; kw...)
+
+For a function of the form `func(;kw...)::AbstractTightbindingModel`, this produces a
+`h::ParametricHamiltonian` that efficiently generates a `Hamiltonian` when calling it as in
+`h(;kw...)`.
+
+    hamiltonian(superlat, h::Hamiltonian)
+
+Builds a `Hamiltonian` by applying `h` to superlattice `superlat`. The seed `h` should be
+compatible with `superlattice`, i.e. `iscompatible(superlattice, h) == true` (see also
+`superlattice`).
+
+    lat |> hamiltonian(h::Hamiltonian)
+    lat |> hamiltonian([func, ] models...)
+
+Functional form of `hamiltonian`, equivalent to `hamiltonian(lat, args...)`
+
+# Examples
+```jldoctest
+julia> hamiltonian(LatticePresets.honeycomb(), hopping(1, range = 1/√3))
+Hamiltonian{2,Complex{Float64}} : 2D Hamiltonian (scalar elements)
+  Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
+  Harmonic size    : 2 × 2
+  Onsites          : 0
+  Hoppings         : 6
+  Coordination     : 3.0
+```
+"""
 hamiltonian(lat::Lattice, t::AbstractTightbindingModel...; kw...) =
     hamiltonian(lat, TightbindingModel(t...); kw...)
 hamiltonian(lat::Lattice, m::TightbindingModel; type::Type = Complex{numbertype(lat)}, kw...) =
@@ -74,8 +115,12 @@ hamiltonian(lat::Lattice, f::Function, ts::AbstractTightbindingModel...;
             type::Type = Complex{numbertype(lat)}, kw...) =
     parametric_hamiltonian(blocktype(lat, type), lat, f, TightbindingModel(ts...); kw...)
 
-hamiltonian(t::AbstractTightbindingModel...; kw...) = z -> hamiltonian(z, t...; kw...)
-hamiltonian(h::Hamiltonian) = z -> hamiltonian(z, h)
+hamiltonian(t::AbstractTightbindingModel...; kw...) =
+    z -> hamiltonian(z, t...; kw...)
+hamiltonian(f::Function, t::AbstractTightbindingModel...; kw...) =
+    z -> hamiltonian(z, f, t...; kw...)
+hamiltonian(h::Hamiltonian) =
+    z -> hamiltonian(z, h)
 
 #######################################################################
 # auxiliary types
