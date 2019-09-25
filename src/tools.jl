@@ -35,7 +35,8 @@ padright(sv::StaticVector{E,T}, ::Val{E}) where {E,T} = sv
 
 @inline pad(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,T2,S<:SMatrix{E2,L2,T2}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
-@inline pad(s::Number, st::Type{<:Number}) = s
+@inline pad(s::Number, ::Type{T}) where {T<:Number} = T(s)
+@inline pad(s::SMatrix{1,1}, ::Type{T}) where {T<:Number} = T(first(s))
 
 ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
 negative(s::SVector{L,<:Number}) where {L} = -s
