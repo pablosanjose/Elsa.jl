@@ -214,7 +214,7 @@ checkinfinite(term) = term.dns === missing && (term.range === missing || !isfini
 
 isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero(dn)
 
-# If all sublats are scanned, avoid doubling hoppings when adding adjoint
+# Avoid double-counting hoppings when adding adjoint
 redundancyfactor(dn, ss, term) =
     isnotredundant(dn, term) || isnotredundant(ss, term) ? 1.0 : 0.5
 # (i,j,dn) and (j,i,-dn) will not both be added if any of the following is true
