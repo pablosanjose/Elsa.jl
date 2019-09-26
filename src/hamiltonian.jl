@@ -11,6 +11,12 @@ struct Hamiltonian{L,M,H<:HamiltonianHarmonic{L,M},F<:Union{Missing,Field}}
     field::F
 end
 
+function Hamiltonian(hs::Vector{H}, field, n::Int, m::Int) where {L,M,H<:HamiltonianHarmonic{L,M}}
+    isempty(hs) && push!(hs, H(zero(SVector{L,Int}), empty_sparse(M, n, m)))
+    sort!(hs, by = h -> abs.(h.dn))
+    return Hamiltonian(hs, field)
+end
+
 nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : size(first(h.harmonics).h, 1)
 
 function nhoppings(ham::Hamiltonian)
@@ -36,11 +42,6 @@ Base.Matrix(h::Hamiltonian) = Hamiltonian(Matrix.(h.harmonics), h.field, h.latti
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
 blocktype(h::Hamiltonian{L,M}) where {L,M} = M
-
-iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L,M}) where {E,L,M} =
-    blocktype(lat, eltype(M)) == blocktype(h) && nsites(h) == nsites(lat)
-iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L2,M}) where {E,L,L2,M} =
-    false
 
 Base.show(io::IO, h::HamiltonianHarmonic{L,M}) where {L,M} = print(io,
 "HamiltonianHarmonic{$L,$(eltype(M))} with dn = $(Tuple(h.dn)) and elements:", h.h)
@@ -122,6 +123,19 @@ hamiltonian(f::Function, t::AbstractTightbindingModel...; kw...) =
 hamiltonian(h::Hamiltonian) =
     z -> hamiltonian(z, h)
 
+iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L,M}) where {E,L,M} =
+    blocktype(lat, eltype(M)) == blocktype(h) && nsites(h) == nsites(lat)
+iscompatible(lat::Lattice{E,L}, h::Hamiltonian{L2,M}) where {E,L,L2,M} =
+    false
+
+Base.copy(h::Hamiltonian) = Hamiltonian(copy.(h.harmonics), h.field)
+Base.copy(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, copy(h.h))
+
+Base.size(h::Hamiltonian, n) = size(first(h.harmonics).h, n)
+Base.size(h::Hamiltonian) = size(first(h.harmonics).h)
+Base.size(h::HamiltonianHarmonic, n) = size(h.h, n)
+Base.size(h::HamiltonianHarmonic) = size(h.h)
+
 #######################################################################
 # auxiliary types
 #######################################################################
@@ -179,7 +193,7 @@ function hamiltonian_sparse(::Type{M}, lat::Lattice{E,L}, model; field = missing
     HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
     n = nsites(lat)
     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
-    return Hamiltonian(harmonics, Field(field, lat))
+    return Hamiltonian(harmonics, Field(field, lat), n, n)
 end
 
 applyterms!(builder, terms...) = foreach(term -> applyterm!(builder, term), terms)
@@ -194,7 +208,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm) where {L,M}
         for i in is
             r = lat.unitcell.sites[i]
             vs = orbsized(term(r), lat.unitcell.orbitals[s])
-            v = pad(vs, M)
+            v = padtotype(vs, M)
             term.forcehermitian ? push!(ijv, (i, i, 0.5 * (v + v'))) : push!(ijv, (i, i, v))
         end
     end
@@ -222,7 +236,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
                     rtarget = lat.unitcell.sites[i]
                     r, dr = _rdr(rsource, rtarget)
                     vs = orbsized(term(r, dr), lat.unitcell.orbitals[s1], lat.unitcell.orbitals[s2])
-                    v = pad(vs, M)
+                    v = padtotype(vs, M)
                     if addadjoint
                         v *= redundancyfactor(dn, (s1, s2), term)
                         push!(ijv, (i, j, v))
@@ -340,7 +354,7 @@ function parametric_hamiltonian(::Type{M}, lat::Lattice{E,L,T}, f::F, model; fie
     applyterms!(builder, terms(model_f)...)
     padright!(nels, 0, length(builder.ijvs)) # in case new harmonics where added
     nels_f = length.(builder.ijvs) # element counters after adding f model
-    empties = isempty.(builder.ijvs) # remove empty harmonics, element counters
+    empties = isempty.(builder.ijvs)
     deleteat!(builder.ijvs, empties)
     deleteat!(nels, empties)
     deleteat!(nels_f, empties)
@@ -356,8 +370,8 @@ function parametric_hamiltonian(::Type{M}, lat::Lattice{E,L,T}, f::F, model; fie
     base_harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in base_ijvs]
     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs]
     pointers = [getpointers(harmonics[k].h, builder.ijvs[k], nels[k], lat) for k in eachindex(harmonics)]
-    base_h = Hamiltonian(base_harmonics, missing)
-    h = Hamiltonian(harmonics, Field(field, lat))
+    base_h = Hamiltonian(base_harmonics, missing, n, n)
+    h = Hamiltonian(harmonics, Field(field, lat), n, n)
     return ParametricHamiltonian(base_h, h, pointers, f)
 end
 
@@ -405,8 +419,112 @@ function applyterm!(ph::ParametricHamiltonian{H}, term::TightbindingModelTerm) w
         vals = nonzeros(h.h)
         for (p, r, dr) in prdrs
             v = term(r, dr) # should perhaps be v = orbsized(term(r, dr), orb1, orb2)
-            vals[p] += pad(v, M)
+            vals[p] += padtotype(v, M)
         end
     end
     return nothing
 end
+
+#######################################################################
+# bloch
+#######################################################################
+struct BlochHamiltonian{L,M,A,H<:HamiltonianHarmonic{L,M,A}}
+    harmonics::Vector{H}
+    matrix::A
+end
+
+function BlochHamiltonian(h::Hamiltonian)
+    hh0 = first(h.harmonics)
+    iszero(hh0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
+    return BlochHamiltonian(h.harmonics, copy(hh0.h))
+end
+
+function (h::BlochHamiltonian{L,M,<:SparseMatrixCSC})(phases::SVector) where {L,M}
+    h0 = first(h.harmonics).h
+    matrix = h.matrix
+    copy!(matrix.nzval, h0.nzval)
+    for ns in 2:length(h.harmonics)
+        hh = h.harmonics[ns]
+        ephi = cis(phases' * hh.dn)
+        muladd_optsparse(matrix, ephi, hh.h)
+    end
+    return matrix
+end
+
+bloch(h::Hamiltonian) = BlochHamiltonian(optimize!(copy(h)))
+
+function muladd_optsparse(matrix, ephi, h)
+    for col in 1:size(h,2)
+        range = nzrange(h, col)
+        for ptr in range
+            row = h.rowval[ptr]
+            matrix[row, col] = ephi * h.nzval[ptr]
+        end
+    end
+    return nothing
+end
+
+#######################################################################
+# optimize : avoid reallocations when summing harmonics
+#######################################################################
+function optimize!(h::Hamiltonian{L,M,H}) where {L,M,A<:SparseMatrixCSC,H<:HamiltonianHarmonic{L,M,A}}
+    Tv = eltype(M)
+    small = eps(real(Tv))
+    hh0 = first(h.harmonics)
+    iszero(hh0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
+    nh = length(h.harmonics)
+    for i in 2:nh
+        hh0.h .+= small * h.harmonics[i].h
+    end
+    return h
+end
+
+# optimize(h) = first(optimize((h,)))
+# optimize(h, hs...) = optimize((h, hs...))
+# optimize(hs::NTuple{N,Hamiltonian}) where {N} = hs
+# function optimize(hs::NTuple{N,Hamiltonian{L,M,H}}) where {N,L,M,A<:SparseMatrixCSC,H<:HamiltonianHarmonic{L,M,A}}
+#     colptr = Int[1]
+#     rowval = Int[]
+#     rows = Int[]
+#     ncols = size(first(hs), 2)
+#     for col in 1:ncols
+#         resize!(rows, 0)
+#         for ham in hs, hh in ham.harmonics
+#             for ptr in nzrange(hh.h, col)
+#                 push!(rows, hh.h.rowval[ptr])
+#             end
+#         end
+#         unique!(sort!(rows))
+#         append!(rowval, rows)
+#         push!(colptr, last(colptr) + length(rows))
+#     end
+#     hhsopt = [[paddedsparse(hh, colptr, rowval) for hh in h.harmonics] for h in hs]
+#     hopt = ntuple(n -> Hamiltonian(hhsopt[n], hs[n].field), Val(N))
+#     return hopt
+# end
+
+# # This assumes hh.h is a strict subset of colptr, rowval
+# function paddedsparse(hh::HamiltonianHarmonic{L,M}, colptr, rowval) where {L,M}
+#     n, m = size(hh.h)
+#     nzval = M[]
+#     colptr0 = hh.h.colptr
+#     rowval0 = hh.h.rowval
+#     nzval0  = hh.h.nzval
+#     ptr0 = colptr0[1]
+#     row0 = rowval0[ptr0]
+#     for col in 1:m
+#         range = colptr[col]:colptr[col+1]-1
+#         for ptr in range
+#             row = rowval[ptr]
+#             if row == row0
+#                 push!(nzval, nzval0[ptr0])
+#                 ptr0 += 1
+#                 row0 = ptr0 < length(rowval0) ? rowval0[ptr0] : n + 1 # pass out after last
+#             else
+#                 push!(nzval, zero(M))
+#             end
+#         end
+#     end
+#     h = SparseMatrixCSC(n, m, colptr, rowval, nzval)
+#     return HamiltonianHarmonic(hh.dn, h)
+# end
