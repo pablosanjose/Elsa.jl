@@ -324,8 +324,8 @@ hamiltonian(lat::Lattice{E,L,T,S}, ham::Hamiltonian{L2,Tv}) where {E,L,T,S,L2,Tv
 struct ParametricHamiltonian{H,F,E,T}
     base::H
     hamiltonian::H
-    pointers::Vector{Vector{Tuple{Int,SVector{E,T},SVector{E,T}}}}
-    f::F
+    pointers::Vector{Vector{Tuple{Int,SVector{E,T},SVector{E,T}}}} # val pointers to modify
+    f::F                                                           # by f on each harmonic
 end
 
 Base.eltype(::ParametricHamiltonian{H}) where {L,M,H<:Hamiltonian{L,M}} = M
@@ -404,7 +404,7 @@ function applyterm!(ph::ParametricHamiltonian{H}, term::TightbindingModelTerm) w
     for (h, prdrs) in zip(ph.hamiltonian.harmonics, ph.pointers)
         vals = nonzeros(h.h)
         for (p, r, dr) in prdrs
-            v = term(r, dr) # v = orbsized(term(r, dr), lat.unitcell.orbitals[s1], lat.unitcell.orbitals[s2])
+            v = term(r, dr) # should perhaps be v = orbsized(term(r, dr), orb1, orb2)
             vals[p] += pad(v, M)
         end
     end

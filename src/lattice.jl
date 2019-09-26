@@ -205,8 +205,8 @@ embedding  dimension `E`, use keyword `dim = Val(E)`. Similarly, override type `
 
     lattice(superlat)
 
-Create a lattice with a unitcell equal to the supercell of superlattice `superlat`.
-See also `superlattice` for information on building superlattices.
+Create a lattice with a unitcell equal to the supercell of lattice `superlat`.
+See also `superlattice` for information on adding supercells to lattices.
 
 # Examples
 ```jldoctest
@@ -309,12 +309,12 @@ isminimalsupercell(lat::Lattice{E,L,T,S}) where {E,L,T,S} = false
 const TOOMANYITERS = 10^8
 
 """
-    superlattice(lattice::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing)
-    superlattice(lattice::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing)
+    superlattice(lat::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing)
+    superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing)
 
-Modifies the supercell of `L`-dimensional `lattice` to one with Bravais vectors
+Modifies the supercell of `L`-dimensional lattice `lat` to one with Bravais vectors
 `br´= br * supercell`, where `supercell::SMatrix{L,L´,Int}` is the integer supercell matrix
-with the `L´` `v`s as columns.
+with the `L´` vectors `v`s as columns.
 
 Only sites at position `r` such that `region(r) == true` will be included in the supercell.
 If `region` is missing, a Bravais unit cell perpendicular to the `v` axes will be selected
@@ -421,9 +421,6 @@ function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region =
     return Lattice(lat.bravais, lat.unitcell, supercell)
 end
 
-# pinvmultiple(::Missing) = (I, 1)
-# pinvmultiple(s::Supercell) = pinvmultiple(s.matrix)
-
 # This is true whenever old ndist is perpendicular to new lattice
 is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(new_dn(dn, invs)); end
 
@@ -431,21 +428,9 @@ new_dn(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
 new_dn(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
 
 wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell * newdn
-# wrap_dn(olddn::SVector, newdn::SVector, ::Missing) = zero(olddn)
-
-# @inline function wrap(i::Tuple, bbox)
-#     n = _wrapdiv.(i, bbox)
-#     j = _wrapmod.(i, bbox)
-#     return j, SVector(n)
-# end
-
-# _wrapdiv(n, (nmin, nmax)) = nmin <= n <= nmax ? 0 : div(n - nmin, 1 + nmax - nmin)
-
-# _wrapmod(n, (nmin, nmax)) = nmin <= n <= nmax ? n : nmin + mod(n - nmin, 1 + nmax - nmin)
-
 
 function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E,L,T,L´}
-    L <= L´ && return truefunc
+    L <= L´ && return r -> true
     # real-space supercell axes + all space
     s = hcat(bravais * supercell, SMatrix{E,E,T}(I))
     q = qr(s).Q
@@ -457,7 +442,5 @@ function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E
     projector = hcat(os...)'
     # ribbon defined by r's with projection within ranges for all orthogonal vectors
     regionfunc(r) = all(first.(ranges) .<= Tuple(projector * r) .< last.(ranges))
-    # return r -> all(first.(ranges) .<= Tuple(projector * r) .<= last.(ranges))
     return regionfunc
 end
-truefunc(r) = true
