@@ -433,13 +433,18 @@ struct BlochHamiltonian{L,M,A,H<:HamiltonianHarmonic{L,M,A}}
     matrix::A
 end
 
+Base.show(io::IO, h::BlochHamiltonian{L,M}) where {L,M} = print(io,
+"BlochHamiltonian{$L,$(eltype(M))} of a $(L)D Hamiltonian with $(length(h.harmonics)) harmonics")
+
 function BlochHamiltonian(h::Hamiltonian)
     hh0 = first(h.harmonics)
     iszero(hh0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
     return BlochHamiltonian(h.harmonics, copy(hh0.h))
 end
 
-function (h::BlochHamiltonian{L,M,<:SparseMatrixCSC})(phases::SVector) where {L,M}
+(h::BlochHamiltonian)(phases::Vararg{Number,L}) where {L} = h(SVector{L}(phases))
+(h::BlochHamiltonian)(phases::NTuple{L,Number}) where {L} = h(SVector{L}(phases))
+function (h::BlochHamiltonian{L,M,<:SparseMatrixCSC})(phases::SVector{L}) where {L,M}
     h0 = first(h.harmonics).h
     matrix = h.matrix
     copy!(matrix.nzval, h0.nzval)
@@ -464,9 +469,7 @@ function muladd_optsparse(matrix, ephi, h)
     return nothing
 end
 
-#######################################################################
-# optimize : avoid reallocations when summing harmonics
-#######################################################################
+# avoid reallocations when summing harmonics
 function optimize!(h::Hamiltonian{L,M,H}) where {L,M,A<:SparseMatrixCSC,H<:HamiltonianHarmonic{L,M,A}}
     Tv = eltype(M)
     small = eps(real(Tv))
