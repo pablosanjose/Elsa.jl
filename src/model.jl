@@ -50,9 +50,9 @@ normalizedn(dn::Missing) = missing
 normalizedn(dn::Tuple{Vararg{Tuple}}) = SVector.(dn)
 normalizedn(dn::Tuple{Vararg{Integer}}) = (SVector(dn),)
 
-sublats(t::OnsiteTerm, lat::Lattice) =
+sublats(t::OnsiteTerm, lat::AbstractLattice) =
     t.sublats === missing ? collect(1:nsublats(lat)) : t.sublats
-sublats(t::HoppingTerm, lat::Lattice) =
+sublats(t::HoppingTerm, lat::AbstractLattice) =
     t.sublats === missing ? collect(Iterators.product(1:nsublats(lat), 1:nsublats(lat))) : t.sublats
 
 displayparameter(::Type{<:Function}) = "Function"
