@@ -7,7 +7,7 @@ import Base: convert, iterate, ==, tail
 import SparseArrays: sparse!, mul!, getcolptr
 
 export sublat, bravais, lattice, hopping, onsite, hamiltonian, randomstate,
-       mul!, supercell, unitcell, bloch, bloch!
+       mul!, supercell, unitcell, bloch, bloch!, sites
     #    unitlattice, combine, transform, transform!, bound,
     #    sitepositions, neighbors, bravaismatrix, marchingmesh
 # export MomentaKPM, dosKPM
@@ -26,7 +26,6 @@ include("lattice.jl")
 include("model.jl")
 include("field.jl")
 include("hamiltonian.jl")
-# include("system.jl")
 include("state.jl")
 # include("operators.jl")
 # include("system.jl")

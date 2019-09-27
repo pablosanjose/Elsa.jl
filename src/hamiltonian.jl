@@ -98,34 +98,35 @@ _nnz(h::Matrix) = length(h)
 
 nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : size(first(h.harmonics).h, 1)
 
-# API #
+# External API #
 """
-    hamiltonian(lat::Lattice{E,L,T}, models...; type = Complex{T}, field = missing)
+    hamiltonian(lat, models...; type, field = missing)
 
-Create a `Hamiltonian` by additively applying `models` to the lattice `lat`` (see `hopping`
+Create a `Hamiltonian` by additively applying `models` to the lattice `lat` (see `hopping`
 and `onsite` for details on building tightbinding models).
 
-The elements of the Hamiltonian are of type `type`, or `SMatrix{N,N,type}`, depending on the
-orbitals in `lat`. The `model` must match said orbitals.
+The elements of the Hamiltonian are of type `type` (`Complex{T}` by default), or
+`SMatrix{N,N,type}`, depending on the maximum number `N` of orbitals in the sublattice of
+`lat`. The `model` must match said orbitals.
 
-Advanced use: if a `field = f(r,dr,h)` function is given, it will affect how the hamiltonian
-operates on a `State`, and in combination with `superlattice` allows to include matrix-free
-perturbations (e.g. disorder, gauge fields) when acting on a `State` (see documentation for
-details).
+Advanced use: if a `field = f(r,dr,h)` function is given, it will modify the hamiltonian
+element `h` operating on sites `r₁` and `r₂`, where `r = (r₁ + r₂)/2` and `dr = r₂ - r₁`.
+In combination with `supercell`, it allows to do matrix-free operations including position-
+dependent perturbations (e.g. disorder, gauge fields).
+
+    h(ϕ₁, ϕ₂, ...)
+    h((ϕ₁, ϕ₂, ...))
+
+Yields the Bloch Hamiltonian matrix `bloch(h, (ϕ₁, ϕ₂, ...))` of a `h::Hamiltonian` on an
+`L`D lattice. See also `bloch!` for a non-allocating version of `bloch`.
 
     hamiltonian(lat, func::Function, models...; kw...)
 
-For a function of the form `func(;kw...)::AbstractTightbindingModel`, this produces a
+For a function of the form `func(;params...)::AbstractTightbindingModel`, this produces a
 `h::ParametricHamiltonian` that efficiently generates a `Hamiltonian` when calling it as in
-`h(;kw...)`.
+`h(;params...)` with specific parameters as keyword arguments `params`. Additionally,
+`h(ϕ₁, ϕ₂, ...; params...)` generates the corresponding Bloch Hamiltonian matrix.
 
-    hamiltonian(superlat, h::Hamiltonian)
-
-Builds a `Hamiltonian` by applying `h` to superlattice `superlat`. The seed `h` should be
-compatible with `superlattice`, i.e. `iscompatible(superlattice, h) == true` (see also
-`superlattice`).
-
-    lat |> hamiltonian(h::Hamiltonian)
     lat |> hamiltonian([func, ] models...)
 
 Functional form of `hamiltonian`, equivalent to `hamiltonian(lat, args...)`
@@ -133,12 +134,24 @@ Functional form of `hamiltonian`, equivalent to `hamiltonian(lat, args...)`
 # Examples
 ```jldoctest
 julia> hamiltonian(LatticePresets.honeycomb(), hopping(1, range = 1/√3))
-Hamiltonian{2,Complex{Float64}} : 2D Hamiltonian (scalar elements)
+Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
+  Elements         : scalars
   Onsites          : 0
   Hoppings         : 6
   Coordination     : 3.0
+
+julia> hopfunc(;k = 0) = hopping(k);
+
+julia> hamiltonian(LatticePresets.square(), hopfunc, onsite(1) + hopping(2))
+Parametric Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
+  Harmonic size    : 1 × 1
+  Elements         : scalars
+  Onsites          : 1
+  Hoppings         : 4
+  Coordination     : 4.0
 ```
 """
 hamiltonian(lat::AbstractLattice, t::AbstractTightbindingModel...; kw...) =
@@ -161,8 +174,8 @@ hamiltonian(h::Hamiltonian) =
 
 bloch(h::Hamiltonian{<:Lattice}, phases...) = copy(bloch!(h, phases...))
 
-bloch!(h::Hamiltonian, phases::Vararg{Number,L}) where {L} = bloch!(h, SVector{L}(phases))
-bloch!(h::Hamiltonian, phases::NTuple{L,Number}) where {L} = bloch!(h, SVector{L}(phases))
+bloch!(h::Hamiltonian, phases::Number...) where {L} = bloch!(h, toSVector(phases))
+bloch!(h::Hamiltonian, phases::Tuple) where {L} = bloch!(h, toSVector(phases))
 function bloch!(h::Hamiltonian{<:Lattice,L,M,H}, phases::SVector{L}) where {L,M,A<:SparseMatrixCSC,H<:HamiltonianHarmonic{L,M,A}}
     h0 = first(h.harmonics).h
     matrix = h.matrix
@@ -192,17 +205,8 @@ function muladd_optsparse(matrix, ephi, h)
     return nothing
 end
 
-# function _isnz(matrix, row, col)
-#     rows = rowvals(matrix)
-#     for p in nzrange(matrix, col)
-#         rows[p] == row && return true
-#     end
-#     return false
-# end
-# iscompatible(lat::AbstractLattice{E,L}, h::Hamiltonian{L,M}) where {E,L,M} =
-#     blocktype(lat, eltype(M)) == blocktype(h) && nsites(h) == nsites(lat)
-# iscompatible(lat::AbstractLattice{E,L}, h::Hamiltonian{L2,M}) where {E,L,L2,M} =
-#     false
+bloch(h::Hamiltonian{<:Superlattice}, phases::Number...) = SupercellBloch(h, toSVector(phases))
+bloch(h::Hamiltonian{<:Superlattice}, phases::Tuple) = SupercellBloch(h, toSVector(phases))
 
 Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.field, h.matrix)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
@@ -420,9 +424,6 @@ function get_or_push!(hs::Vector{HamiltonianHarmonic{L,Tv,SparseMatrixBuilder{B}
     return newh
 end
 
-# hamiltonian(lat::Lattice{E,L,T,S}, ham::Hamiltonian{L2,Tv}) where {E,L,T,S,L2,Tv} =
-#     throw(DimensionMismatch("Lattice dimensions $L does not match the Hamiltonian's $L2"))
-
 #######################################################################
 # parametric hamiltonian
 #######################################################################
@@ -437,7 +438,7 @@ Base.eltype(::ParametricHamiltonian{H}) where {L,M,H<:Hamiltonian{L,M}} = M
 
 Base.show(io::IO, pham::ParametricHamiltonian) = print(io, "Parametric ", pham.hamiltonian)
 
-function parametric_hamiltonian(::Type{M}, lat::Lattice{E,L,T}, f::F, model; field = missing) where {M,E,L,T,F}
+function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, f::F, model; field = missing) where {M,E,L,T,F}
     builder = IJVBuilder{M}(lat)
     applyterms!(builder, terms(model)...)
     nels = length.(builder.ijvs) # element counters for each harmonic
@@ -461,12 +462,12 @@ function parametric_hamiltonian(::Type{M}, lat::Lattice{E,L,T}, f::F, model; fie
     base_harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in base_ijvs]
     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs]
     pointers = [getpointers(harmonics[k].h, builder.ijvs[k], nels[k], lat) for k in eachindex(harmonics)]
-    base_h = Hamiltonian(base_harmonics, missing, n, n)
-    h = Hamiltonian(harmonics, Field(field, lat), n, n)
+    base_h = Hamiltonian(lat, base_harmonics, missing, n, n)
+    h = Hamiltonian(lat, harmonics, Field(field, lat), n, n)
     return ParametricHamiltonian(base_h, h, pointers, f)
 end
 
-function getpointers(h::SparseMatrixCSC, ijv, eloffset, lat::Lattice{E,L,T}) where {E,L,T}
+function getpointers(h::SparseMatrixCSC, ijv, eloffset, lat::AbstractLattice{E,L,T}) where {E,L,T}
     rows = rowvals(h)
     sites = lat.unitcell.sites
     pointers = Tuple{Int,SVector{E,T},SVector{E,T}}[] # (pointer, r, dr)
@@ -494,6 +495,8 @@ function (ph::ParametricHamiltonian)(;kw...)
     return ph.hamiltonian
 end
 
+(ph::ParametricHamiltonian)(arg, args...; kw...) = ph(;kw...)(arg, args...)
+
 function initialize!(ph::ParametricHamiltonian)
     for (bh, h, prdrs) in zip(ph.base.harmonics, ph.hamiltonian.harmonics, ph.pointers)
         vals = nonzeros(h.h)
@@ -505,7 +508,7 @@ function initialize!(ph::ParametricHamiltonian)
     return nothing
 end
 
-function applyterm!(ph::ParametricHamiltonian{H}, term::TightbindingModelTerm) where {L,M,H<:Hamiltonian{L,M}}
+function applyterm!(ph::ParametricHamiltonian{H}, term::TightbindingModelTerm) where {L,M,LA,H<:Hamiltonian{LA,L,M}}
     for (h, prdrs) in zip(ph.hamiltonian.harmonics, ph.pointers)
         vals = nonzeros(h.h)
         for (p, r, dr) in prdrs
@@ -515,60 +518,3 @@ function applyterm!(ph::ParametricHamiltonian{H}, term::TightbindingModelTerm) w
     end
     return nothing
 end
-
-#######################################################################
-# bloch
-#######################################################################
-# struct BlochHamiltonian{L,M,A,H<:HamiltonianHarmonic{L,M,A}}
-#     harmonics::Vector{H}
-#     matrix::A
-# end
-
-# Base.show(io::IO, h::BlochHamiltonian{L,M}) where {L,M} = print(io,
-# "BlochHamiltonian{$L,$(eltype(M))} of a $(L)D Hamiltonian with $(length(h.harmonics)) harmonics")
-
-# function BlochHamiltonian(h::Hamiltonian)
-#     hh0 = first(h.harmonics)
-#     iszero(hh0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
-#     return BlochHamiltonian(h.harmonics, copy(hh0.h))
-# end
-
-# (h::BlochHamiltonian)(phases::Vararg{Number,L}) where {L} = h(SVector{L}(phases))
-# (h::BlochHamiltonian)(phases::NTuple{L,Number}) where {L} = h(SVector{L}(phases))
-# function (h::BlochHamiltonian{L,M,<:SparseMatrixCSC})(phases::SVector{L}) where {L,M}
-#     h0 = first(h.harmonics).h
-#     matrix = h.matrix
-#     copy!(matrix.nzval, h0.nzval)
-#     for ns in 2:length(h.harmonics)
-#         hh = h.harmonics[ns]
-#         ephi = cis(phases' * hh.dn)
-#         muladd_optsparse(matrix, ephi, hh.h)
-#     end
-#     return matrix
-# end
-
-# bloch(h::Hamiltonian) = BlochHamiltonian(optimize!(copy(h)))
-
-# function muladd_optsparse(matrix, ephi, h)
-#     for col in 1:size(h,2)
-#         range = nzrange(h, col)
-#         for ptr in range
-#             row = h.rowval[ptr]
-#             matrix[row, col] = ephi * h.nzval[ptr]
-#         end
-#     end
-#     return nothing
-# end
-
-# # # avoid reallocations when summing harmonics
-# # function optimize!(h::Hamiltonian{L,M,H}) where {L,M,A<:SparseMatrixCSC,H<:HamiltonianHarmonic{L,M,A}}
-# #     Tv = eltype(M)
-# #     small = eps(real(Tv))
-# #     hh0 = first(h.harmonics)
-# #     iszero(hh0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
-# #     nh = length(h.harmonics)
-# #     for i in 2:nh
-# #         hh0.h .+= small * h.harmonics[i].h
-# #     end
-# #     return h
-# # end

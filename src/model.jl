@@ -78,7 +78,7 @@ $(i)  Force Hermitian  : $(h.forcehermitian)
 $(i)  Coefficient      : $(h.coefficient)")
 end
 
-# API #
+# External API #
 
 function onsite(o; sublats = missing, forcehermitian::Bool = true)
     return OnsiteTerm(o, normalizesublats(sublats), 1, forcehermitian)
@@ -112,7 +112,7 @@ terms(t::TightbindingModelTerm) = (t,)
 
 TightbindingModel(t::AbstractTightbindingModel...) = TightbindingModel(tuplejoin(terms.(t)...))
 
-# API #
+# External API #
 
 Base.:*(x, m::TightbindingModel) = TightbindingModel(x .* m.terms)
 Base.:*(m::TightbindingModel, x) = x * m

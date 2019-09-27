@@ -1,3 +1,5 @@
+abstract type AbstractLattice{E,L,T} end
+
 #######################################################################
 # Sublat (sublattice)
 #######################################################################
@@ -21,7 +23,7 @@ displayname(s::Sublat) = s.name == nametype(:_) ? "pending" : string(":", s.name
 displayorbitals(s::Sublat) = string("(", join(string.(":", s.orbitals), ", "), ")")
 nsites(s::Sublat) = length(s.sites)
 
-# API #
+# External API #
 
 """
     sublat(sites...; name::$(NameType), orbitals = (:noname,))
@@ -62,17 +64,21 @@ Base.show(io::IO, b::Bravais{E,L,T}) where {E,L,T} = print(io,
   Vectors : $(displayvectors(b))
   Matrix  : ", b.matrix)
 
-# API #
+# External API #
 
 """
     bravais(vecs...)
-    bravais(mat)
+    bravais(matrix)
 
 Create a `Bravais{E,L}` that adds `L` Bravais vectors `vecs` in `E` dimensional space,
 alternatively given as the columns of matrix `mat`. For higher instantiation efficiency
 enter `vecs` as `Tuple`s or `SVector`s and `mat` as `SMatrix`.
 
 We can scale a `b::Bravais` simply by multiplying it with a factor `a`, like `a * b`.
+
+    bravais(lat::Lattice)
+
+Obtain the Bravais matrix of lattice `lat`
 
 # Examples
 ```jldoctest
@@ -83,6 +89,7 @@ Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space.
 ```
 """
 bravais(vs::Union{Tuple, AbstractVector}...) = Bravais(toSMatrix(vs...))
+bravais(lat::AbstractLattice) = lat.unitcell.sites
 
 transform(b::Bravais{E,0}, f::F) where {E,F<:Function} = b
 
@@ -140,8 +147,6 @@ nsites(u::Unitcell) = length(u.sites)
 #######################################################################
 # Lattice
 #######################################################################
-abstract type AbstractLattice{E,L,T} end
-
 struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: AbstractLattice{E,L,T}
     bravais::B
     unitcell::U
@@ -168,7 +173,7 @@ end
 Base.summary(::Lattice{E,L,T}) where {E,L,T} =
     "Lattice{$E,$L,$T} : $(L)D lattice in $(E)D space"
 
-# API #
+# External API #
 
 """
     lattice([bravais::Bravais,] sublats::Sublat...; dim::Val{E}, type::T, names, orbitals)
@@ -179,10 +184,7 @@ embedding  dimension `E`, use keyword `dim = Val(E)`. Similarly, override type `
 `type = T`. The keywords `names::Tuple` and `orbitals::Tuple{Tuple}` can be used to rename
 `sublats` or redefine their orbitals per site.
 
-    lattice(superlat)
-
-Create a lattice with a unitcell equal to the supercell of lattice `superlat`.
-See also `superlattice` for information on adding supercells to lattices.
+See also `LatticePresets` for built-in lattices.
 
 # Examples
 ```jldoctest
@@ -194,14 +196,17 @@ Lattice{3,1,Float32} : 1D lattice in 3D space
     Orbitals      : ((:noname,), (:noname,))
     Sites         : (1, 1) --> 2 total per unit cell
 
-julia> lattice(superlattice(LatticePresets.honeycomb(), 100))
+julia> LatticePresets.honeycomb(orbitals = ((:up, :down), (:up, :down)))
 Lattice{2,2,Float64} : 2D lattice in 2D space
   Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
   Sublattices     : 2
     Names         : (:A, :B)
-    Orbitals      : ((:noname,), (:noname,))
-    Sites         : (10000, 10000) --> 20000 total per unit cell
+    Orbitals      : ((:up, :down), (:up, :down))
+    Sites         : (1, 1) --> 2 total per unit cell
 ```
+
+# See also:
+    LatticePresets, bravais, sublat, supercell, intracell
 """
 lattice(s::Sublat, ss::Sublat...; kw...) where {E,T} = _lattice(Unitcell(s, ss...; kw...))
 _lattice(u::Unitcell{E,T}) where {E,T} = Lattice(Bravais{E,T}(), u)
@@ -298,6 +303,23 @@ nsites(lat::AbstractLattice) = length(lat.unitcell.sites)
 nsites(lat::AbstractLattice, sublat) = sublatsites(lat)[sublat]
 
 nsublats(lat::AbstractLattice) = length(lat.unitcell.names)
+
+is_superlattice(lat::Lattice) = false
+is_superlattice(lat::Superlattice) = true
+
+# External API #
+
+"""
+    sites(lat[, sublat::Int])
+    lat |> sites
+    lat |> sites(s::Int)
+
+Extract the positions of all sites in a lattice, or in a specific sublattice
+"""
+sites(lat::AbstractLattice) = lat.unitcell.sites
+sites(lat::AbstractLattice, s::Int) = view(lat.unitcell.sites, siterange(lat, s))
+sites() = lat -> sites(lat)
+sites(s::Int) = lat -> sites(lat, s)
 
 # sublatindex(lat::AbstractLattice, name::NameType) = findfirst(s -> (s.name == name), lat.sublats)
 # sublatindex(lat::AbstractLattice, i::Integer) = Int(i)
