@@ -157,9 +157,13 @@ hamiltonian(f::Function, t::AbstractTightbindingModel...; kw...) =
 hamiltonian(h::Hamiltonian) =
     z -> hamiltonian(z, h)
 
-(h::Hamiltonian)(phases::Vararg{Number,L}) where {L} = h(SVector{L}(phases))
-(h::Hamiltonian)(phases::NTuple{L,Number}) where {L} = h(SVector{L}(phases))
-function (h::Hamiltonian{<:Lattice,L,M,H})(phases::SVector{L}) where {L,M,A<:SparseMatrixCSC,H<:HamiltonianHarmonic{L,M,A}}
+(h::Hamiltonian)(phases...) = bloch(h, phases...)
+
+bloch(h::Hamiltonian{<:Lattice}, phases...) = copy(bloch!(h, phases...))
+
+bloch!(h::Hamiltonian, phases::Vararg{Number,L}) where {L} = bloch!(h, SVector{L}(phases))
+bloch!(h::Hamiltonian, phases::NTuple{L,Number}) where {L} = bloch!(h, SVector{L}(phases))
+function bloch!(h::Hamiltonian{<:Lattice,L,M,H}, phases::SVector{L}) where {L,M,A<:SparseMatrixCSC,H<:HamiltonianHarmonic{L,M,A}}
     h0 = first(h.harmonics).h
     matrix = h.matrix
     if length(h0.nzval) == length(matrix.nzval) # rewrite matrix from previous calls
