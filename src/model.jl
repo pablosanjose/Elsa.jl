@@ -50,9 +50,9 @@ normalizedn(dn::Missing) = missing
 normalizedn(dn::Tuple{Vararg{Tuple}}) = SVector.(dn)
 normalizedn(dn::Tuple{Vararg{Integer}}) = (SVector(dn),)
 
-sublats(t::OnsiteTerm, lat::Lattice) =
+sublats(t::OnsiteTerm, lat::AbstractLattice) =
     t.sublats === missing ? collect(1:nsublats(lat)) : t.sublats
-sublats(t::HoppingTerm, lat::Lattice) =
+sublats(t::HoppingTerm, lat::AbstractLattice) =
     t.sublats === missing ? collect(Iterators.product(1:nsublats(lat), 1:nsublats(lat))) : t.sublats
 
 displayparameter(::Type{<:Function}) = "Function"
@@ -78,7 +78,7 @@ $(i)  Force Hermitian  : $(h.forcehermitian)
 $(i)  Coefficient      : $(h.coefficient)")
 end
 
-# API #
+# External API #
 
 function onsite(o; sublats = missing, forcehermitian::Bool = true)
     return OnsiteTerm(o, normalizesublats(sublats), 1, forcehermitian)
@@ -112,7 +112,7 @@ terms(t::TightbindingModelTerm) = (t,)
 
 TightbindingModel(t::AbstractTightbindingModel...) = TightbindingModel(tuplejoin(terms.(t)...))
 
-# API #
+# External API #
 
 Base.:*(x, m::TightbindingModel) = TightbindingModel(x .* m.terms)
 Base.:*(m::TightbindingModel, x) = x * m

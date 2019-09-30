@@ -1,3 +1,5 @@
+abstract type AbstractLattice{E,L,T} end
+
 #######################################################################
 # Sublat (sublattice)
 #######################################################################
@@ -21,7 +23,7 @@ displayname(s::Sublat) = s.name == nametype(:_) ? "pending" : string(":", s.name
 displayorbitals(s::Sublat) = string("(", join(string.(":", s.orbitals), ", "), ")")
 nsites(s::Sublat) = length(s.sites)
 
-# API #
+# External API #
 
 """
     sublat(sites...; name::$(NameType), orbitals = (:noname,))
@@ -62,17 +64,21 @@ Base.show(io::IO, b::Bravais{E,L,T}) where {E,L,T} = print(io,
   Vectors : $(displayvectors(b))
   Matrix  : ", b.matrix)
 
-# API #
+# External API #
 
 """
     bravais(vecs...)
-    bravais(mat)
+    bravais(matrix)
 
 Create a `Bravais{E,L}` that adds `L` Bravais vectors `vecs` in `E` dimensional space,
 alternatively given as the columns of matrix `mat`. For higher instantiation efficiency
 enter `vecs` as `Tuple`s or `SVector`s and `mat` as `SMatrix`.
 
 We can scale a `b::Bravais` simply by multiplying it with a factor `a`, like `a * b`.
+
+    bravais(lat::Lattice)
+
+Obtain the Bravais matrix of lattice `lat`
 
 # Examples
 ```jldoctest
@@ -83,6 +89,7 @@ Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space.
 ```
 """
 bravais(vs::Union{Tuple, AbstractVector}...) = Bravais(toSMatrix(vs...))
+bravais(lat::AbstractLattice) = lat.unitcell.sites
 
 transform(b::Bravais{E,0}, f::F) where {E,F<:Function} = b
 
@@ -138,6 +145,74 @@ end
 nsites(u::Unitcell) = length(u.sites)
 
 #######################################################################
+# Lattice
+#######################################################################
+struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: AbstractLattice{E,L,T}
+    bravais::B
+    unitcell::U
+end
+function Lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,E,T}
+    L = min(E,L2) # L should not exceed E
+    Lattice(convert(Bravais{E,L,T}, bravais), unitcell)
+end
+
+displaynames(l::AbstractLattice) = display_as_tuple(l.unitcell.names, ":")
+displayorbitals(l::AbstractLattice) =
+    replace(replace(string(l.unitcell.orbitals), "Symbol(\"" => ":"), "\")" => "")
+
+function Base.show(io::IO, lat::Lattice)
+    i = get(io, :indent, "")
+    print(io, i, summary(lat), "\n",
+"$i  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))
+$i  Sublattices     : $(nsublats(lat))
+$i    Names         : $(displaynames(lat))
+$i    Orbitals      : $(displayorbitals(lat))
+$i    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell")
+end
+
+Base.summary(::Lattice{E,L,T}) where {E,L,T} =
+    "Lattice{$E,$L,$T} : $(L)D lattice in $(E)D space"
+
+# External API #
+
+"""
+    lattice([bravais::Bravais,] sublats::Sublat...; dim::Val{E}, type::T, names, orbitals)
+
+Create a `Lattice{E,L,T}` with Bravais matrix `bravais` and sublattices `sublats`
+converted to a common  `E`-dimensional embedding space and type `T`. To override the
+embedding  dimension `E`, use keyword `dim = Val(E)`. Similarly, override type `T` with
+`type = T`. The keywords `names::Tuple` and `orbitals::Tuple{Tuple}` can be used to rename
+`sublats` or redefine their orbitals per site.
+
+See also `LatticePresets` for built-in lattices.
+
+# Examples
+```jldoctest
+julia> lattice(bravais((1, 0)), sublat((0, 0)), sublat((0, Float32(1))); dim = Val(3))
+Lattice{3,1,Float32} : 1D lattice in 3D space
+  Bravais vectors : ((1.0, 0.0, 0.0),)
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Orbitals      : ((:noname,), (:noname,))
+    Sites         : (1, 1) --> 2 total per unit cell
+
+julia> LatticePresets.honeycomb(orbitals = ((:up, :down), (:up, :down)))
+Lattice{2,2,Float64} : 2D lattice in 2D space
+  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Orbitals      : ((:up, :down), (:up, :down))
+    Sites         : (1, 1) --> 2 total per unit cell
+```
+
+# See also:
+    LatticePresets, bravais, sublat, supercell, intracell
+"""
+lattice(s::Sublat, ss::Sublat...; kw...) where {E,T} = _lattice(Unitcell(s, ss...; kw...))
+_lattice(u::Unitcell{E,T}) where {E,T} = Lattice(Bravais{E,T}(), u)
+lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = Lattice(br, Unitcell(s, ss...; kw...))
+
+#######################################################################
 # Supercell
 #######################################################################
 struct Supercell{L,L´,LP,LL´} # LP = L+1, L is lattice dim, L´ is supercell dim
@@ -156,134 +231,38 @@ Base.CartesianIndices(s::Supercell) = CartesianIndices(tail(axes(s.cellmask)))
 
 function Base.show(io::IO, s::Supercell{L,L´}) where {L,L´}
     i = get(io, :indent, "")
-    print(io,
-"$(i)Supercell{$L,$(L´)} for $(L´)D superlattice of the base $(L)D lattice
-$(i)  Supervectors  : $(displayvectors(s.matrix))
-$(i)  Supersites    : $(nsites(s))")
+    print(io, i,
+"Supercell{$L,$(L´)} for $(L´)D superlattice of the base $(L)D lattice
+$i  Supervectors  : $(displayvectors(s.matrix))
+$i  Supersites    : $(nsites(s))")
 end
 
 #######################################################################
-# Lattice
+# Superlattice
 #######################################################################
-struct Lattice{E,L,T<:AbstractFloat,S<:Supercell{L},B<:Bravais{E,L,T},U<:Unitcell{E,T}}
+struct Superlattice{E,L,T<:AbstractFloat,L´,S<:Supercell{L,L´},B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: AbstractLattice{E,L,T}
     bravais::B
     unitcell::U
     supercell::S
 end
-function Lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,E,T}
-    L = min(E,L2) # L should not exceed E
-    Lattice(convert(Bravais{E,L,T}, bravais), unitcell, Supercell{L}(nsites(unitcell)))
-end
 
-displaynames(l::Lattice) = display_as_tuple(l.unitcell.names, ":")
-displayorbitals(l::Lattice) =
-    replace(replace(string(l.unitcell.orbitals), "Symbol(\"" => ":"), "\")" => "")
-
-function Base.show(io::IO, lat::Lattice{E,L,T}) where {E,L,T}
+function Base.show(io::IO, lat::Superlattice)
     i = get(io, :indent, "")
-    ioindent = IOContext(io, :indent => "$(i)  ")
-    print(io,
-"$(i)Lattice{$E,$L,$T} : $(L)D lattice in $(E)D space
-$(i)  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))
-$(i)  Sublattices     : $(nsublats(lat))
-$(i)    Names         : $(displaynames(lat))
-$(i)    Orbitals      : $(displayorbitals(lat))
-$(i)    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell")
-    isminimalsupercell(lat) || print(ioindent, "\n", lat.supercell)
+    ioindent = IOContext(io, :indent => string(i, "  "))
+    print(io, i, summary(lat), "\n",
+"$i  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))
+$i  Sublattices     : $(nsublats(lat))
+$i    Names         : $(displaynames(lat))
+$i    Orbitals      : $(displayorbitals(lat))
+$i    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell\n")
+    print(ioindent, lat.supercell)
 end
 
-# API #
-
-"""
-    lattice([bravais::Bravais,] sublats::Sublat...; dim::Val{E}, type::T, names, orbitals)
-
-Create a `Lattice{E,L,T}` with Bravais matrix `bravais` and sublattices `sublats`
-converted to a common  `E`-dimensional embedding space and type `T`. To override the
-embedding  dimension `E`, use keyword `dim = Val(E)`. Similarly, override type `T` with
-`type = T`. The keywords `names::Tuple` and `orbitals::Tuple{Tuple}` can be used to rename
-`sublats` or redefine their orbitals per site.
-
-    lattice(superlat)
-
-Create a lattice with a unitcell equal to the supercell of lattice `superlat`.
-See also `superlattice` for information on adding supercells to lattices.
-
-# Examples
-```jldoctest
-julia> lattice(bravais((1, 0)), sublat((0, 0)), sublat((0, Float32(1))); dim = Val(3))
-Lattice{3,1,Float32} : 1D lattice in 3D space
-  Bravais vectors : ((1.0, 0.0, 0.0),)
-  Sublattices     : 2
-    Names         : (:A, :B)
-    Orbitals      : ((:noname,), (:noname,))
-    Sites         : (1, 1) --> 2 total per unit cell
-
-julia> lattice(superlattice(LatticePresets.honeycomb(), 100))
-Lattice{2,2,Float64} : 2D lattice in 2D space
-  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
-  Sublattices     : 2
-    Names         : (:A, :B)
-    Orbitals      : ((:noname,), (:noname,))
-    Sites         : (10000, 10000) --> 20000 total per unit cell
-```
-"""
-lattice(s::Sublat, ss::Sublat...; kw...) where {E,T} = _lattice(Unitcell(s, ss...; kw...))
-_lattice(u::Unitcell{E,T}) where {E,T} = Lattice(Bravais{E,T}(), u)
-lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = Lattice(br, Unitcell(s, ss...; kw...))
-
-function lattice(lat::Lattice)
-    newoffsets = supercell_offsets(lat)
-    newsites = supercell_sites(lat)
-    unitcell = Unitcell(newsites, lat.unitcell.names, newoffsets, lat.unitcell.orbitals)
-    bravais = lat.bravais * lat.supercell.matrix
-    return Lattice(bravais, unitcell)
-end
-
-function supercell_offsets(lat::Lattice)
-    sitecounts = zeros(Int, nsublats(lat) + 1)
-    foreach_supersite((s, oldi, dn, newi) -> sitecounts[s + 1] += 1, lat)
-    newoffsets = cumsum!(sitecounts, sitecounts)
-    return newoffsets
-end
-
-function supercell_sites(lat::Lattice)
-    newsites = similar(lat.unitcell.sites, nsites(lat.supercell))
-    oldsites = lat.unitcell.sites
-    bravais = lat.bravais.matrix
-    foreach_supersite((s, oldi, dn, newi) -> newsites[newi] = bravais * dn + oldsites[oldi], lat)
-    return newsites
-end
-
-# Auxiliary #
-
-# find SVector type that can hold all orbital amplitudes in any lattice sites
-orbitaltype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
-    _orbitaltype(SVector{1,Tv}, lat.unitcell.orbitals...)
-_orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
-    (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
-_orbitaltype(t::Type{SVector{N,Tv}}) where {N,Tv} = t
-_orbitaltype(t::Type{SVector{1,Tv}}) where {Tv} = Tv
-
-# find SMatrix type that can hold all matrix elements between lattice sites
-blocktype(lat::Lattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
-    _blocktype(orbitaltype(lat, Tv))
-_blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
-_blocktype(::Type{S}) where {S<:Number} = S
-
-numbertype(::Lattice{E,L,T}) where {E,L,T} = T
-
-sublat(lat::Lattice, siteidx) = findlast(o -> o < siteidx, lat.unitcell.offsets)
-siterange(lat::Lattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.offsets[sublat+1]
-
-sublatsites(lat::Lattice) = diff(lat.unitcell.offsets)
-
-nsites(lat::Lattice) = length(lat.unitcell.sites)
-nsites(lat::Lattice, sublat) = sublatsites(lat)[sublat]
-
-nsublats(lat) = length(lat.unitcell.names)
+Base.summary(::Superlattice{E,L,T,L´}) where {E,L,T,L´} =
+    "Superlattice{$E,$L,$T,$L´} : $(L)D lattice in $(E)D space, filling a $(L´)D supercell"
 
 # apply f to trues in cellmask. Arguments are oldi = old site index, s = sublat index
-function foreach_supersite(f::F, lat::Lattice) where {F<:Function}
+function foreach_supersite(f::F, lat::Superlattice) where {F<:Function}
     newi = 0
     for s in 1:nsublats(lat), oldi in siterange(lat, s)
         for dn in CartesianIndices(lat.supercell)
@@ -296,15 +275,70 @@ function foreach_supersite(f::F, lat::Lattice) where {F<:Function}
     return nothing
 end
 
-isminimalsupercell(lat::Lattice{E,L,T,S}) where {E,L,T,S<:Supercell{L,L}} =
-    all(r -> r == 0:0, tail(cellmaskaxes(lat))) && all(lat.supercell.cellmask)
-isminimalsupercell(lat::Lattice{E,L,T,S}) where {E,L,T,S} = false
+#######################################################################
+# AbstractLattice interface
+#######################################################################
+# find SVector type that can hold all orbital amplitudes in any lattice sites
+orbitaltype(lat::AbstractLattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
+    _orbitaltype(SVector{1,Tv}, lat.unitcell.orbitals...)
+_orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
+    (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
+_orbitaltype(t::Type{SVector{N,Tv}}) where {N,Tv} = t
+_orbitaltype(t::Type{SVector{1,Tv}}) where {Tv} = Tv
 
-# sublatindex(lat::Lattice, name::NameType) = findfirst(s -> (s.name == name), lat.sublats)
-# sublatindex(lat::Lattice, i::Integer) = Int(i)
+# find SMatrix type that can hold all matrix elements between lattice sites
+blocktype(lat::AbstractLattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
+    _blocktype(orbitaltype(lat, Tv))
+_blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
+_blocktype(::Type{S}) where {S<:Number} = S
+
+numorbitals(lat::AbstractLattice) = length.(lat.unitcell.orbitals)
+
+numbertype(::AbstractLattice{E,L,T}) where {E,L,T} = T
+
+sublat(lat::AbstractLattice, siteidx) = Int(findlast(o -> o < siteidx, lat.unitcell.offsets))
+
+siterange(lat::AbstractLattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.offsets[sublat+1]
+
+offsets(lat) = lat.unitcell.offsets
+
+flatdim(lat::AbstractLattice) = sum(flatdims(lat))
+flatdims(lat::AbstractLattice) = sublatsites(lat) .* numorbitals(lat)
+
+function flatoffsets(lat::AbstractLattice)
+    v = append!([0], flatdims(lat))
+    return cumsum!(v, v)
+end
+
+sublatsites(lat::AbstractLattice) = diff(lat.unitcell.offsets)
+
+nsites(lat::AbstractLattice) = length(lat.unitcell.sites)
+nsites(lat::AbstractLattice, sublat) = sublatsites(lat)[sublat]
+
+nsublats(lat::AbstractLattice) = length(lat.unitcell.names)
+
+issuperlattice(lat::Lattice) = false
+issuperlattice(lat::Superlattice) = true
+
+# External API #
+
+"""
+    sites(lat[, sublat::Int])
+    lat |> sites
+    lat |> sites(s::Int)
+
+Extract the positions of all sites in a lattice, or in a specific sublattice
+"""
+sites(lat::AbstractLattice) = lat.unitcell.sites
+sites(lat::AbstractLattice, s::Int) = view(lat.unitcell.sites, siterange(lat, s))
+sites() = lat -> sites(lat)
+sites(s::Int) = lat -> sites(lat, s)
+
+# sublatindex(lat::AbstractLattice, name::NameType) = findfirst(s -> (s.name == name), lat.sublats)
+# sublatindex(lat::AbstractLattice, i::Integer) = Int(i)
 
 #######################################################################
-# superlattice
+# supercell
 #######################################################################
 const TOOMANYITERS = 10^8
 
@@ -372,38 +406,19 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
     Total sites   : 9
 ```
 """
-superlattice(v::Union{SMatrix,Tuple,SVector}...; kw...) = lat -> superlattice(lat, v...; kw...)
-superlattice(lat::Lattice{E,L}; kw...) where {E,L} = superlattice(lat, SMatrix{L,0,Int}(); kw...)
-superlattice(lat::Lattice{E,L}, factor::Integer; kw...) where {E,L} =
-    superlattice(lat, SMatrix{L,L,Int}(factor * I); kw...)
-superlattice(lat::Lattice{E,L}, factors::Vararg{Integer,L}; kw...) where {E,L} =
-    superlattice(lat, SMatrix{L,L,Int}(Diagonal(SVector(factors))); kw...)
-superlattice(lat::Lattice{E,L}, vecs::NTuple{L,Int}...; kw...) where {E,L} =
-    superlattice(lat, toSMatrix(Int, vecs...); kw...)
-function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing) where {E,L,L´}
-    bravais = lat.bravais.matrix
-    regionfunc = region === missing ? ribbonfunc(bravais, supercell) : region
-    iter = BoxIterator(zero(SVector{L,Int}))
+supercell(v::Union{SMatrix,Tuple,SVector}...; kw...) = lat -> supercell(lat, v...; kw...)
+supercell(lat::AbstractLattice{E,L}; kw...) where {E,L} = supercell(lat, SMatrix{L,0,Int}(); kw...)
+supercell(lat::AbstractLattice{E,L}, factor::Integer; kw...) where {E,L} =
+    supercell(lat, SMatrix{L,L,Int}(factor * I); kw...)
+supercell(lat::AbstractLattice{E,L}, factors::Vararg{Integer,L}; kw...) where {E,L} =
+    supercell(lat, SMatrix{L,L,Int}(Diagonal(SVector(factors))); kw...)
+supercell(lat::AbstractLattice{E,L}, vecs::NTuple{L,Int}...; kw...) where {E,L} =
+    supercell(lat, toSMatrix(Int, vecs...); kw...)
+function supercell(lat::AbstractLattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing) where {E,L,L´}
+    brmatrix = lat.bravais.matrix
+    regionfunc = region === missing ? ribbonfunc(brmatrix, supercell) : region
     in_supercell_func = is_perp_dir(supercell)
-    foundfirst = false
-    counter = 0
-    for dn in iter   # We first compute the bounding box
-        found = false
-        counter += 1; counter == TOOMANYITERS &&
-            throw(ArgumentError("`region` seems unbounded (after $TOOMANYITERS iterations)"))
-        in_supercell = in_supercell_func(SVector(Tuple(dn)))
-        r0 = bravais * SVector(Tuple(dn))
-        for site in lat.unitcell.sites
-            r = r0 + site
-            found = in_supercell && regionfunc(r)
-            if found || !foundfirst
-                acceptcell!(iter, dn)
-                foundfirst = found
-                break
-            end
-        end
-    end
-    c = CartesianIndices(iter)
+    c = supercell_bbox_iterator(lat, regionfunc, in_supercell_func)
     ns = nsites(lat)
     cellmask = OffsetArray(BitArray(undef, ns, size(c)...), 1:ns, c.indices...)
     @inbounds for dn in c
@@ -411,14 +426,14 @@ function superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region =
         dnvec = SVector(dntup)
         in_supercell = in_supercell_func(dnvec)
         in_supercell || (cellmask[:, dntup...] .= false; continue)
-        r0 = bravais * dnvec
+        r0 = brmatrix * dnvec
         for (i, site) in enumerate(lat.unitcell.sites)
             r = site + r0
             cellmask[i, dntup...] = in_supercell && regionfunc(r)
         end
     end
     supercell = Supercell(supercell, cellmask)
-    return Lattice(lat.bravais, lat.unitcell, supercell)
+    return Superlattice(lat.bravais, lat.unitcell, supercell)
 end
 
 # This is true whenever old ndist is perpendicular to new lattice
@@ -443,4 +458,122 @@ function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E
     # ribbon defined by r's with projection within ranges for all orthogonal vectors
     regionfunc(r) = all(first.(ranges) .<= Tuple(projector * r) .< last.(ranges))
     return regionfunc
+end
+
+function supercell_bbox_iterator(lat::Lattice{E,L}, regionfunc, in_supercell_func) where {E,L}
+    bravais = lat.bravais.matrix
+    iter = BoxIterator(zero(SVector{L,Int}))
+    foundfirst = false
+    counter = 0
+    for dn in iter
+        found = false
+        counter += 1; counter == TOOMANYITERS &&
+            throw(ArgumentError("`region` seems unbounded (after $TOOMANYITERS iterations)"))
+        in_supercell = in_supercell_func(SVector(Tuple(dn)))
+        r0 = bravais * SVector(Tuple(dn))
+        for site in lat.unitcell.sites
+            r = r0 + site
+            found = in_supercell && regionfunc(r)
+            if found || !foundfirst
+                acceptcell!(iter, dn)
+                foundfirst = found
+                break
+            end
+        end
+    end
+    c = CartesianIndices(iter)
+    return c
+end
+
+#######################################################################
+# unitcell
+#######################################################################
+"""
+    superlattice(lat::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing)
+    superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing)
+
+Modifies the supercell of `L`-dimensional lattice `lat` to one with Bravais vectors
+`br´= br * supercell`, where `supercell::SMatrix{L,L´,Int}` is the integer supercell matrix
+with the `L´` vectors `v`s as columns.
+
+Only sites at position `r` such that `region(r) == true` will be included in the supercell.
+If `region` is missing, a Bravais unit cell perpendicular to the `v` axes will be selected
+for the `L-L´` non-periodic directions.
+
+    superlattice(lattice::Lattice{E,L}, factor::Integer; region = missing)
+
+Calls `superlattice` with a uniformly scaled `supercell = SMatrix{L,L}(factor * I)`
+
+    superlattice(lattice::Lattice{E,L}, factors::Integer...; region = missing)
+
+Calls `superlattice` with different scaling along each Bravais vector (diagonal supercell
+with factors along the diagonal)
+
+    lattice |> superlattice(v...; kw...)
+
+Functional syntax, equivalent to `superlattice(lattice, v...; kw...)
+
+# Examples
+```jldoctest
+julia> superlattice(LatticePresets.honeycomb(), region = RegionPresets.circle(300))
+Lattice{2,2,Float64} : 2D lattice in 2D space
+  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Orbitals      : ((:noname,), (:noname,))
+    Sites         : (1, 1) --> 2 total per unit cell
+  Supercell
+    Dimensions    : 0
+    Vectors       : ()
+    Total sites   : 652966
+
+julia> superlattice(LatticePresets.triangular(), (1,1), (1, -1))
+Lattice{2,2,Float64} : 2D lattice in 2D space
+  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+  Sublattices     : 1
+    Names         : (:A)
+    Orbitals      : ((:noname,),)
+    Sites         : (1) --> 1 total per unit cell
+  Supercell
+    Dimensions    : 2
+    Vectors       : ((1, 1), (1, -1))
+    Total sites   : 2
+
+julia> LatticePresets.square() |> superlattice(3)
+Lattice{2,2,Float64} : 2D lattice in 2D space
+  Bravais vectors : ((1.0, 0.0), (0.0, 1.0))
+  Sublattices     : 1
+    Names         : (:A)
+    Orbitals      : ((:noname,),)
+    Sites         : (1) --> 1 total per unit cell
+  Supercell
+    Dimensions    : 2
+    Vectors       : ((3, 0), (0, 3))
+    Total sites   : 9
+```
+"""
+unitcell(v::Union{SMatrix,Tuple,SVector}...; kw...) = lat -> unitcell(lat, v...; kw...)
+unitcell(lat::Lattice, args...; kw...) = unitcell(supercell(lat, args...; kw...))
+
+function unitcell(lat::Superlattice)
+    newoffsets = supercell_offsets(lat)
+    newsites = supercell_sites(lat)
+    unitcell = Unitcell(newsites, lat.unitcell.names, newoffsets, lat.unitcell.orbitals)
+    bravais = lat.bravais * lat.supercell.matrix
+    return Lattice(bravais, unitcell)
+end
+
+function supercell_offsets(lat::Superlattice)
+    sitecounts = zeros(Int, nsublats(lat) + 1)
+    foreach_supersite((s, oldi, dn, newi) -> sitecounts[s + 1] += 1, lat)
+    newoffsets = cumsum!(sitecounts, sitecounts)
+    return newoffsets
+end
+
+function supercell_sites(lat::Superlattice)
+    newsites = similar(lat.unitcell.sites, nsites(lat.supercell))
+    oldsites = lat.unitcell.sites
+    bravais = lat.bravais.matrix
+    foreach_supersite((s, oldi, dn, newi) -> newsites[newi] = bravais * dn + oldsites[oldi], lat)
+    return newsites
 end

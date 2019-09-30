@@ -35,7 +35,7 @@ end
 
 (ps::ParametricSystem)(;kw...) = System(ps.lattice, ps.hamiltonian(;kw...))
 
-# API #
+# External API #
 
 system(lat::Lattice, t::AbstractTightbindingModel...; kw...) =
     System(lat, hamiltonian(lat, t...; kw...))

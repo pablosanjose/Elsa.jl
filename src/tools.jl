@@ -83,11 +83,13 @@ function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
     return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
 end
 
+@inline tuplejoin() = ()
 @inline tuplejoin(x) = x
 @inline tuplejoin(x, y) = (x..., y...)
 @inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
 
 function isgrowing(vs::AbstractVector, i0 = 1)
+    i0 > length(vs) && return true
     vprev = vs[i0]
     for i in i0 + 1:length(vs)
         v = vs[i]
