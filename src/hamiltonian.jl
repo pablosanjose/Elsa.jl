@@ -362,20 +362,21 @@ end
 
 function unitcell(ham::Hamiltonian{LA,L,Tv}) where {E,L,T,L´,Tv,LA<:Superlattice{E,L,T,L´}}
     lat = ham.lattice
-    mapping = similar(lat.supercell.cellmask, Int) # store supersite indices newi
+    sc = lat.supercell
+    mapping = OffsetArray{Int}(undef, sc.sites, sc.cells.indices...) # store supersite indices newi
     mapping .= 0
     foreach_supersite((s, oldi, olddn, newi) -> mapping[oldi, Tuple(olddn)...] = newi, lat)
-    dim = nsites(lat.supercell)
+    dim = nsites(sc)
     B = blocktype(ham)
     harmonic_builders = HamiltonianHarmonic{L´,Tv,SparseMatrixBuilder{B}}[]
-    pinvint = pinvmultiple(lat.supercell.matrix)
+    pinvint = pinvmultiple(sc.matrix)
     foreach_supersite(lat) do s, source_i, source_dn, newcol
         for oldh in ham.harmonics
             rows = rowvals(oldh.h)
             vals = nonzeros(oldh.h)
             target_dn = source_dn + oldh.dn
             super_dn = new_dn(target_dn, pinvint)
-            wrapped_dn = wrap_dn(target_dn, super_dn, lat.supercell.matrix)
+            wrapped_dn = wrap_dn(target_dn, super_dn, sc.matrix)
             newh = get_or_push!(harmonic_builders, super_dn, dim)
             for p in nzrange(oldh.h, source_i)
                 target_i = rows[p]

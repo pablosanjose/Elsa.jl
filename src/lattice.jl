@@ -215,20 +215,22 @@ lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = Lattice(br, Unitcell(s, 
 #######################################################################
 # Supercell
 #######################################################################
-struct Supercell{L,L´,M<:Union{Missing,OffsetArray{Bool}},S<:SMatrix} # L´ is supercell dim
+struct Supercell{L,L´,M<:Union{Missing,OffsetArray{Bool}},S<:SMatrix{L,L´}} # L´ is supercell dim
     matrix::S
-    cells::CartesianIndices{L´,NTuple{L´,UnitRange{Int}}}
+    sites::UnitRange{Int}
+    cells::CartesianIndices{L,NTuple{L,UnitRange{Int}}}
     mask::M
 end
 
 Supercell{L}(ns::Integer) where {L} =
-    Supercell(SMatrix{L,L,Int,L*L}(I), trues(1:ns, ntuple(_->0:0, Val(L))...))
+    Supercell(SMatrix{L,L,Int,L*L}(I), 1:ns, CartesianIndices(ntuple(_->0:0, Val(L))), missing)
 
 dim(::Supercell{L,L´}) where {L,L´} = L´
 
-nsites(s::Supercell) = sum(s.cellmask)
+nsites(s::Supercell{L,L´,<:OffsetArray}) where {L,L´} = sum(s.mask)
+nsites(s::Supercell{L,L´,Missing}) where {L,L´} = length(s.sites) * length(s.cells)
 
-Base.CartesianIndices(s::Supercell) = CartesianIndices(tail(axes(s.cellmask)))
+Base.CartesianIndices(s::Supercell) = s.cells
 
 function Base.show(io::IO, s::Supercell{L,L´}) where {L,L´}
     i = get(io, :indent, "")
@@ -237,6 +239,11 @@ function Base.show(io::IO, s::Supercell{L,L´}) where {L,L´}
 $i  Supervectors  : $(displayvectors(s.matrix))
 $i  Supersites    : $(nsites(s))")
 end
+
+isinmask(s::Supercell{L,L´,<:OffsetArray}, site, dn) where {L,L´} = s.mask[site, Tuple(dn)...]
+isinmask(s::Supercell{L,L´,Missing}, site, dn) where {L,L´} = true
+isinmask(s::Supercell{L,L´,<:OffsetArray}, site) where {L,L´} = s.mask[site]
+isinmask(s::Supercell{L,L´,Missing}, site) where {L,L´} = true
 
 #######################################################################
 # Superlattice
@@ -262,12 +269,12 @@ end
 Base.summary(::Superlattice{E,L,T,L´}) where {E,L,T,L´} =
     "Superlattice{$E,$L,$T,$L´} : $(L)D lattice in $(E)D space, filling a $(L´)D supercell"
 
-# apply f to trues in cellmask. Arguments are oldi = old site index, s = sublat index
+# apply f to trues in mask. Arguments are s = sublat, oldi = old site, dn, newi = new site
 function foreach_supersite(f::F, lat::Superlattice) where {F<:Function}
     newi = 0
     for s in 1:nsublats(lat), oldi in siterange(lat, s)
         for dn in CartesianIndices(lat.supercell)
-            if lat.supercell.cellmask[oldi, Tuple(dn)...]
+            if isinmask(lat.supercell, oldi, dn)
                 newi += 1
                 f(s, oldi, SVector(Tuple(dn)), newi)
             end
@@ -415,25 +422,25 @@ supercell(lat::AbstractLattice{E,L}, factors::Vararg{Integer,L}; kw...) where {E
     supercell(lat, SMatrix{L,L,Int}(Diagonal(SVector(factors))); kw...)
 supercell(lat::AbstractLattice{E,L}, vecs::NTuple{L,Int}...; kw...) where {E,L} =
     supercell(lat, toSMatrix(Int, vecs...); kw...)
-function supercell(lat::AbstractLattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing) where {E,L,L´}
+function supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}; region = missing) where {E,L,L´}
     brmatrix = lat.bravais.matrix
-    regionfunc = region === missing ? ribbonfunc(brmatrix, supercell) : region
-    in_supercell_func = is_perp_dir(supercell)
-    c = supercell_bbox_iterator(lat, regionfunc, in_supercell_func)
+    regionfunc = region === missing ? ribbonfunc(brmatrix, scmatrix) : region
+    in_supercell_func = is_perp_dir(scmatrix)
+    cells = supercell_cells(lat, regionfunc, in_supercell_func)
     ns = nsites(lat)
-    cellmask = OffsetArray(BitArray(undef, ns, size(c)...), 1:ns, c.indices...)
-    @inbounds for dn in c
+    mask = OffsetArray(BitArray(undef, ns, size(cells)...), 1:ns, cells.indices...)
+    @inbounds for dn in cells
         dntup = Tuple(dn)
         dnvec = SVector(dntup)
         in_supercell = in_supercell_func(dnvec)
-        in_supercell || (cellmask[:, dntup...] .= false; continue)
+        in_supercell || (mask[:, dntup...] .= false; continue)
         r0 = brmatrix * dnvec
         for (i, site) in enumerate(lat.unitcell.sites)
             r = site + r0
-            cellmask[i, dntup...] = in_supercell && regionfunc(r)
+            mask[i, dntup...] = in_supercell && regionfunc(r)
         end
     end
-    supercell = Supercell(supercell, cellmask)
+    supercell = Supercell(scmatrix, 1:ns, cells, mask)
     return Superlattice(lat.bravais, lat.unitcell, supercell)
 end
 
@@ -461,7 +468,7 @@ function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E
     return regionfunc
 end
 
-function supercell_bbox_iterator(lat::Lattice{E,L}, regionfunc, in_supercell_func) where {E,L}
+function supercell_cells(lat::Lattice{E,L}, regionfunc, in_supercell_func) where {E,L}
     bravais = lat.bravais.matrix
     iter = BoxIterator(zero(SVector{L,Int}))
     foundfirst = false

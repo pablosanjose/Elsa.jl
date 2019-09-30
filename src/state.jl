@@ -28,14 +28,14 @@ SupercellState(lat::Superlattice{E,L,T};
       vector = OffsetArray{orbitaltype(lat, Tv)}(undef, cellmaskaxes(lat))) where {E,L,T,Tv} =
     SupercellState(vector, lat.supercell)
 
-cellmaskaxes(lat::Superlattice{E,L}) where {E,L} = axes(lat.supercell.cellmask)
+cellmaskaxes(lat::Superlattice{E,L}) where {E,L} = axes(lat.supercell.mask)
 cellmaskaxes(lat::Lattice{E,L}) where {E,L} = (1:nsites(lat),)
 
 nsites(s::SupercellState) = nsites(s.supercell)
 
 function isemptycell(s::SupercellState, cell)
-    @inbounds for i in size(s.supercell.cellmask, 1)
-        s.supercell.cellmask[i, cell...] && return false
+    @inbounds for i in size(s.supercell.mask, 1)
+        s.supercell.mask[i, cell...] && return false
     end
     return true
 end
@@ -64,7 +64,7 @@ function randomstate(lat::AbstractLattice{E,L,T}; type::Type{Tv} = Complex{T}) w
     if !all(x -> x == norbs[1], norbs)  # zero out missing orbitals
         @inbounds for c in CartesianIndices(masksize)
             site = first(Tuple(c))
-            insupercell = !isslat || lat.supercell.cellmask.parent[c]
+            insupercell = !isslat || lat.supercell.mask.parent[c]
             norb = norbs[sublat(lat, site)] * insupercell
             for j in 1:N, i in 1:n
                 v[i + (j-1)*n, Tuple(c)...] =
@@ -140,39 +140,39 @@ maybe_wrapstate(sv, lat::Lattice) = sv
 #######################################################################
 # mul!
 #######################################################################
-function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = false) where {L,V,S<:SupercellState{L,V}}
-    C = t.vector
-    B = s.vector
-    celliter = CartesianIndices(tail(axes(B)))
-    cols = 1:size(first(ham.harmonics).h, 2)
-    pinvint = pinvmultiple(s.supercell.matrix)
-    zeroV = zero(V)
-    # Scale target by β
-    if β != 1
-        β != 0 ? rmul!(C, β) : fill!(C, zeroV)
-    end
-    # Add α * blochphase * h * source to target
-    @inbounds Threads.@threads for ic in celliter
-        i = Tuple(ic)
-        # isemptycell(s, i) && continue # good for performance? Check
-        for h in ham.harmonics
-            olddn = h.dn + SVector(i)
-            newdn = new_dn(olddn, pinvint)
-            j = Tuple(wrap_dn(olddn, newdn, s.supercell.matrix))
-            α´ = α * cis(s.phases' * newdn)
-            nzv = nonzeros(h.h)
-            rv = rowvals(h.h)
-            for col in cols
-                αxj = B[col, i...] * α´
-                for p in nzrange(h.h, col)
-                    C[rv[p], j...] += applyfield(ham.field, nzv[p], rv[p], col, h.dn) * αxj
-                end
-            end
-        end
-    end
-    # Filter out sites not in supercell
-    @simd for j in eachindex(t.vector)
-        @inbounds s.supercell.cellmask[j] || (t.vector[j] = zeroV)
-    end
-    return t
-end
+# function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = false) where {L,V,S<:SupercellState{L,V}}
+#     C = t.vector
+#     B = s.vector
+#     celliter = CartesianIndices(tail(axes(B)))
+#     cols = 1:size(first(ham.harmonics).h, 2)
+#     pinvint = pinvmultiple(s.supercell.matrix)
+#     zeroV = zero(V)
+#     # Scale target by β
+#     if β != 1
+#         β != 0 ? rmul!(C, β) : fill!(C, zeroV)
+#     end
+#     # Add α * blochphase * h * source to target
+#     @inbounds Threads.@threads for ic in celliter
+#         i = Tuple(ic)
+#         # isemptycell(s, i) && continue # good for performance? Check
+#         for h in ham.harmonics
+#             olddn = h.dn + SVector(i)
+#             newdn = new_dn(olddn, pinvint)
+#             j = Tuple(wrap_dn(olddn, newdn, s.supercell.matrix))
+#             α´ = α * cis(s.phases' * newdn)
+#             nzv = nonzeros(h.h)
+#             rv = rowvals(h.h)
+#             for col in cols
+#                 αxj = B[col, i...] * α´
+#                 for p in nzrange(h.h, col)
+#                     C[rv[p], j...] += applyfield(ham.field, nzv[p], rv[p], col, h.dn) * αxj
+#                 end
+#             end
+#         end
+#     end
+#     # Filter out sites not in supercell
+#     @simd for j in eachindex(t.vector)
+#         @inbounds isinmask(s.supercell, j) || (t.vector[j] = zeroV)
+#     end
+#     return t
+# end
