@@ -109,7 +109,7 @@ function _nnzdiag(s::SparseMatrixCSC)
     end
     return count
 end
-_nnzdiag(s::Matrix) = count(!iszero, Diagonal(s))
+_nnzdiag(s::Matrix) = count(!iszero, s[i,i] for i in 1:minimum(size(s)))
 
 nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : size(first(h.harmonics).h, 1)
 
