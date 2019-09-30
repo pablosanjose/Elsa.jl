@@ -1,28 +1,25 @@
 module LatticeTest
 
-using Test
 using Elsa
-using Elsa: nsites, nlinks
+using Test
+using Elsa: nsites, nlinks, Sublat
 
 @testset "bravais" begin
-    @test Bravais() isa Bravais{0,0,Float64,0}
-    @test Bravais((1, 2), (3, 3)) isa Bravais{2,2,Int,4}
-    @test Bravais(@SMatrix[1. 2.; 3 3]) isa Bravais{2,2,Float64,4}
+    @test bravais() isa Bravais{0,0,Float64,0}
+    @test bravais((1, 2), (3, 3)) isa Bravais{2,2,Int,4}
+    @test bravais(@SMatrix[1. 2.; 3 3]) isa Bravais{2,2,Float64,4}
 end
 
 @testset "sublat" begin
-    @test Sublat((3, 3)) isa Sublat{2,Int64}
-    @test Sublat((3, 3.)) isa Sublat{2,Float64}
-    @test Sublat([3, 3.]) isa Sublat{2,Float64}
-    @test Sublat(@SVector[3, 3]) isa Sublat{2,Int64}
-    @test Sublat(@SVector[3., 3]) isa Sublat{2,Float64}
-    @test Sublat(@SVector[3., 3], (3, 3)) isa Sublat{2,Float64}
-    @test Sublat([3, 4.], [3, 3]) isa Sublat{2,Float64}
-    @test Sublat((3, 4.), [3, 3]) isa Sublat{2,Float64}
-    @test Sublat(@SVector[3f0, 3f0]) isa Sublat{2,Float32}
-
-    @test Sublat(@SVector[3f0, 3f0], (3, 4), name = :A) isa Sublat{2,Float32}
-    @test Sublat((3f0, 3.0), name = :A) isa Sublat{2,Float64}
+    sitelist = [(3,3), (3,3.), [3,3.], @SVector[3, 3], @SVector[3, 3f0], @SVector[3f0, 3.]]
+    for site2 in sitelist, site1 in sitelist
+        for orbs in [(:a,), (:a,:b), (:a,:b,:a)]
+            @test sublat(site1, site2, orbitals = orbs) isa 
+                Sublat{2,promote_type(typeof.(site1)..., typeof.(site2)...), length(orbs)}
+        end
+    end
+    @test sublat((3,)) isa Sublat{1,Int,1}
+    @test sublat((), orbitals = (:up,:down)) isa Sublat{0,Float64,2}
 end
 
 @testset "lattice" begin

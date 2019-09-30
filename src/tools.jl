@@ -1,5 +1,3 @@
-extended_eps(T = Float64) = sqrt(eps(T))
-
 toSMatrix() = SMatrix{0,0,Float64}()
 toSMatrix(ss::NTuple{N,Number}...) where {N} = toSMatrix(SVector{N}.(ss)...)
 toSMatrix(ss::SVector{N}...) where {N} = hcat(ss...)
@@ -13,75 +11,123 @@ toSVectors(vs...) = [promote(toSVector.(vs)...)...]
 toSVector(v::SVector) = v
 toSVector(v::NTuple{N,Number}) where {N} = SVector(v)
 toSVector(x::Number) = SVector{1}(x)
+toSVector(::Tuple{}) = SVector{0,Float64}()
 toSVector(::Type{T}, v) where {T} = T.(toSVector(v))
 toSVector(::Type{T}, ::Tuple{}) where {T} = SVector{0,T}()
 # Dynamic dispatch
 toSVector(v::AbstractVector) = SVector(Tuple(v))
 
-ensureSMatrix(f::Function) = f
-ensureSMatrix(m::T) where T<:Number = SMatrix{1,1,T,1}(m)
-ensureSMatrix(m::SMatrix) = m
-ensureSMatrix(m::Array) = 
-    throw(ErrorException("Write all model terms using scalars or @SMatrix[matrix]"))
+# ensureSMatrix(f::Function) = f
+# ensureSMatrix(m::T) where T<:Number = SMatrix{1,1,T,1}(m)
+# ensureSMatrix(m::SMatrix) = m
+# ensureSMatrix(m::Array) =
+#     throw(ErrorException("Write all model terms using scalars or @SMatrix[matrix]"))
 
 _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
-zerotuple(::Type{T}, ::Val{L}) where {T,L} = ntuple(_ -> zero(T), Val(L))
-
-padright(sv::StaticVector{E,T}, x::T, ::Val{E}) where {E,T} = sv
-padright(sv::StaticVector{E,T}, x::T2, ::Val{E2}) where {E,T,E2,T2} =
-    SVector{E2, T2}(ntuple(i -> i > E ? x : T2(sv[i]), Val(E2)))
-padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
-
-@inline padrightbottom(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,T2,S<:SMatrix{E2,L2,T2}} =
-    SMatrix{E2,L2,T2}(
-        ntuple(k -> _padrightbottom((k - 1) % E2 + 1, (k - 1) ÷ E2 + 1, zero(T2), s), 
-               Val(E2 * L2)))
-padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
-
-function padrightbottom(m::Matrix{T}, zeroT::T, im, jm) where T
-    i0, j0 = size(m)
-    [i <= i0 && j<= j0 ? m[i,j] : zeroT for i in 1:im, j in 1:jm]
+# zerotuple(::Type{T}, ::Val{L}) where {T,L} = ntuple(_ -> zero(T), Val(L))
+function padright!(v::Vector, x, n::Integer)
+    n0 = length(v)
+    resize!(v, max(n, n0))
+    for i in (n0 + 1):n
+        v[i] = x
+    end
+    return v
 end
 
-@inline _padrightbottom(i, j, zero, s::SMatrix{E,L}) where {E,L} = 
-    i > E || j > L ? zero : s[i,j]
+padright(sv::StaticVector{E,T}, x::T, ::Val{E}) where {E,T} = sv
+padright(sv::StaticVector{E1,T1}, x::T2, ::Val{E2}) where {E1,T1,E2,T2} =
+    (T = promote_type(T1,T2); SVector{E2, T}(ntuple(i -> i > E1 ? x : convert(T, sv[i]), Val(E2))))
+padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
+padright(sv::StaticVector{E,T}, ::Val{E}) where {E,T} = sv
 
-# @inline tuplejoin(x) = x
-# @inline tuplejoin(x, y) = (x..., y...)
-# @inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
+@inline padtotype(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,T2,S<:SMatrix{E2,L2,T2}} =
+    S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
+@inline padtotype(s::Number, ::Type{T}) where {T<:Number} = T(s)
+@inline padtotype(s::SMatrix{1,1}, ::Type{T}) where {T<:Number} = T(first(s))
+
+## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
+negative(s::SVector{L,<:Number}) where {L} = -s
+negative(s::SVector{0,<:Number}) where {L} = s
+
+empty_sparse(::Type{M}, n, m) where {M} = sparse(Int[], Int[], M[], n, m)
+
+display_as_tuple(v, prefix = "") = isempty(v) ? "()" : 
+    string("(", prefix, join(v, string(", ", prefix)), ")")
+
+displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; kw...) where {E,L} =
+    ntuple(l -> round.(Tuple(mat[:,l]); kw...), Val(L))
+displayvectors(mat::SMatrix{E,L,<:Integer}; kw...) where {E,L} =
+    ntuple(l -> Tuple(mat[:,l]), Val(L))
+
+# pseudoinverse of s times an integer n, so that it is an integer matrix (for accuracy)
+pinvmultiple(s::SMatrix{L,0}) where {L} = (SMatrix{0,0,Int}(), 0)
+function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
+    L < L´ && throw(DimensionMismatch("Supercell dimensions $(L´) cannot exceed lattice dimensions $L"))
+    qrfact = qr(s)
+    n = det(qrfact.R)
+    abs(n) < sqrt(eps(n)) && throw(ErrorException("Supercell appears to be singular"))
+    pinverse = inv(qrfact.R) * qrfact.Q'
+    return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
+end
+
+@inline tuplejoin() = ()
+@inline tuplejoin(x) = x
+@inline tuplejoin(x, y) = (x..., y...)
+@inline tuplejoin(x, y, z...) = (x..., tuplejoin(y, z...)...)
+
+function isgrowing(vs::AbstractVector, i0 = 1)
+    i0 > length(vs) && return true
+    vprev = vs[i0]
+    for i in i0 + 1:length(vs)
+        v = vs[i]
+        v <= vprev && return false
+        vprev = v
+    end
+    return true
+end
+
+# pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')
+
+# padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
+
+# function padrightbottom(m::Matrix{T}, zeroT::T, im, jm) where T
+#     i0, j0 = size(m)
+#     [i <= i0 && j<= j0 ? m[i,j] : zeroT for i in 1:im, j in 1:jm]
+# end
+
+
 # tuplesort((a,b)::Tuple{<:Number,<:Number}) = a > b ? (b, a) : (a, b)
 # tuplesort(t::Tuple) = t
 # tuplesort(::Missing) = missing
 
-collectfirst(s::T, ss...) where {T} = _collectfirst((s,), ss...)
-_collectfirst(ts::NTuple{N,T}, s::T, ss...) where {N,T} = _collectfirst((ts..., s), ss...)
-_collectfirst(ts::Tuple, ss...) = (ts, ss)
-_collectfirst(ts::NTuple{N,System}, s::System, ss...) where {N} = _collectfirst((ts..., s), ss...)
+# collectfirst(s::T, ss...) where {T} = _collectfirst((s,), ss...)
+# _collectfirst(ts::NTuple{N,T}, s::T, ss...) where {N,T} = _collectfirst((ts..., s), ss...)
+# _collectfirst(ts::Tuple, ss...) = (ts, ss)
+# _collectfirst(ts::NTuple{N,System}, s::System, ss...) where {N} = _collectfirst((ts..., s), ss...)
 # collectfirsttolast(ss...) = tuplejoin(reverse(collectfirst(ss...))...)
 
-negSVector(s::SVector{L,<:Number}) where {L} = -s
-negSVector(s::SVector{0,<:Number}) where {L} = s    ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
 
-allorderedpairs(v) = [(i, j) for i in v, j in v if i >= j]
 
-# Like copyto! but with potentially different tensor orders
-function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1}, 
-                    src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
-    isempty(Rdest) && return dest
-    if length(Rdest) != length(Rsrc)
-        throw(ArgumentError("source and destination must have same length (got $(length(Rsrc)) and $(length(Rdest)))"))
-    end
-    checkbounds(dest, first(Rdest))
-    checkbounds(dest, last(Rdest))
-    checkbounds(src, first(Rsrc))
-    checkbounds(src, last(Rsrc))
-    src′ = Base.unalias(dest, src)
-    for (Is, Id) in zip(Rsrc, Rdest)
-        @inbounds dest[Id] = src′[Is]
-    end
-    return dest
-end
+# allorderedpairs(v) = [(i, j) for i in v, j in v if i >= j]
+
+# # Like copyto! but with potentially different tensor orders
+# function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
+#                     src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
+#     isempty(Rdest) && return dest
+#     if length(Rdest) != length(Rsrc)
+#         throw(ArgumentError("source and destination must have same length (got $(length(Rsrc)) and $(length(Rdest)))"))
+#     end
+#     checkbounds(dest, first(Rdest))
+#     checkbounds(dest, last(Rdest))
+#     checkbounds(src, first(Rsrc))
+#     checkbounds(src, last(Rsrc))
+#     src′ = Base.unalias(dest, src)
+#     for (Is, Id) in zip(Rsrc, Rdest)
+#         @inbounds dest[Id] = src′[Is]
+#     end
+#     return dest
+# end
 
 ######################################################################
 # Permutations (taken from Combinatorics.jl)

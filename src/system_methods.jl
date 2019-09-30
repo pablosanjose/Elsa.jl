@@ -2,8 +2,8 @@
 # Transform system
 #######################################################################
 
-function transform!(sys::System, f::Function; sublatinds = collect(eachindex(sys.lattice.sublats)))
-    for s in sublatinds
+function transform!(sys::System, f::Function; sublats = eachindex(sys.lattice.sublats))
+    for s in sublats
         sind = sublatindex(sys.sysinfo, s)
         transform!(sys.lattice.sublats[sind], f)
     end
@@ -11,9 +11,10 @@ function transform!(sys::System, f::Function; sublatinds = collect(eachindex(sys
     return sys
 end
 
-transform!(f::Function; kw...) = sys -> transform!(sys, f; kw...)
 transform(sys::System, f; kw...) = transform!(deepcopy(sys), f; kw...)
-transform(f::Function; kw...) = sys -> transform(sys, f; kw...)
+
+transform!(f::Function; kw...) = x -> transform!(x, f; kw...)
+transform(f::Function; kw...) = x -> transform(x, f; kw...)
 
 #######################################################################
 # System's Hamiltonian and velocity
@@ -434,7 +435,7 @@ function _growsublats(sys::System{E,L,T}, supercell, region) where {E,L,T}
     sitemaps = OffsetArray{Int,L+1,Array{Int,L+1}}[zeros(Int, 1:length(sublat.sites), 
         ranges...) for sublat in sys.lattice.sublats]
     
-    sublats = [Sublat{E,T}(; name = sublat.name) for sublat in sys.lattice.sublats]
+    sublats = [empty(sublat) for sublat in sys.lattice.sublats]
     for (s, sublat) in enumerate(sys.lattice.sublats)
         counter = 0
         for cell in CartesianIndices(ranges) , (i, site) in enumerate(sublat.sites)

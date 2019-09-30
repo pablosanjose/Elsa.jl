@@ -36,8 +36,8 @@ end
 
 sortreal(list, n = min(length(list), 10); rev = false) = sort(sort(list, by = abs, rev = rev)[1:n], by = real)
 
-# sys = System(:honeycomb, Model(Hopping(1))) |> grow(region = Region(:circle, 300))
-sys = System(:honeycomb, Model(Onsite(.2), Hopping(1, range = 1/√3))) |> grow(supercell = 30)
+# sys = System(LatticePresets.honeycomb(), Model(Hopping(1))) |> grow(region = Region(:circle, 300))
+sys = System(LatticePresets.honeycomb(), Model(Onsite(.2), Hopping(1, range = 1/√3))) |> grow(supercell = 30)
 h = hamiltonian(sys, k = (0.21321,0.234213));
 @time l = lmap(h);
 @time l2 = lmap2(h);

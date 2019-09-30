@@ -28,8 +28,10 @@ end
 
 @testset "model" begin
     @test isempty(Model().terms)
-    @test_throws DimensionMismatch System(:honeycomb, Model(Hopping(@SMatrix[1 2], sublats = 2)))
-    @test System(:honeycomb, Model(Hopping(@SMatrix[1 2], sublats = (1, 2)))) isa System
+    @test_throws DimensionMismatch System(LatticePresets.honeycomb(), 
+        Model(Hopping(@SMatrix[1 2], sublats = 2)))
+    @test System(LatticePresets.honeycomb(), 
+        Model(Hopping(@SMatrix[1 2], sublats = (1, 2)))) isa System
 end
 
 end
