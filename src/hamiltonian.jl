@@ -83,7 +83,7 @@ isnumblocktype(h) = false
 function nhoppings(ham::Hamiltonian)
     count = 0
     for h in ham.harmonics
-        count += iszero(h.dn) ? (_nnz(h.h) - nnzdiag(h.h)) : _nnz(h.h)
+        count += iszero(h.dn) ? (_nnz(h.h) - _nnzdiag(h.h)) : _nnz(h.h)
     end
     return count
 end
@@ -91,13 +91,25 @@ end
 function nonsites(ham::Hamiltonian)
     count = 0
     for h in ham.harmonics
-        iszero(h.dn) && (count += nnzdiag(h.h))
+        iszero(h.dn) && (count += _nnzdiag(h.h))
     end
     return count
 end
 
 _nnz(h::SparseMatrixCSC) = nnz(h)
-_nnz(h::Matrix) = length(h)
+_nnz(h::Matrix) = count(!iszero, h)
+
+function _nnzdiag(s::SparseMatrixCSC)
+    count = 0
+    rowptrs = rowvals(s)
+    for col in 1:size(s,2)
+        for ptr in nzrange(s, col)
+            rowptrs[ptr] == col && (count += 1; break)
+        end
+    end
+    return count
+end
+_nnzdiag(s::Matrix) = count(!iszero, Diagonal(s))
 
 nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : size(first(h.harmonics).h, 1)
 

@@ -50,18 +50,6 @@ padright(sv::StaticVector{E,T}, ::Val{E}) where {E,T} = sv
 negative(s::SVector{L,<:Number}) where {L} = -s
 negative(s::SVector{0,<:Number}) where {L} = s
 
-function nnzdiag(s::SparseMatrixCSC)
-    count = 0
-    rowptrs = rowvals(s)
-    for col in 1:size(s,2)
-        for ptr in nzrange(s, col)
-            rowptrs[ptr] == col && (count += 1; break)
-        end
-    end
-    return count
-end
-nnzdiag(s::Matrix) = minimum(size(s))
-
 empty_sparse(::Type{M}, n, m) where {M} = sparse(Int[], Int[], M[], n, m)
 
 display_as_tuple(v, prefix = "") = isempty(v) ? "()" : 
