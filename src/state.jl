@@ -53,8 +53,9 @@ Base.similar(s::SupercellState) = SupercellState(similar(s.vector),  s.supercell
 
 # External API #
 
+# build a random state, with zeroed-out padding orbitals, throughout the supercell/unitcell
 function randomstate(lat::AbstractLattice{E,L,T}; type::Type{Tv} = Complex{T}) where {E,L,T,Tv}
-    isslat = is_superlattice(lat)
+    isslat = issuperlattice(lat)
     V = orbitaltype(lat, type)
     n, N = floatsorbs(V, T)
     masksize = length.(cellmaskaxes(lat))
@@ -77,7 +78,42 @@ function randomstate(lat::AbstractLattice{E,L,T}; type::Type{Tv} = Complex{T}) w
     return maybe_wrapstate(sv, lat)
 end
 
-# Auxiliary #
+# # Auxiliary #
+
+# function randomstate2(lat::Lattice{E,L,T}; type::Type{Tv} = Complex{T}) where {E,L,T,Tv}
+#     v = maskedrand(lat, type, 1:nsites(lat))
+#     return v
+# end
+
+# function randomstate2(lat::Superlattice{E,L,T}; type::Type{Tv} = Complex{T}) where {E,L,T,Tv}
+#     v = maskedrand(lat, type, cellmaskaxes(lat)...)
+#     return SupercellState(v, lat.supercell)
+# end
+
+# function maskedrand(lat, type, siteiter, celliter...)
+#     V = orbitaltype(lat, type)
+#     lcell = length.(celliter)
+#     lsite = length(siteiter)
+#     v = rand(V, lsite, lcell...)
+#     norbs = length.(lat.unitcell.orbitals)
+#     for c in CartesianIndices(lcell), s in 1:nsublats(lat)
+#         norb = norbs[s]
+#         for j in siterange(lat, s)
+#             v[j, Tuple(c)...]
+#             # v[j, Tuple(c)...] = mask(v[j, Tuple(c)...], norb)
+#             # v[j, Tuple(c)...] *= mask(V, norb)
+#         end
+#     end
+#     # rmul!(v, inv(norm(v)))
+#     # return OffsetArray(v, siteiter, celliter...)
+# end
+
+# mask(::Type{SVector{L,T}}, norb) where {L,T} =
+#     SMatrix{L,L,T}(Diagonal(SVector(ntuple(i -> i > norb ? zero(T) : one(T), Val(L)))))
+# mask(::Type{T}, norb) where {T<:Number} = one(T)
+# mask(s::SVector{L,T}, norb) where {L,T} =
+#     SVector(ntuple(i -> i > norb ? zero(T) : s[i], Val(L)))
+# mask(s::Number, norb) = s
 
 function floatsorbs(V::Type{<:SVector}, T)
     n, r = divrem(sizeof(eltype(V)), sizeof(T))

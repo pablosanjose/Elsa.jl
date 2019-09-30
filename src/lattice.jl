@@ -292,10 +292,23 @@ blocktype(lat::AbstractLattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T
 _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
 _blocktype(::Type{S}) where {S<:Number} = S
 
+numorbitals(lat::AbstractLattice) = length.(lat.unitcell.orbitals)
+
 numbertype(::AbstractLattice{E,L,T}) where {E,L,T} = T
 
-sublat(lat::AbstractLattice, siteidx) = findlast(o -> o < siteidx, lat.unitcell.offsets)
+sublat(lat::AbstractLattice, siteidx) = Int(findlast(o -> o < siteidx, lat.unitcell.offsets))
+
 siterange(lat::AbstractLattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.offsets[sublat+1]
+
+offsets(lat) = lat.unitcell.offsets
+
+flatdim(lat::AbstractLattice) = sum(flatdims(lat))
+flatdims(lat::AbstractLattice) = sublatsites(lat) .* numorbitals(lat)
+
+function flatoffsets(lat::AbstractLattice)
+    v = append!([0], flatdims(lat))
+    return cumsum!(v, v)
+end
 
 sublatsites(lat::AbstractLattice) = diff(lat.unitcell.offsets)
 
@@ -304,8 +317,8 @@ nsites(lat::AbstractLattice, sublat) = sublatsites(lat)[sublat]
 
 nsublats(lat::AbstractLattice) = length(lat.unitcell.names)
 
-is_superlattice(lat::Lattice) = false
-is_superlattice(lat::Superlattice) = true
+issuperlattice(lat::Lattice) = false
+issuperlattice(lat::Superlattice) = true
 
 # External API #
 

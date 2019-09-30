@@ -6,7 +6,7 @@ struct HamiltonianHarmonic{L,M,A<:AbstractMatrix{M}}
     h::A
 end
 
-struct Hamiltonian{LA<:AbstractLattice,L,M,H<:HamiltonianHarmonic{L,M},F<:Union{Missing,Field},A<:Union{Missing,AbstractMatrix}}
+struct Hamiltonian{LA<:AbstractLattice,L,M,A<:Union{Missing,AbstractMatrix},H<:HamiltonianHarmonic{L,M,A},F<:Union{Missing,Field}}
     lattice::LA
     harmonics::Vector{H}
     field::F
@@ -41,7 +41,7 @@ Base.summary(::Hamiltonian{LA}) where {E,L,LA<:Lattice{E,L}} =
 Base.summary(::Hamiltonian{LA}) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}} =
     "Hamiltonian{<:Superlattice} : $(L)D Hamiltonian on a $(L´)D Superlattice in $(E)D space"
 
-matrixtype(::Hamiltonian{LA,L,M,H}) where {LA,L,M,A,H<:HamiltonianHarmonic{L,M,A}} = A
+matrixtype(::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = A
 displaymatrixtype(h::Hamiltonian) = displaymatrixtype(matrixtype(h))
 displaymatrixtype(::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC, sparse"
 displaymatrixtype(::Type{<:Array}) = "Matrix, dense"
@@ -76,6 +76,9 @@ end
 # Internal API #
 
 blocktype(h::Hamiltonian{LA,L,M}) where {LA,L,M} = M
+isnumblocktype(h::Hamiltonian) = isnumblocktype(blocktype(h))
+isnumblocktype(h::Number) = true
+isnumblocktype(h) = false
 
 function nhoppings(ham::Hamiltonian)
     count = 0
@@ -172,43 +175,7 @@ hamiltonian(h::Hamiltonian) =
 
 (h::Hamiltonian)(phases...) = bloch(h, phases...)
 
-bloch(h::Hamiltonian{<:Lattice}, phases...) = copy(bloch!(h, phases...))
-
-bloch!(h::Hamiltonian, phases::Number...) where {L} = bloch!(h, toSVector(phases))
-bloch!(h::Hamiltonian, phases::Tuple) where {L} = bloch!(h, toSVector(phases))
-function bloch!(h::Hamiltonian{<:Lattice,L,M,H}, phases::SVector{L}) where {L,M,A<:SparseMatrixCSC,H<:HamiltonianHarmonic{L,M,A}}
-    h0 = first(h.harmonics).h
-    matrix = h.matrix
-    if length(h0.nzval) == length(matrix.nzval) # rewrite matrix from previous calls
-        copy!(matrix.nzval, h0.nzval)
-    else # first call, align first harmonic h0 with optimized matrix
-        copy!(h0.colptr, matrix.colptr)
-        copy!(h0.rowval, matrix.rowval)
-        copy!(h0.nzval, matrix.nzval)
-    end
-    for ns in 2:length(h.harmonics)
-        hh = h.harmonics[ns]
-        ephi = cis(phases' * hh.dn)
-        muladd_optsparse(matrix, ephi, hh.h)
-    end
-    return matrix
-end
-
-function muladd_optsparse(matrix, ephi, h)
-    for col in 1:size(h,2)
-        range = nzrange(h, col)
-        for ptr in range
-            row = h.rowval[ptr]
-            matrix[row, col] = ephi * h.nzval[ptr]
-        end
-    end
-    return nothing
-end
-
-bloch(h::Hamiltonian{<:Superlattice}, phases::Number...) = SupercellBloch(h, toSVector(phases))
-bloch(h::Hamiltonian{<:Superlattice}, phases::Tuple) = SupercellBloch(h, toSVector(phases))
-
-Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.field, h.matrix)
+Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.field, Matrix(h.matrix))
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
 Base.copy(h::Hamiltonian) = Hamiltonian(h.lattice, copy.(h.harmonics), h.field)
@@ -517,4 +484,124 @@ function applyterm!(ph::ParametricHamiltonian{H}, term::TightbindingModelTerm) w
         end
     end
     return nothing
+end
+
+#######################################################################
+# Bloch routines
+#######################################################################
+bloch!(h::Hamiltonian, phases::Number...) where {L} = bloch!(h, toSVector(phases))
+bloch!(h::Hamiltonian, phases::Tuple) where {L} = bloch!(h, toSVector(phases))
+function bloch!(h::Hamiltonian{<:Lattice,L,M,<:SparseMatrixCSC}, phases::SVector{L}) where {L,M}
+    h0 = first(h.harmonics).h
+    matrix = h.matrix
+    if length(h0.nzval) == length(matrix.nzval) # rewrite matrix from previous calls
+        copy!(matrix.nzval, h0.nzval)
+    else # first call, align first harmonic h0 with optimized matrix
+        copy!(h0.colptr, matrix.colptr)
+        copy!(h0.rowval, matrix.rowval)
+        copy!(h0.nzval, matrix.nzval)
+    end
+    for ns in 2:length(h.harmonics)
+        hh = h.harmonics[ns]
+        ephi = cis(phases' * hh.dn)
+        muladd_optsparse(matrix, ephi, hh.h)
+    end
+    return matrix
+end
+
+function muladd_optsparse(matrix, ephi, h)
+    for col in 1:size(h,2)
+        range = nzrange(h, col)
+        for ptr in range
+            row = h.rowval[ptr]
+            matrix[row, col] = ephi * h.nzval[ptr]
+        end
+    end
+    return nothing
+end
+
+function bloch!(h::Hamiltonian{<:Lattice,L,M,<:Matrix}, phases::SVector{L}) where {L,M}
+    matrix = h.matrix
+    fill!(matrix, zero(eltype(matrix)))
+    for hh in h.harmonics
+        ephi = cis(phases' * hh.dn)
+        matrix .+= ephi .* hh.h
+    end
+    return matrix
+end
+
+bloch(h::Hamiltonian{<:Lattice}, phases...) = copy(bloch!(h, phases...))
+bloch(h::Hamiltonian{<:Superlattice}, phases::Number...) = SupercellBloch(h, toSVector(phases))
+bloch(h::Hamiltonian{<:Superlattice}, phases::Tuple) = SupercellBloch(h, toSVector(phases))
+
+function flatbloch!(matrix, h::Hamiltonian{<:Lattice,L,M,<:Matrix}, phases...) where {L,M<:SMatrix}
+    bloch!(h, phases...)
+    lat = h.lattice
+    offsets = flatoffsets(lat)
+    numorbs = numorbitals(lat)
+    for s2 in 1:nsublats(lat), s1 in 1:nsublats(lat)
+        offset1, offset2 = offsets[s1], offsets[s2]
+        norb1, norb2 = numorbs[s1], numorbs[s2]
+        for (m, j) in enumerate(siterange(lat, s2)), (n, i) in enumerate(siterange(lat, s1))
+            ioffset, joffset = offset1 + (n-1)*norb1, offset2 + (m-1)*norb2
+            el = h.matrix[i, j]
+            for sj in 1:norb2, si in 1:norb1
+                matrix[ioffset + si, joffset + sj] = el[si, sj]
+            end
+        end
+    end
+    return matrix
+end
+
+function flatbloch!(matrix, h::Hamiltonian{<:Lattice,L,<:Number}, phases...) where {L}
+    bloch!(h, phases...)
+    copy!(matrix, h.matrix)
+    return matrix
+end
+
+function flatbloch!(h::Hamiltonian{<:Lattice,L,<:Number}, phases...) where {L}
+    bloch!(h, phases...)
+    return h.matrix
+end
+
+function flatbloch(h::Hamiltonian{<:Lattice,L,M,<:Matrix}, phases...) where {L,M<:SMatrix}
+    dim = flatdim(h.lattice)
+    return flatbloch!(similar(h.matrix, eltype(M), (dim, dim)), h, phases...)
+end
+
+function flatbloch(h::Hamiltonian{<:Lattice,L,<:Number}, phases...) where {L}
+    bloch!(h, phases...)
+    return copy(h.matrix)
+end
+
+function flatbloch(h::Hamiltonian{<:Lattice,L,M,<:SparseMatrixCSC}, phases...) where {L,M<:SMatrix}
+    bloch!(h, phases...)
+    lat = h.lattice
+    offsets = flatoffsets(lat)
+    numorbs = numorbitals(lat)
+    dim = flatdim(h.lattice)
+    builder = SparseMatrixBuilder{eltype(M)}(dim, dim)
+    for s2 in 1:nsublats(lat)
+        norb2 = numorbs[s2]
+        for col in siterange(lat, s2), sj in 1:norb2
+            for ptr in nzrange(h.matrix, col)
+                row = rowvals(h.matrix)[ptr]
+                val = nonzeros(h.matrix)[ptr]
+                fo, s1 = flatoffset_sublat(lat, row, numorbs, offsets)
+                norb1 = numorbs[s1]
+                for si in 1:norb1
+                    flatrow = fo + si
+                    pushtocolumn!(builder, flatrow, val[si, sj])
+                end
+            end
+            finalisecolumn!(builder)
+        end
+    end
+    matrix = sparse(builder)
+    return matrix
+end
+
+function flatoffset_sublat(lat, i, no = numorbitals(lat), fo = flatoffsets(lat), o = offsets(lat))
+    s = sublat(lat, i)
+    return (fo[s] + (i - o[s] - 1) * no[s]), s
 end
