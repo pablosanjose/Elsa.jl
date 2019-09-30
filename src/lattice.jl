@@ -215,9 +215,10 @@ lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = Lattice(br, Unitcell(s, 
 #######################################################################
 # Supercell
 #######################################################################
-struct Supercell{L,L´,LP,LL´} # LP = L+1, L is lattice dim, L´ is supercell dim
-    matrix::SMatrix{L,L´,Int,LL´}
-    cellmask::OffsetArray{Bool,LP,BitArray{LP}}
+struct Supercell{L,L´,M<:Union{Missing,OffsetArray{Bool}},S<:SMatrix} # L´ is supercell dim
+    matrix::S
+    cells::CartesianIndices{L´,NTuple{L´,UnitRange{Int}}}
+    mask::M
 end
 
 Supercell{L}(ns::Integer) where {L} =
