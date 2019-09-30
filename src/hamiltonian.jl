@@ -546,7 +546,7 @@ bloch(h::Hamiltonian{<:Lattice}, phases...) = copy(bloch!(h, phases...))
 bloch(h::Hamiltonian{<:Superlattice}, phases::Number...) = SupercellBloch(h, toSVector(phases))
 bloch(h::Hamiltonian{<:Superlattice}, phases::Tuple) = SupercellBloch(h, toSVector(phases))
 
-function flatbloch!(matrix, h::Hamiltonian{<:Lattice,L,M,<:Matrix}, phases...) where {L,M<:SMatrix}
+function blochflat!(matrix, h::Hamiltonian{<:Lattice,L,M,<:Matrix}, phases...) where {L,M<:SMatrix}
     bloch!(h, phases...)
     lat = h.lattice
     offsets = flatoffsets(lat)
@@ -565,28 +565,28 @@ function flatbloch!(matrix, h::Hamiltonian{<:Lattice,L,M,<:Matrix}, phases...) w
     return matrix
 end
 
-function flatbloch!(matrix, h::Hamiltonian{<:Lattice,L,<:Number}, phases...) where {L}
+function blochflat!(matrix, h::Hamiltonian{<:Lattice,L,<:Number}, phases...) where {L}
     bloch!(h, phases...)
     copy!(matrix, h.matrix)
     return matrix
 end
 
-function flatbloch!(h::Hamiltonian{<:Lattice,L,<:Number}, phases...) where {L}
+function blochflat!(h::Hamiltonian{<:Lattice,L,<:Number}, phases...) where {L}
     bloch!(h, phases...)
     return h.matrix
 end
 
-function flatbloch(h::Hamiltonian{<:Lattice,L,M,<:Matrix}, phases...) where {L,M<:SMatrix}
+function blochflat(h::Hamiltonian{<:Lattice,L,M,<:Matrix}, phases...) where {L,M<:SMatrix}
     dim = flatdim(h.lattice)
-    return flatbloch!(similar(h.matrix, eltype(M), (dim, dim)), h, phases...)
+    return blochflat!(similar(h.matrix, eltype(M), (dim, dim)), h, phases...)
 end
 
-function flatbloch(h::Hamiltonian{<:Lattice,L,<:Number}, phases...) where {L}
+function blochflat(h::Hamiltonian{<:Lattice,L,<:Number}, phases...) where {L}
     bloch!(h, phases...)
     return copy(h.matrix)
 end
 
-function flatbloch(h::Hamiltonian{<:Lattice,L,M,<:SparseMatrixCSC}, phases...) where {L,M<:SMatrix}
+function blochflat(h::Hamiltonian{<:Lattice,L,M,<:SparseMatrixCSC}, phases...) where {L,M<:SMatrix}
     bloch!(h, phases...)
     lat = h.lattice
     offsets = flatoffsets(lat)
