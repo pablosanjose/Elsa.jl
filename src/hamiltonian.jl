@@ -520,21 +520,26 @@ Base.eltype(::ParametricHamiltonian{H}) where {L,M,H<:Hamiltonian{L,M}} = M
 # Bloch routines
 #######################################################################
 """
-    bloch!(h::Hamiltonian, phases::Real...)
-    bloch!(h::Hamiltonian, phases::NTuple{L,Real})
-    bloch!(h::Hamiltonian, phases::AbstractVector{Real})
+    bloch!(matrix, h::Hamiltonian, ϕs::Real...)
+    bloch!(matrix, h::Hamiltonian, ϕs::NTuple{L,Real})
+    bloch!(matrix, h::Hamiltonian, ϕs::AbstractVector{Real})
 
-Build the Bloch Hamiltonian matrix of `h`, for the specified Bloch `phases`. In terms of
-Bloch wavevector `k`, `phases = k * bravais(h)`.
+Overwrite `matrix` with the Bloch Hamiltonian matrix of `h`, for the specified Bloch
+phases `ϕs`. In terms of Bloch wavevector `k`, `ϕs = k * bravais(h)`. If all `ϕs` are
+omitted, the intracell Hamiltonian is returned instead.
 
-    h |> bloch!(phases...)
+    bloch!(h::Hamiltonian, ϕs::Real...)
+    bloch!(h::Hamiltonian, ϕs::NTuple{L,Real})
+    bloch!(h::Hamiltonian, ϕs::AbstractVector{Real})
 
-Functional form, equivalent to `bloch!(h, phases...)`
+Same as above, using the internal `h.matrix` as `matrix`. Care should be taken with aliasing
+using this syntax, as assigning `b1 = bloch!(h, ϕs₁)` and subsequently calling `bloch!`
+again with different phases, `b2 = bloch!(h, ϕs₂)`, would result in `b1 === b2`.
+For a copying version of `bloch!` without this caveat, see `bloch`.
 
-Note: This function processes and returns an internal array in `h` to avoid allocations. As a
-result, care should be taken with assigning `b1 = bloch!(h, ϕs₁)` and subsequently calling
-`bloch!` again, `b2 = bloch!(h, ϕs₁)`, since then `b1 === b2`. For a copying version of
-`bloch!` without this caveat, see `bloch`.
+    h |> bloch!(ϕs...)
+
+Functional form, equivalent to `bloch!(h, ϕs...)`
 
 # Examples
 ```
@@ -551,56 +556,59 @@ julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch
 
 """
 bloch!(phases...) = h -> bloch!(h, phases...)
-bloch!(h::Hamiltonian, phases::Number...) where {L} = bloch!(h, toSVector(phases))
-bloch!(h::Hamiltonian, phases::Tuple) where {L} = bloch!(h, toSVector(phases))
-function bloch!(h::Hamiltonian{<:Lattice,L,M,<:SparseMatrixCSC}, phases::SVector{L}) where {L,M}
-    initialize!(h)
+bloch!(h::Hamiltonian, ϕs...) = bloch!(h.matrix, h, ϕs...)
+bloch!(matrix, h::Hamiltonian, ϕs...) =
+    add_harmonics!(optimized_zerobloch!(matrix, h), h, ϕs...)
+
+# On first call, h.matrix is optimized, but not the first (zero, often largest) harmonic.
+function optimized_zerobloch!(matrix::A, h::Hamiltonian{<:Lattice,<:Any,<:Any,A}) where {L,M,A<:SparseMatrixCSC}
+    h0 = first(h.harmonics).h
+    if length(h0.nzval) != length(h.matrix.nzval) # first call, align first harmonic h0 with
+        copy!(h0.colptr, h.matrix.colptr)         # optimized h.matrix
+        copy!(h0.rowval, h.matrix.rowval)
+        copy!(h0.nzval,  h.matrix.nzval)
+        matrix === h.matrix || copy!(matrix, h.matrix)  # Also copy optimized h.matrix to matrix
+    else  # if h.matrix, assume it's dirty and overwrite. Otherwise copy first harmonic, already optimized
+        matrix === h.matrix ? copy!(h.matrix.nzval, h0.nzval) : copy!(matrix, h0)
+    end
+    return matrix
+end
+
+function optimized_zerobloch!(matrix::A, h::Hamiltonian{<:Lattice,<:Any,<:Any,A}) where {L,M,A<:Matrix}
+    copy!(matrix, first(h.harmonics).h)
+end
+
+add_harmonics!(zerobloch, h::Hamiltonian, ϕs::Number...) =
+    add_harmonics!(zerobloch, h, toSVector(ϕs))
+add_harmonics!(zerobloch, h::Hamiltonian, ϕs::Tuple) =
+    add_harmonics!(zerobloch, h, toSVector(ϕs))
+add_harmonics!(zerobloch, h::Hamiltonian, ::SVector{0}) = zerobloch
+
+function add_harmonics!(zerobloch::A, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{L}) where {L,M,A<:SparseMatrixCSC}
+    (rowvals(h.matrix) == rowvals(zerobloch) && h.matrix.colptr == zerobloch.colptr) ||
+        throw(ArgumentError("Unaligned bloch matrices"))
+    for ns in 2:length(h.harmonics)
+        hh = h.harmonics[ns]
+        hhmatrix = hh.h
+        ephi = cis(ϕs' * hh.dn)
+        for col in 1:size(hhmatrix, 2)
+            range = nzrange(hhmatrix, col)
+            for ptr in range
+                row = hhmatrix.rowval[ptr]
+                zerobloch[row, col] = ephi * hhmatrix.nzval[ptr]
+            end
+        end
+    end
+    return zerobloch
+end
+
+function add_harmonics!(zerobloch::A, h::Hamiltonian{<:Lattice,L,M,A}, phases::SVector{L}) where {L,M,A<:Matrix}
     for ns in 2:length(h.harmonics)
         hh = h.harmonics[ns]
         ephi = cis(phases' * hh.dn)
-        muladd_optimized_sparse(h.matrix, ephi, hh.h)
+        zerobloch .+= ephi .* hh.h
     end
-    return h.matrix
-end
-bloch!(h::Hamiltonian{<:Lattice,L,M,<:SparseMatrixCSC}, phases::SVector{0}) where {L,M} =
-    (initialize!(h); h.matrix)
-
-# On first call, h.matrix is optimized, but not the first (zero, often largest) harmonic.
-# Need to align it first. Otherwise assume h.matrix is dirty, initialize with zero harmonic.
-function initialize!(h::Hamiltonian{<:Lattice,L,M,<:SparseMatrixCSC}) where {L,M}
-    h0 = first(h.harmonics).h
-    if length(h0.nzval) == length(h.matrix.nzval) # rewrite matrix from previous calls
-        copy!(h.matrix.nzval, h0.nzval)
-    else # first call, align first harmonic h0 with optimized matrix
-        copy!(h0.colptr, h.matrix.colptr)
-        copy!(h0.rowval, h.matrix.rowval)
-        copy!(h0.nzval,  h.matrix.nzval)
-    end
-    return h
-end
-
-function muladd_optimized_sparse(matrix, ephi, h)
-    for col in 1:size(h,2)
-        range = nzrange(h, col)
-        for ptr in range
-            row = h.rowval[ptr]
-            matrix[row, col] = ephi * h.nzval[ptr]
-        end
-    end
-    return nothing
-end
-
-function bloch!(h::Hamiltonian{<:Lattice,L,M,<:Matrix}, phases::SVector{L}) where {L,M}
-    initialize!(h)
-    for hh in h.harmonics
-        ephi = cis(phases' * hh.dn)
-        h.matrix .+= ephi .* hh.h
-    end
-    return h.matrix
-end
-
-function initialize!(h::Hamiltonian{<:Lattice,L,M,<:Matrix}) where {L,M}
-    fill!(h.matrix, zero(eltype(h.matrix)))
+    return zerobloch
 end
 
 """
@@ -609,7 +617,8 @@ end
     bloch(h::Hamiltonian, phases::AbstractVector{Real})
 
 Build the Bloch Hamiltonian matrix of `h`, for the specified Bloch `phases`. In terms of
-Bloch wavevector `k`, `phases = k * bravais(h)`.
+Bloch wavevector `k`, `phases = k * bravais(h)`. If all `ϕs` are omitted, the intracell
+Hamiltonian is returned instead.
 
     h |> bloch(phases...)
     h(phases...)
@@ -634,10 +643,28 @@ julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch
 
 """
 bloch(phases...) = h -> bloch(h, phases...)
-bloch(h::Hamiltonian, phases...) = copy(bloch!(h, phases...))
-# bloch(h::Hamiltonian{<:Lattice}, phases...) = copy(bloch!(h, phases...))
-# bloch(h::Hamiltonian{<:Superlattice}, phases::Number...) = SupercellBloch(h, toSVector(phases))
-# bloch(h::Hamiltonian{<:Superlattice}, phases::Tuple) = SupercellBloch(h, toSVector(phases))
+bloch(h::Hamiltonian, phases...) = bloch!(similar(h.matrix), h, phases...)
+
+#######################################################################
+# Flattened bloch
+#######################################################################
+# More specific method for zerobloch with different eltype
+function optimized_zerobloch!(matrix::SparseMatrixCSC{<:Number}, h::Hamiltonian{<:Lattice,<:Any,<:SMatrix})
+    # h0 = first(h.harmonics).h
+    # if length(h0.nzval) != length(h.matrix.nzval) # first call, align first harmonic h0 with
+    #     copy!(h0.colptr, h.matrix.colptr)         # optimized h.matrix
+    #     copy!(h0.rowval, h.matrix.rowval)
+    #     copy!(h0.nzval,  h.matrix.nzval)
+    #     matrix === h.matrix || copy!(matrix, h.matrix)  # Also copy optimized h.matrix to matrix
+    # else  # if h.matrix, assume it's dirty and overwrite. Otherwise copy first harmonic, already optimized
+    #     matrix === h.matrix ? copy!(h.matrix.nzval, h0.nzval) : copy!(matrix, h0)
+    # end
+    # return matrix
+end
+
+function add_harmonics!(zerobloch::SparseMatrixCSC{<:Number}, h::Hamiltonian{<:Lattice,L,<:SMatrix}, ϕs::SVector{L}) where {L}
+
+end
 
 function blochflat!(matrix, h::Hamiltonian{<:Lattice,L,M,<:Matrix}, phases...) where {L,M<:SMatrix}
     bloch!(h, phases...)
