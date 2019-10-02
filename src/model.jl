@@ -26,8 +26,8 @@ struct HoppingTerm{F,
     forcehermitian::Bool
 end
 
-(o::OnsiteTerm{<:Function})(r) = o.o(r)
-(o::OnsiteTerm)(r) = o.o
+(o::OnsiteTerm{<:Function})(r,dr) = o.o(r)
+(o::OnsiteTerm)(r,dr) = o.o
 
 (h::HoppingTerm{<:Function})(r, dr) = h.h(r, dr)
 (h::HoppingTerm)(r, dr) = h.h

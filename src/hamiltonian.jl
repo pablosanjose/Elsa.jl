@@ -269,7 +269,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm) where {L,M}
         offset = lat.unitcell.offsets[s]
         for i in is
             r = lat.unitcell.sites[i]
-            vs = orbsized(term(r), lat.unitcell.orbitals[s])
+            vs = orbsized(term(r,r), lat.unitcell.orbitals[s])
             v = padtotype(vs, M)
             term.forcehermitian ? push!(ijv, (i, i, 0.5 * (v + v'))) : push!(ijv, (i, i, v))
         end
