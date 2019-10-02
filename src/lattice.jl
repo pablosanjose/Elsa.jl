@@ -374,70 +374,70 @@ sites(s::Int) = lat -> sites(lat, s)
 const TOOMANYITERS = 10^8
 
 """
-    superlattice(lat::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing)
-    superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing)
+    supercell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing)
+    supercell(lat::Lattice{E,L}, sc::SMatrix{L,L´,Int}; region = missing)
 
-Modifies the supercell of `L`-dimensional lattice `lat` to one with Bravais vectors
-`br´= br * supercell`, where `supercell::SMatrix{L,L´,Int}` is the integer supercell matrix
-with the `L´` vectors `v`s as columns.
+Generates a `Superlattice` from an `L`-dimensional lattice `lat` with Bravais vectors
+`br´= br * sc`, where `sc::SMatrix{L,L´,Int}` is the integer supercell matrix with the `L´`
+vectors `v`s as columns. If no `v` are given, the superlattice will be bounded.
 
 Only sites at position `r` such that `region(r) == true` will be included in the supercell.
 If `region` is missing, a Bravais unit cell perpendicular to the `v` axes will be selected
 for the `L-L´` non-periodic directions.
 
-    superlattice(lattice::Lattice{E,L}, factor::Integer; region = missing)
+    supercell(lattice::Lattice{E,L}, factor::Integer; region = missing)
 
-Calls `superlattice` with a uniformly scaled `supercell = SMatrix{L,L}(factor * I)`
+Calls `supercell` with a uniformly scaled `sc = SMatrix{L,L}(factor * I)`
 
-    superlattice(lattice::Lattice{E,L}, factors::Integer...; region = missing)
+    supercell(lattice::Lattice{E,L}, factors::Integer...; region = missing)
 
-Calls `superlattice` with different scaling along each Bravais vector (diagonal supercell
+Calls `supercell` with different scaling along each Bravais vector (diagonal supercell
 with factors along the diagonal)
 
-    lattice |> superlattice(v...; kw...)
+    lattice |> supercell(v...; kw...)
 
-Functional syntax, equivalent to `superlattice(lattice, v...; kw...)
+Functional syntax, equivalent to `supercell(lattice, v...; kw...)
 
 # Examples
 ```jldoctest
-julia> superlattice(LatticePresets.honeycomb(), region = RegionPresets.circle(300))
-Lattice{2,2,Float64} : 2D lattice in 2D space
+julia> supercell(LatticePresets.honeycomb(), region = RegionPresets.circle(300))
+Superlattice{2,2,Float64,0} : 2D lattice in 2D space, filling a 0D supercell
   Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
   Sublattices     : 2
     Names         : (:A, :B)
     Orbitals      : ((:noname,), (:noname,))
     Sites         : (1, 1) --> 2 total per unit cell
-  Supercell
-    Dimensions    : 0
-    Vectors       : ()
-    Total sites   : 652966
+  Supercell{2,0} for 0D superlattice of the base 2D lattice
+    Supervectors  : ()
+    Supersites    : 652966
 
-julia> superlattice(LatticePresets.triangular(), (1,1), (1, -1))
-Lattice{2,2,Float64} : 2D lattice in 2D space
+julia> supercell(LatticePresets.triangular(), (1,1), (1, -1))
+Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
   Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
   Sublattices     : 1
     Names         : (:A)
     Orbitals      : ((:noname,),)
     Sites         : (1) --> 1 total per unit cell
-  Supercell
-    Dimensions    : 2
-    Vectors       : ((1, 1), (1, -1))
-    Total sites   : 2
+  Supercell{2,2} for 2D superlattice of the base 2D lattice
+    Supervectors  : ((1, 1), (1, -1))
+    Supersites    : 2
 
-julia> LatticePresets.square() |> superlattice(3)
-Lattice{2,2,Float64} : 2D lattice in 2D space
+julia> LatticePresets.square() |> supercell(3)
+Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
   Bravais vectors : ((1.0, 0.0), (0.0, 1.0))
   Sublattices     : 1
     Names         : (:A)
     Orbitals      : ((:noname,),)
     Sites         : (1) --> 1 total per unit cell
-  Supercell
-    Dimensions    : 2
-    Vectors       : ((3, 0), (0, 3))
-    Total sites   : 9
+  Supercell{2,2} for 2D superlattice of the base 2D lattice
+    Supervectors  : ((3, 0), (0, 3))
+    Supersites    : 9
 ```
+
+# See also:
+    unitcell
 """
-supercell(v::Union{SMatrix,Tuple,SVector}...; kw...) = lat -> supercell(lat, v...; kw...)
+supercell(v::Union{SMatrix,Tuple,SVector,Integer}...; kw...) = lat -> supercell(lat, v...; kw...)
 supercell(lat::AbstractLattice{E,L}; kw...) where {E,L} = supercell(lat, SMatrix{L,0,Int}(); kw...)
 supercell(lat::AbstractLattice{E,L}, factor::Integer; kw...) where {E,L} =
     supercell(lat, SMatrix{L,L,Int}(factor * I); kw...)
@@ -520,70 +520,75 @@ end
 # unitcell
 #######################################################################
 """
-    superlattice(lat::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing)
-    superlattice(lat::Lattice{E,L}, supercell::SMatrix{L,L´,Int}; region = missing)
+    unitcell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing)
+    unitcell(lat::Lattice{E,L}, uc::SMatrix{L,L´,Int}; region = missing)
 
-Modifies the supercell of `L`-dimensional lattice `lat` to one with Bravais vectors
-`br´= br * supercell`, where `supercell::SMatrix{L,L´,Int}` is the integer supercell matrix
-with the `L´` vectors `v`s as columns.
+Generates a `Lattice` from an `L`-dimensional lattice `lat` and a larger unit cell, such
+that its Bravais vectors are `br´= br * uc`. Here `uc::SMatrix{L,L´,Int}` is the integer
+unitcell matrix, with the `L´` vectors `v`s as columns. If no `v` are given, the new lattice
+will be bounded.
 
-Only sites at position `r` such that `region(r) == true` will be included in the supercell.
-If `region` is missing, a Bravais unit cell perpendicular to the `v` axes will be selected
-for the `L-L´` non-periodic directions.
+Only sites at position `r` such that `region(r) == true` will be included in the new
+unitcell. If `region` is missing, a Bravais unitcell perpendicular to the `v` axes will be
+selected for the `L-L´` non-periodic directions.
 
-    superlattice(lattice::Lattice{E,L}, factor::Integer; region = missing)
+    unitcell(lattice::Lattice{E,L}, factor::Integer; region = missing)
 
-Calls `superlattice` with a uniformly scaled `supercell = SMatrix{L,L}(factor * I)`
+Calls `unitcell` with a uniformly scaled `uc = SMatrix{L,L}(factor * I)`
 
-    superlattice(lattice::Lattice{E,L}, factors::Integer...; region = missing)
+    unitcell(lattice::Lattice{E,L}, factors::Integer...; region = missing)
 
-Calls `superlattice` with different scaling along each Bravais vector (diagonal supercell
+Calls `unitcell` with different scaling along each Bravais vector (diagonal supercell
 with factors along the diagonal)
 
-    lattice |> superlattice(v...; kw...)
+    lattice |> unitcell(v...; kw...)
 
-Functional syntax, equivalent to `superlattice(lattice, v...; kw...)
+Functional syntax, equivalent to `unitcell(lattice, v...; kw...)
+
+    unitcell(slat::Superlattice)
+
+Convert Superlattice `slat` into a lattice with its unit cell matching `slat`'s supercell.
 
 # Examples
 ```jldoctest
-julia> superlattice(LatticePresets.honeycomb(), region = RegionPresets.circle(300))
-Lattice{2,2,Float64} : 2D lattice in 2D space
-  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+julia> unitcell(LatticePresets.honeycomb(), region = RegionPresets.circle(300))
+Lattice{2,0,Float64} : 0D lattice in 2D space
+  Bravais vectors : ()
   Sublattices     : 2
     Names         : (:A, :B)
     Orbitals      : ((:noname,), (:noname,))
-    Sites         : (1, 1) --> 2 total per unit cell
-  Supercell
-    Dimensions    : 0
-    Vectors       : ()
-    Total sites   : 652966
+    Sites         : (326483, 326483) --> 652966 total per unit cell
 
-julia> superlattice(LatticePresets.triangular(), (1,1), (1, -1))
+julia> unitcell(LatticePresets.triangular(), (1,1), (1, -1))
 Lattice{2,2,Float64} : 2D lattice in 2D space
-  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+  Bravais vectors : ((0.0, 1.732051), (1.0, 0.0))
   Sublattices     : 1
     Names         : (:A)
     Orbitals      : ((:noname,),)
-    Sites         : (1) --> 1 total per unit cell
-  Supercell
-    Dimensions    : 2
-    Vectors       : ((1, 1), (1, -1))
-    Total sites   : 2
+    Sites         : (2) --> 2 total per unit cell
 
-julia> LatticePresets.square() |> superlattice(3)
+julia> LatticePresets.square() |> unitcell(3)
 Lattice{2,2,Float64} : 2D lattice in 2D space
-  Bravais vectors : ((1.0, 0.0), (0.0, 1.0))
+  Bravais vectors : ((3.0, 0.0), (0.0, 3.0))
   Sublattices     : 1
     Names         : (:A)
     Orbitals      : ((:noname,),)
-    Sites         : (1) --> 1 total per unit cell
-  Supercell
-    Dimensions    : 2
-    Vectors       : ((3, 0), (0, 3))
-    Total sites   : 9
+    Sites         : (9) --> 9 total per unit cell
+
+julia> supercell(LatticePresets.square(), 3) |> unitcell
+Lattice{2,2,Float64} : 2D lattice in 2D space
+  Bravais vectors : ((3.0, 0.0), (0.0, 3.0))
+  Sublattices     : 1
+    Names         : (:A)
+    Orbitals      : ((:noname,),)
+    Sites         : (9) --> 9 total per unit cell
 ```
+
+# See also:
+
+    supercell
 """
-unitcell(v::Union{SMatrix,Tuple,SVector}...; kw...) = lat -> unitcell(lat, v...; kw...)
+unitcell(v::Union{SMatrix,Tuple,SVector,Integer}...; kw...) = lat -> unitcell(lat, v...; kw...)
 unitcell(lat::Lattice, args...; kw...) = unitcell(supercell(lat, args...; kw...))
 
 function unitcell(lat::Superlattice)
