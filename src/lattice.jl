@@ -585,7 +585,6 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
 ```
 
 # See also:
-
     supercell
 """
 unitcell(v::Union{SMatrix,Tuple,SVector,Integer}...; kw...) = lat -> unitcell(lat, v...; kw...)

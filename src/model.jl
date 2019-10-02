@@ -84,11 +84,12 @@ end
     onsite(o; sublats = missing, forcehermitian = true)
 
 Create an `TightbindingModelTerm` that applies an onsite energy `o` to a `Lattice` when
-creating a `Hamiltonian` with `hamiltonian`.
+creating a `Hamiltonian` with `hamiltonian`. If `forcehermitian` is true, it will be forced
+to produce a Hermitian Hamiltonian.
 
 The onsite energy `o` can be a number, a matrix (preferably `SMatrix`) or a function of the
-form `r -> ...` for a position-dependent onsite energy. If `sublat` is specified as a tuple
-of sublattice indices, `onsite` is only applied to said sublattices.
+form `r -> ...` for a position-dependent onsite energy. If `sublats` is specified as a
+sublattice index or tuple thereof, `onsite` is only applied to said sublattices.
 
 `TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
 together to build more complicated `TightbindingModel`s.
@@ -117,11 +118,61 @@ Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
   Hoppings         : 0
   Coordination     : 0.0
 ```
+
+# See also:
+    `hopping`
 """
 function onsite(o; sublats = missing, forcehermitian::Bool = true)
     return OnsiteTerm(o, sanitize_sublats(sublats), 1, forcehermitian)
 end
 
+"""
+    hopping(h; sublats = missing, range = 1, dn = missing, forcehermitian = true)
+
+Create an `TightbindingModelTerm` that applies a hopping `h` to a `Lattice` when
+creating a `Hamiltonian` with `hamiltonian`. If `forcehermitian` is true, it will be forced
+to produce a Hermitian Hamiltonian.
+
+The maximum distance between coupled sites is given by `range::Real`. If a cell distance
+`dn::NTuple{L,Int}` or distances `dn::NTuple{M,NTuple{L,Int}}` are given, only unit cells
+at that distance will be coupled.
+
+The hopping amplitude `h` can be a number, a matrix (preferably `SMatrix`) or a function
+of the form `(r, dr) -> ...` for a position-dependent hopping (`r` is the bond center,
+and `dr` the bond vector). If `sublats` is specified as a sublattice index pairs, or tuple
+thereof, `hopping` is only applied between said sublattices.
+
+`TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
+together to build more complicated `TightbindingModel`s.
+
+# Examples
+```
+julia> onsite(1) - hopping(2, dn = ((1,2), (0,0)), sublats = (1,1))
+TightbindingModel{2}: model with 2 terms
+  OnsiteTerm{Int64}:
+    Sublattices      : any
+    Force Hermitian  : true
+    Coefficient      : 1
+  HoppingTerm{Int64}:
+    Sublattice pairs : (1 => 1,)
+    dn cell jumps    : ([1, 2], [0, 0])
+    Hopping range    : 1.0
+    Force Hermitian  : true
+    Coefficient      : -1
+
+julia> hamiltonian(LatticePresets.honeycomb(), hopping((r,dr) -> cos(r[1]), sublats = ((1,1), (2,2))))
+Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 7 (SparseMatrixCSC, sparse)
+  Harmonic size    : 2 × 2
+  Elements         : scalars
+  Onsites          : 0
+  Hoppings         : 12
+  Coordination     : 6.0
+```
+
+# See also:
+    `onsite`
+"""
 function hopping(h; sublats = missing, range::Real = 1, dn = missing, forcehermitian::Bool = true)
     return HoppingTerm(h, sanitize_sublatpairs(sublats), sanitize_dn(dn),
                        range + sqrt(eps(Float64)), 1, forcehermitian)

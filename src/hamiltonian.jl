@@ -14,8 +14,10 @@ struct Hamiltonian{LA<:AbstractLattice,L,M,A<:Union{Missing,AbstractMatrix},H<:H
 end
 
 function Hamiltonian(lat, hs::Vector{H}, field, n::Int, m::Int) where {L,M,H<:HamiltonianHarmonic{L,M}}
-    isempty(hs) && push!(hs, H(zero(SVector{L,Int}), empty_sparse(M, n, m)))
     sort!(hs, by = h -> abs.(h.dn))
+    if isempty(hs) || !iszero(first(hs).dn)
+        pushfirst!(hs, H(zero(SVector{L,Int}), empty_sparse(M, n, m)))
+    end
     return Hamiltonian(lat, hs, field)
 end
 Hamiltonian(lat::Superlattice, hs, field) = Hamiltonian(lat, hs, field, missing)
@@ -133,7 +135,7 @@ dependent perturbations (e.g. disorder, gauge fields).
     h((ϕ₁, ϕ₂, ...))
 
 Yields the Bloch Hamiltonian matrix `bloch(h, (ϕ₁, ϕ₂, ...))` of a `h::Hamiltonian` on an
-`L`D lattice. See also `bloch!` for a non-allocating version of `bloch`.
+`L`D lattice. (See also `bloch!` for a non-allocating version of `bloch`.)
 
     hamiltonian(lat, func::Function, models...; kw...)
 
