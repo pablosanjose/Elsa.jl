@@ -395,9 +395,14 @@ Calls `supercell` with a uniformly scaled `sc = SMatrix{L,L}(factor * I)`
 Calls `supercell` with different scaling along each Bravais vector (diagonal supercell
 with factors along the diagonal)
 
-    lattice |> supercell(v...; kw...)
+    lat |> supercell(v...; kw...)
 
-Functional syntax, equivalent to `supercell(lattice, v...; kw...)
+Functional syntax, equivalent to `supercell(lat, v...; kw...)
+
+    supercell(h::Hamiltonian, v...; kw...)
+
+Promotes the `Lattice` of `h` to a `Superlattice` without changing the Hamiltonian itself,
+which always refers to the unitcell of the lattice.
 
 # Examples
 ```jldoctest
@@ -549,6 +554,11 @@ Functional syntax, equivalent to `unitcell(lattice, v...; kw...)
     unitcell(slat::Superlattice)
 
 Convert Superlattice `slat` into a lattice with its unit cell matching `slat`'s supercell.
+
+    unitcell(h::Hamiltonian, v...; kw...)
+
+Transforms the `Lattice` of `h` to have a larger unitcell, and expanding the Hamiltonian
+accordingly.
 
 # Examples
 ```jldoctest

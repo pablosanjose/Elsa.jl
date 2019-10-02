@@ -352,7 +352,7 @@ isnotredundant(dn::SVector, term) = term.dns !== missing && !iszero(dn)
 isnotredundant((s1, s2)::Tuple{Int,Int}, term) = term.sublats !== missing && s1 != s2
 
 #######################################################################
-# unitcell/supercell
+# unitcell/supercell for Hamiltonians
 #######################################################################
 
 function supercell(ham::Hamiltonian, args...; kw...)
