@@ -89,7 +89,7 @@ Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space.
 ```
 """
 bravais(vs::Union{Tuple, AbstractVector}...) = Bravais(toSMatrix(vs...))
-bravais(lat::AbstractLattice) = lat.unitcell.sites
+bravais(lat::AbstractLattice) = lat.bravais.matrix
 
 transform(b::Bravais{E,0}, f::F) where {E,F<:Function} = b
 
@@ -118,13 +118,14 @@ Unitcell(sublats::Sublat...; kw...) = Unitcell(promote(sublats...); kw...)
 function Unitcell(sublats::NTuple{N,Sublat{E,T}};
     dim::Val{E2} = Val(E),
     type::Type{T2} = float(T),
-    names::Vector{NameType} = [s.name for s in sublats],
-    orbitals::NTuple{N,Tuple} = (s->s.orbitals).(sublats)) where {N,E,E2,T,T2}
+    names = [s.name for s in sublats],
+    orbitals = (s->s.orbitals).(sublats)) where {N,E,E2,T,T2}
+    _names = sanitize_names(names, Val(N))
     # Make sublat names unique
     allnames = NameType[:_]
-    for i in eachindex(names)
-        names[i] in allnames && (names[i] = uniquename(allnames, names[i], i))
-        push!(allnames, names[i])
+    for i in eachindex(_names)
+        _names[i] in allnames && (_names[i] = uniquename(allnames, _names[i], i))
+        push!(allnames, _names[i])
     end
     sites = SVector{E2,T2}[]
     offsets = [0]  # length(offsets) == length(sublats) + 1
@@ -134,8 +135,16 @@ function Unitcell(sublats::NTuple{N,Sublat{E,T}};
         end
         push!(offsets, length(sites))
     end
-    return Unitcell(sites, names, offsets, (n -> nametype.(n)).(orbitals))
+    _orbitals = sanitize_orbs(orbitals, Val(N))
+    return Unitcell(sites, _names, offsets, _orbitals)
 end
+
+sanitize_names(names::AbstractVector, ::Val) = nametype.(names)
+sanitize_names(names::Tuple, ::Val) = [nametype.(names)...]
+sanitize_names(name::Union{NameType,Int}, ::Val{N}) where {N} = fill(name, N)
+sanitize_orbs(o::NTuple{N,Tuple}, ::Val{N}) where {N} = (n -> nametype.(n)).(o)
+sanitize_orbs(o::NTuple{M,<:Any}, ::Val{N}) where {M,N} =
+    ntuple(n -> ntuple(m -> nametype(o[m]), Val(M)), Val(N))
 
 function uniquename(allnames, name, i)
     newname = nametype(Char(64+i)) # Lexicographic, starting from Char(65) = 'A'
@@ -181,8 +190,14 @@ Base.summary(::Lattice{E,L,T}) where {E,L,T} =
 Create a `Lattice{E,L,T}` with Bravais matrix `bravais` and sublattices `sublats`
 converted to a common  `E`-dimensional embedding space and type `T`. To override the
 embedding  dimension `E`, use keyword `dim = Val(E)`. Similarly, override type `T` with
-`type = T`. The keywords `names::Tuple` and `orbitals::Tuple{Tuple}` can be used to rename
-`sublats` or redefine their orbitals per site.
+`type = T`.
+
+The keywords `names` and `orbitals` can be used to rename `sublats` or redefine
+their orbitals per site. If there are `N` sublattices, `names` must be a collection of `N`
+unique identifiers ($NameType or Int), and `orbitals` an collection of `N` collections, each
+with the orbital identifiers of each sublattice. If a single such collection is provided,
+all sublattices are assumed to have the same orbitals. Names, however, are forced to be
+unique (see examples).
 
 See also `LatticePresets` for built-in lattices.
 
@@ -196,12 +211,20 @@ Lattice{3,1,Float32} : 1D lattice in 3D space
     Orbitals      : ((:noname,), (:noname,))
     Sites         : (1, 1) --> 2 total per unit cell
 
-julia> LatticePresets.honeycomb(orbitals = ((:up, :down), (:up, :down)))
+julia> LatticePresets.honeycomb(names = (:C, :D), orbitals = ((:u, :d), (:l, :r)))
 Lattice{2,2,Float64} : 2D lattice in 2D space
   Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
   Sublattices     : 2
-    Names         : (:A, :B)
-    Orbitals      : ((:up, :down), (:up, :down))
+    Names         : (:C, :D)
+    Orbitals      : ((:u, :d), (:l, :r))
+    Sites         : (1, 1) --> 2 total per unit cell
+
+julia> LatticePresets.honeycomb(names = :E, orbitals = (:u, :d))
+Lattice{2,2,Float64} : 2D lattice in 2D space
+  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+  Sublattices     : 2
+    Names         : (:E, :B)
+    Orbitals      : ((:u, :d), (:u, :d))
     Sites         : (1, 1) --> 2 total per unit cell
 ```
 
