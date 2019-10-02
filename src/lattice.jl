@@ -77,8 +77,9 @@ enter `vecs` as `Tuple`s or `SVector`s and `mat` as `SMatrix`.
 We can scale a `b::Bravais` simply by multiplying it with a factor `a`, like `a * b`.
 
     bravais(lat::Lattice)
+    bravais(h::Hamiltonian)
 
-Obtain the Bravais matrix of lattice `lat`
+Obtain the Bravais matrix of lattice `lat` or Hamiltonian `h`
 
 # Examples
 ```jldoctest
