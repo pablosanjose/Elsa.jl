@@ -32,23 +32,24 @@ end
 (h::HoppingTerm{<:Function})(r, dr) = h.h(r, dr)
 (h::HoppingTerm)(r, dr) = h.h
 
-normalizesublats(s::Integer) = Tuple(s)
-normalizesublats(s::Missing) = missing
-normalizesublats(n) = throw(ErrorException(
+sanitize_sublats(s::Missing) = missing
+sanitize_sublats(s::Integer) = Tuple(s)
+sanitize_sublats(s::NTuple{N,Integer}) where {N} = s
+sanitize_sublats(n) = throw(ErrorException(
     "`sublats` for `onsite` must be either `missing`, an `s` or a tuple of `s`s, with `s::Integer` a sublattice number"))
 
-normalizesublatpairs(s::Missing) = missing
-normalizesublatpairs((s1, s2)::Tuple{Integer,Integer}) = ((s1, s2),)
-normalizesublatpairs((s2, s1)::Pair{<:Integer,<:Integer}) = ((s1, s2),)
-normalizesublatpairs(s::Integer) = ((s,s),)
-normalizesublatpairs(s::NTuple{N,Any}) where {N} =
-    ntuple(n -> first(normalizesublatpairs(s[n])), Val(N))
-normalizesublatpairs(s) = throw(ErrorException(
+sanitize_sublatpairs(s::Missing) = missing
+sanitize_sublatpairs((s1, s2)::Tuple{Integer,Integer}) = ((s1, s2),)
+sanitize_sublatpairs((s2, s1)::Pair{<:Integer,<:Integer}) = ((s1, s2),)
+sanitize_sublatpairs(s::Integer) = ((s,s),)
+sanitize_sublatpairs(s::NTuple{N,Any}) where {N} =
+    ntuple(n -> first(sanitize_sublatpairs(s[n])), Val(N))
+sanitize_sublatpairs(s) = throw(ErrorException(
     "`sublats` for `hopping` must be either `missing`, a tuple `(s₁, s₂)`, or a tuple of such tuples, with `sᵢ::Integer` a sublattice number"))
 
-normalizedn(dn::Missing) = missing
-normalizedn(dn::Tuple{Vararg{Tuple}}) = SVector.(dn)
-normalizedn(dn::Tuple{Vararg{Integer}}) = (SVector(dn),)
+sanitize_dn(dn::Missing) = missing
+sanitize_dn(dn::Tuple{Vararg{Tuple}}) = SVector.(dn)
+sanitize_dn(dn::Tuple{Vararg{Integer}}) = (SVector(dn),)
 
 sublats(t::OnsiteTerm, lat::AbstractLattice) =
     t.sublats === missing ? collect(1:nsublats(lat)) : t.sublats
@@ -79,13 +80,50 @@ $(i)  Coefficient      : $(h.coefficient)")
 end
 
 # External API #
+"""
+    onsite(o; sublats = missing, forcehermitian = true)
 
+Create an `TightbindingModelTerm` that applies an onsite energy `o` to a `Lattice` when
+creating a `Hamiltonian` with `hamiltonian`.
+
+The onsite energy `o` can be a number, a matrix (preferably `SMatrix`) or a function of the
+form `r -> ...` for a position-dependent onsite energy. If `sublat` is specified as a tuple
+of sublattice indices, `onsite` is only applied to said sublattices.
+
+`TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
+together to build more complicated `TightbindingModel`s.
+
+# Examples
+```
+julia> onsite(1, sublats = (1,2)) - hopping(2)
+TightbindingModel{2}: model with 2 terms
+  OnsiteTerm{Int64}:
+    Sublattices      : (1, 2)
+    Force Hermitian  : true
+    Coefficient      : 1
+  HoppingTerm{Int64}:
+    Sublattice pairs : any
+    dn cell jumps    : any
+    Hopping range    : 1.0
+    Force Hermitian  : true
+    Coefficient      : -1
+
+julia> hamiltonian(LatticePresets.honeycomb(orbitals = (:a, :b)), onsite(r->@SMatrix[1 2; 3 4]))
+Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 1 (SparseMatrixCSC, sparse)
+  Harmonic size    : 2 × 2
+  Elements         : 2 × 2 blocks
+  Onsites          : 2
+  Hoppings         : 0
+  Coordination     : 0.0
+```
+"""
 function onsite(o; sublats = missing, forcehermitian::Bool = true)
-    return OnsiteTerm(o, normalizesublats(sublats), 1, forcehermitian)
+    return OnsiteTerm(o, sanitize_sublats(sublats), 1, forcehermitian)
 end
 
 function hopping(h; sublats = missing, range::Real = 1, dn = missing, forcehermitian::Bool = true)
-    return HoppingTerm(h, normalizesublatpairs(sublats), normalizedn(dn),
+    return HoppingTerm(h, sanitize_sublatpairs(sublats), sanitize_dn(dn),
                        range + sqrt(eps(Float64)), 1, forcehermitian)
 end
 
@@ -123,8 +161,8 @@ Base.:+(t::TightbindingModelTerm, m::TightbindingModel) = TightbindingModel((t, 
 Base.:-(m::TightbindingModel, t::TightbindingModelTerm) = m + (-t)
 Base.:-(t::TightbindingModelTerm, m::TightbindingModel) = t + (-m)
 
-function Base.show(io::IO, m::TightbindingModel{N,F}) where {N,F}
+function Base.show(io::IO, m::TightbindingModel{N}) where {N}
     ioindent = IOContext(io, :indent => "  ")
-    print(io, "TightbindingModel{$N,$F}: $N terms, of which $F can be fused:", "\n")
+    print(io, "TightbindingModel{$N}: model with $N terms", "\n")
     foreach(t -> print(ioindent, t, "\n"), m.terms)
 end
