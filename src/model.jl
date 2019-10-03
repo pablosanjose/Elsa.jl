@@ -199,6 +199,7 @@ end
 terms(t::TightbindingModel) = t.terms
 terms(t::TightbindingModelTerm) = (t,)
 
+TightbindingModel(m::TightbindingModel) = m
 TightbindingModel(t::AbstractTightbindingModel...) = TightbindingModel(tuplejoin(terms.(t)...))
 
 # External API #
