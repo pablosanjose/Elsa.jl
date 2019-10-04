@@ -6,9 +6,15 @@ struct HamiltonianHarmonic{L,M,A<:AbstractMatrix{M}}
     h::A
 end
 
+HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:SparseMatrixCSC{M}} =
+    HamiltonianHarmonic(dn, sparse(Int[], Int[], M[], n, m))
+
+HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Matrix{M}} =
+    HamiltonianHarmonic(dn, zeros(M, n, m))
+
 struct Hamiltonian{LA<:AbstractLattice,L,M,A<:Union{Missing,AbstractMatrix},
                    H<:HamiltonianHarmonic{L,M,A},F<:Union{Missing,Field},
-                   O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}}
+                   O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}} <: AbstractArray{A,L}
     lattice::LA
     harmonics::Vector{H}
     field::F
@@ -28,20 +34,27 @@ Hamiltonian(lat::Superlattice, hs, field, orbs) =
 Hamiltonian(lat::Lattice, hs, field, orbs) =
     Hamiltonian(lat, hs, field, optimized_h0(hs), orbs)
 
-function Base.show(io::IO, ham::Hamiltonian)
+Base.show(io::IO, ham::Hamiltonian) = show(io, MIME("text/plain"), ham)
+function Base.show(io::IO, ::MIME"text/plain", ham::Hamiltonian)
     i = get(io, :indent, "")
     print(io, i, summary(ham), "\n",
 "$i  Bloch harmonics  : $(length(ham.harmonics)) ($(displaymatrixtype(ham)))
 $i  Harmonic size    : $((n -> "$n × $n")(nsites(ham)))
 $i  Orbitals         : $(displayorbitals(ham))
-$i  Elements         : $(displayelements(ham))
+$i  Element type     : $(displayelements(ham))
 $i  Onsites          : $(nonsites(ham))
 $i  Hoppings         : $(nhoppings(ham))
 $i  Coordination     : $(nhoppings(ham) / nsites(ham))")
 end
 
-Base.show(io::IO, h::HamiltonianHarmonic{L,M}) where {L,M} = print(io,
-"HamiltonianHarmonic{$L,$(eltype(M))} with dn = $(Tuple(h.dn)) and elements:", h.h)
+Base.show(io::IO, h::HamiltonianHarmonic) = show(io, MIME("text/plain"), h)
+Base.show(io::IO, ::MIME"text/plain", h::HamiltonianHarmonic{L,M}) where {L,M} = print(io,
+"HamiltonianHarmonic{$L,$(eltype(M))} : Bloch harmonic of $(L)D Hamiltonian
+  Harmonic type   : $(displaymatrixtype(typeof(h.h)))
+  Harmonic size   : $((n -> "$n × $n")(nsites(h)))
+  Cell distance   : $(Tuple(h.dn))
+  Element type    : $(displayelements(M))
+  Elements        : $(_nnz(h.h))")
 
 Base.summary(::Hamiltonian{LA}) where {E,L,LA<:Lattice{E,L}} =
     "Hamiltonian{<:Lattice} : $(L)D Hamiltonian on a $(L)D Lattice in $(E)D space"
@@ -56,7 +69,7 @@ displaymatrixtype(::Type{<:Array}) = "Matrix, dense"
 displaymatrixtype(A::Type{<:AbstractArray}) = string(A)
 displayelements(h::Hamiltonian) = displayelements(blocktype(h))
 displayelements(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)"
-displayelements(::Type{T}) where {T} = "scalars ($T)"
+displayelements(::Type{T}) where {T} = "scalar ($T)"
 displayorbitals(h::Hamiltonian) =
     replace(replace(string(h.orbitals), "Symbol(\"" => ":"), "\")" => "")
 
@@ -136,7 +149,8 @@ function _nnzdiag(s::SparseMatrixCSC)
 end
 _nnzdiag(s::Matrix) = count(!iszero, s[i,i] for i in 1:minimum(size(s)))
 
-nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : size(first(h.harmonics).h, 1)
+nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : nsites(first(h.harmonics))
+nsites(h::HamiltonianHarmonic) = size(h.h, 1)
 
 sanitize_orbs(os::NTuple{M,Union{Tuple,Val}}, names::NTuple{N}) where {N,M} =
     ntuple(n -> n > M ? (:a,) : sanitize_orbs(os[n]), Val(N))
@@ -161,7 +175,7 @@ sanitize_orbs(p::Pair) = sanitize_orbs(last(p))
 
 # External API #
 """
-    hamiltonian(lat, model; orbitals, field, type)
+    hamiltonian(lat[, model]; orbitals, field, type)
 
 Create a `Hamiltonian` by additively applying `model::TighbindingModel` to the lattice `lat`
 (see `hopping` and `onsite` for details on building tightbinding models).
@@ -208,22 +222,48 @@ corresponding Bloch Hamiltonian matrix (equivalent to `h(;params...)(ϕ₁, ϕ�
 
 Functional form of `hamiltonian`, equivalent to `hamiltonian(lat, args...)`
 
+# Indexing
+
+Indexing into a Hamiltonian `h` works as follows. Access the `HamiltonianHarmonic` matrix
+at a given `dn::NTuple{L,Int}` with `h[dn...]`. Assign `v` into element `(i,j)` of said
+matrix with `h[dn...][i,j] = v`. Broadcasting with vectors of indices `is` and `js` is
+supported, `h[dn...][is, js] = v_matrix`.
+
+To add an empty harmonic with a given `dn::NTuple{L,Int}`, do `push!(h, dn)`. To delete it,
+do `deleteat!(h, dn)`.
+
 # Examples
 ```jldoctest
-julia> hamiltonian(LatticePresets.honeycomb(), hopping(@SMatrix[1 2; 3 4], range = 1/√3),
-       orbitals = Val(2))
+julia> h = hamiltonian(LatticePresets.honeycomb(), hopping(@SMatrix[1 2; 3 4], range = 1/√3), orbitals = Val(2))
 Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
   Orbitals         : ((:a, :a), (:a, :a))
-  Elements         : 2 × 2 blocks (Complex{Float64})
+  Element type     : 2 × 2 blocks (Complex{Float64})
   Onsites          : 0
   Hoppings         : 6
   Coordination     : 3.0
 
-julia> hopfunc(;k = 0) = hopping(k);
+julia> push!(h, (3,3)) # Adding a new Hamiltonian harmonic (if not already present)
+Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 6 (SparseMatrixCSC, sparse)
+  Harmonic size    : 2 × 2
+  Orbitals         : ((:a, :a), (:a, :a))
+  Element type     : 2 × 2 blocks (Complex{Float64})
+  Onsites          : 0
+  Hoppings         : 6
+  Coordination     : 3.0
 
-julia> hamiltonian(LatticePresets.square(), onsite(1) + hopping(2), hopfunc)
+julia> h[3,3][1,1] = @SMatrix[1 2; 2 1]; h[3,3] # element assignment
+2×2 SparseArrays.SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64} with 1 stored entry:
+  [1, 1]  =  [1.0+0.0im 2.0+0.0im; 2.0+0.0im 1.0+0.0im]
+
+julia> h[3,3][[1,2],[1,2]] .= rand(SMatrix{2,2,Float64}, 2, 2) # Broadcast assignment
+2×2 view(::SparseArrays.SparseMatrixCSC{StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4},Int64}, [1, 2], [1, 2]) with eltype StaticArrays.SArray{Tuple{2,2},Complex{Float64},2,4}:
+ [0.271152+0.0im 0.921417+0.0im; 0.138212+0.0im 0.525911+0.0im]  [0.444284+0.0im 0.280035+0.0im; 0.565106+0.0im 0.121869+0.0im]
+ [0.201126+0.0im 0.912446+0.0im; 0.372099+0.0im 0.931358+0.0im]  [0.883422+0.0im 0.874016+0.0im; 0.296095+0.0im 0.995861+0.0im]
+
+julia> hopfunc(;k = 0) = hopping(k); hamiltonian(LatticePresets.square(), onsite(1) + hopping(2), hopfunc) # Parametric Hamiltonian
 Parametric Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 1 × 1
@@ -232,10 +272,12 @@ Parametric Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
   Onsites          : 1
   Hoppings         : 4
   Coordination     : 4.0
+
 ```
 """
-hamiltonian(lat, t1, ts...; orbitals = missing, kw...) =
-    _hamiltonian(lat, sanitize_orbs(orbitals, lat.unitcell.names), t1, ts...; kw...)
+hamiltonian(lat, ts...; orbitals = missing, kw...) =
+    _hamiltonian(lat, sanitize_orbs(orbitals, lat.unitcell.names), ts...; kw...)
+_hamiltonian(lat::AbstractLattice, orbs; kw...) = _hamiltonian(lat, orbs, TightbindingModel(); kw...)
 _hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel; type::Type = Complex{numbertype(lat)}, kw...) =
     hamiltonian_sparse(blocktype(orbs, type), lat, orbs, m; kw...)
 _hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel, f::Function;
@@ -263,6 +305,43 @@ Base.size(h::HamiltonianHarmonic, n) = size(h.h, n)
 Base.size(h::HamiltonianHarmonic) = size(h.h)
 
 bravais(h::Hamiltonian) = bravais(h.lattice)
+
+# Indexing #
+
+Base.push!(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L} = push!(h, SVector(dn...))
+Base.push!(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} = push!(h, SVector(dn...))
+function Base.push!(h::Hamiltonian{<:Any,L,M,A}, dn::SVector{L,Int}) where {L,M,A}
+    for hh in h.harmonics
+        hh.dn == dn && return hh
+    end
+    hh = HamiltonianHarmonic{L,M,A}(dn, size(h)...)
+    push!(h.harmonics, hh)
+    return h
+end
+
+@inline function Base.getindex(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L}
+    dnv = SVector(dn...)
+    nh = findfirst(hh -> hh.dn == dnv, h.harmonics)
+    nh === nothing && throw(BoundsError(h, dn))
+    return h.harmonics[nh].h
+end
+
+Base.deleteat!(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} =
+    deleteat!(h, toSVector(dn))
+Base.deleteat!(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L} =
+    deleteat!(h, toSVector(dn))
+function Base.deleteat!(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L}
+    nh = findfirst(hh -> hh.dn == SVector(dn...), h.harmonics)
+    nh === nothing || deleteat!(h.harmonics, nh)
+    return h
+end
+
+Base.isassigned(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} = isassigned(h, dn)
+function Base.isassigned(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L}
+    dnv = SVector(dn...)
+    nh = findfirst(hh -> hh.dn == dnv, h.harmonics)
+    return nh !== nothing
+end
 
 #######################################################################
 # auxiliary types
