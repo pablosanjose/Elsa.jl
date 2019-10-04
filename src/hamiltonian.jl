@@ -335,6 +335,13 @@ function Base.deleteat!(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L}
     return h
 end
 
+Base.isassigned(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} = isassigned(h, dn)
+function Base.isassigned(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L}
+    dnv = SVector(dn...)
+    nh = findfirst(hh -> hh.dn == dnv, h.harmonics)
+    return nh !== nothing
+end
+
 #######################################################################
 # auxiliary types
 #######################################################################
