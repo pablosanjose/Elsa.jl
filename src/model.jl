@@ -5,7 +5,7 @@ abstract type AbstractTightbindingModel end
 abstract type TightbindingModelTerm <: AbstractTightbindingModel end
 
 struct OnsiteTerm{F,
-                  S<:Union{Missing,Tuple{Vararg{Int}}},
+                  S<:Union{Missing,Tuple{Vararg{NameType}}},
                   C} <: TightbindingModelTerm
     o::F
     sublats::S
@@ -14,7 +14,7 @@ struct OnsiteTerm{F,
 end
 
 struct HoppingTerm{F,
-                   S<:Union{Missing,Tuple{Vararg{Tuple{Int,Int}}}},
+                   S<:Union{Missing,Tuple{Vararg{Tuple{NameType,NameType}}}},
                    D<:Union{Missing,Tuple{Vararg{SVector{L,Int}}} where L},
                    R<:Union{Missing,Real},
                    C} <: TightbindingModelTerm
@@ -33,28 +33,48 @@ end
 (h::HoppingTerm)(r, dr) = h.h
 
 sanitize_sublats(s::Missing) = missing
-sanitize_sublats(s::Integer) = Tuple(s)
-sanitize_sublats(s::NTuple{N,Integer}) where {N} = s
+sanitize_sublats(s::Integer) = (nametype(s),)
+sanitize_sublats(s::NameType) = (s,)
+sanitize_sublats(s::Tuple) where {N} = nametype.(s)
 sanitize_sublats(n) = throw(ErrorException(
-    "`sublats` for `onsite` must be either `missing`, an `s` or a tuple of `s`s, with `s::Integer` a sublattice number"))
+    "`sublats` for `onsite` must be either `missing`, an `s` or a tuple of `s`s, with `s::$NameType` is a sublattice name"))
 
 sanitize_sublatpairs(s::Missing) = missing
-sanitize_sublatpairs((s1, s2)::Tuple{Integer,Integer}) = ((s1, s2),)
-sanitize_sublatpairs((s2, s1)::Pair{<:Integer,<:Integer}) = ((s1, s2),)
-sanitize_sublatpairs(s::Integer) = ((s,s),)
+sanitize_sublatpairs((s1, s2)::Tuple{2,Union{Integer,NameType}}) = ((nametype(s1), nametype(s2)),)
+sanitize_sublatpairs((s2, s1)::Pair) = (sanitize_sublatpairs(s1, s2),)
+sanitize_sublatpairs(s::Union{Integer,NameType}) = (sanitize_sublatpairs(s,s),)
 sanitize_sublatpairs(s::NTuple{N,Any}) where {N} =
     ntuple(n -> first(sanitize_sublatpairs(s[n])), Val(N))
 sanitize_sublatpairs(s) = throw(ErrorException(
-    "`sublats` for `hopping` must be either `missing`, a tuple `(s₁, s₂)`, or a tuple of such tuples, with `sᵢ::Integer` a sublattice number"))
+    "`sublats` for `hopping` must be either `missing`, a tuple `(s₁, s₂)`, or a tuple of such tuples, with `sᵢ::$NameType` a sublattice name"))
 
 sanitize_dn(dn::Missing) = missing
 sanitize_dn(dn::Tuple{Vararg{Tuple}}) = SVector.(dn)
 sanitize_dn(dn::Tuple{Vararg{Integer}}) = (SVector(dn),)
 
-sublats(t::OnsiteTerm, lat::AbstractLattice) =
-    t.sublats === missing ? collect(1:nsublats(lat)) : t.sublats
-sublats(t::HoppingTerm, lat::AbstractLattice) =
-    t.sublats === missing ? collect(Iterators.product(1:nsublats(lat), 1:nsublats(lat))) : t.sublats
+sublats(t::OnsiteTerm{<:Any,Missing}, lat::AbstractLattice) = collect(1:nsublats(lat))
+function sublats(t::OnsiteTerm{<:Any,<:Tuple}, lat::AbstractLattice)
+    names = lat.unitcell.names
+    s = Int[]
+    for name in t.terms
+        i = findfirst(isequal(name), names)
+        i !== nothing && push!(s, i)
+    end
+    return s
+end
+
+sublats(t::HoppingTerm{<:Any,Missing}, lat::AbstractLattice) =
+    collect(Iterators.product(1:nsublats(lat), 1:nsublats(lat)))
+function sublats(t::HoppingTerm{<:Any,<:Tuple}, lat::AbstractLattice)
+    names = lat.unitcell.names
+    s = Tuple{Int,Int}[]
+    for (n1, n2) in t.terms
+        i1 = findfirst(isequal(n1), names)
+        i2 = findfirst(isequal(n2), names)
+        i1 !== nothing && i2 !== nothing && push!(s, (i1, i2))
+    end
+    return s
+end
 
 displayparameter(::Type{<:Function}) = "Function"
 displayparameter(::Type{T}) where {T} = "$T"
@@ -84,12 +104,12 @@ end
     onsite(o; sublats = missing, forcehermitian = true)
 
 Create an `TightbindingModelTerm` that applies an onsite energy `o` to a `Lattice` when
-creating a `Hamiltonian` with `hamiltonian`. If `forcehermitian` is true, it will be forced
-to produce a Hermitian Hamiltonian.
+creating a `Hamiltonian` with `hamiltonian`.
 
 The onsite energy `o` can be a number, a matrix (preferably `SMatrix`) or a function of the
 form `r -> ...` for a position-dependent onsite energy. If `sublats` is specified as a
-sublattice index or tuple thereof, `onsite` is only applied to said sublattices.
+sublattice name or tuple thereof, `onsite` is only applied to sublattices with said names.
+If `forcehermitian` is true, the model will produce an Hermitian Hamiltonian.
 
 `TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
 together to build more complicated `TightbindingModel`s.
@@ -130,8 +150,7 @@ end
     hopping(h; sublats = missing, range = 1, dn = missing, forcehermitian = true)
 
 Create an `TightbindingModelTerm` that applies a hopping `h` to a `Lattice` when
-creating a `Hamiltonian` with `hamiltonian`. If `forcehermitian` is true, it will be forced
-to produce a Hermitian Hamiltonian.
+creating a `Hamiltonian` with `hamiltonian`.
 
 The maximum distance between coupled sites is given by `range::Real`. If a cell distance
 `dn::NTuple{L,Int}` or distances `dn::NTuple{M,NTuple{L,Int}}` are given, only unit cells
@@ -139,8 +158,9 @@ at that distance will be coupled.
 
 The hopping amplitude `h` can be a number, a matrix (preferably `SMatrix`) or a function
 of the form `(r, dr) -> ...` for a position-dependent hopping (`r` is the bond center,
-and `dr` the bond vector). If `sublats` is specified as a sublattice index pairs, or tuple
-thereof, `hopping` is only applied between said sublattices.
+and `dr` the bond vector). If `sublats` is specified as a sublattice name pair, or tuple
+thereof, `hopping` is only applied between sublattices with said names. If `forcehermitian`
+is true, the model will produce an Hermitian Hamiltonian.
 
 `TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
 together to build more complicated `TightbindingModel`s.
