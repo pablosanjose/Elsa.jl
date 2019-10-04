@@ -210,7 +210,7 @@ dependent perturbations (e.g. disorder, gauge fields).
 Build the Bloch Hamiltonian matrix `bloch(h, (ϕ₁, ϕ₂, ...))` of a `h::Hamiltonian` on an
 `L`D lattice. (See also `bloch!` for a non-allocating version of `bloch`.)
 
-    hamiltonian(lat, model, funcmodel::Function; kw...)
+    hamiltonian(lat, [model,] funcmodel::Function; kw...)
 
 For a function of the form `funcmodel(;params...)::TightbindingModel`, produce a
 `h::ParametricHamiltonian` that efficiently generates a `Hamiltonian` with model `model +
@@ -218,9 +218,9 @@ funcmodel(;params...)` when calling it as in `h(;params...)` (using specific par
 keyword arguments `params`). Additionally, `h(ϕ₁, ϕ₂, ...; params...)` generates the
 corresponding Bloch Hamiltonian matrix (equivalent to `h(;params...)(ϕ₁, ϕ₂, ...)`).
 
-    lat |> hamiltonian([func, ] models...)
+    lat |> hamiltonian([func, model]; kw...)
 
-Functional form of `hamiltonian`, equivalent to `hamiltonian(lat, args...)`
+Functional form of `hamiltonian`, equivalent to `hamiltonian(lat, ...; ...)`
 
 # Indexing
 
@@ -278,6 +278,7 @@ Parametric Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
 hamiltonian(lat, ts...; orbitals = missing, kw...) =
     _hamiltonian(lat, sanitize_orbs(orbitals, lat.unitcell.names), ts...; kw...)
 _hamiltonian(lat::AbstractLattice, orbs; kw...) = _hamiltonian(lat, orbs, TightbindingModel(); kw...)
+_hamiltonian(lat::AbstractLattice, orbs, f::Function; kw...) = _hamiltonian(lat, orbs, TightbindingModel(), f; kw...)
 _hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel; type::Type = Complex{numbertype(lat)}, kw...) =
     hamiltonian_sparse(blocktype(orbs, type), lat, orbs, m; kw...)
 _hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel, f::Function;
