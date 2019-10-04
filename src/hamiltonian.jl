@@ -223,7 +223,7 @@ Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
 
 julia> hopfunc(;k = 0) = hopping(k);
 
-julia> hamiltonian(LatticePresets.square(), hopfunc, onsite(1) + hopping(2))
+julia> hamiltonian(LatticePresets.square(), onsite(1) + hopping(2), hopfunc)
 Parametric Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
   Harmonic size    : 1 × 1
