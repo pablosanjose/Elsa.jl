@@ -175,7 +175,7 @@ sanitize_orbs(p::Pair) = sanitize_orbs(last(p))
 
 # External API #
 """
-    hamiltonian(lat, model; orbitals, field, type)
+    hamiltonian(lat[, model]; orbitals, field, type)
 
 Create a `Hamiltonian` by additively applying `model::TighbindingModel` to the lattice `lat`
 (see `hopping` and `onsite` for details on building tightbinding models).
