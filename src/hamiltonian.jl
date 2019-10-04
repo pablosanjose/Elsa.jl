@@ -275,8 +275,9 @@ Parametric Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
 
 ```
 """
-hamiltonian(lat, t1, ts...; orbitals = missing, kw...) =
-    _hamiltonian(lat, sanitize_orbs(orbitals, lat.unitcell.names), t1, ts...; kw...)
+hamiltonian(lat, ts...; orbitals = missing, kw...) =
+    _hamiltonian(lat, sanitize_orbs(orbitals, lat.unitcell.names), ts...; kw...)
+_hamiltonian(lat::AbstractLattice, orbs; kw...) = _hamiltonian(lat, orbs, TightbindingModel(); kw...)
 _hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel; type::Type = Complex{numbertype(lat)}, kw...) =
     hamiltonian_sparse(blocktype(orbs, type), lat, orbs, m; kw...)
 _hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel, f::Function;
