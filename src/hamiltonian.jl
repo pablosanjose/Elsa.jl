@@ -218,6 +218,9 @@ funcmodel(;params...)` when calling it as in `h(;params...)` (using specific par
 keyword arguments `params`). Additionally, `h(ϕ₁, ϕ₂, ...; params...)` generates the
 corresponding Bloch Hamiltonian matrix (equivalent to `h(;params...)(ϕ₁, ϕ₂, ...)`).
 
+It's important to note that `params` keywords in the definition of `funcmodel` must have
+default values, as in `model(;o = 1) = onsite(o)`.
+
     lat |> hamiltonian([func, model]; kw...)
 
 Functional form of `hamiltonian`, equivalent to `hamiltonian(lat, ...; ...)`
