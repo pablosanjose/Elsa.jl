@@ -6,9 +6,15 @@ struct HamiltonianHarmonic{L,M,A<:AbstractMatrix{M}}
     h::A
 end
 
+HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:SparseMatrixCSC{M}} =
+    HamiltonianHarmonic(dn, sparse(Int[], Int[], M[], n, m))
+
+HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Matrix{M}} =
+    HamiltonianHarmonic(dn, zeros(M, n, m))
+
 struct Hamiltonian{LA<:AbstractLattice,L,M,A<:Union{Missing,AbstractMatrix},
                    H<:HamiltonianHarmonic{L,M,A},F<:Union{Missing,Field},
-                   O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}}
+                   O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}} <: AbstractArray{A,L}
     lattice::LA
     harmonics::Vector{H}
     field::F
@@ -28,7 +34,7 @@ Hamiltonian(lat::Superlattice, hs, field, orbs) =
 Hamiltonian(lat::Lattice, hs, field, orbs) =
     Hamiltonian(lat, hs, field, optimized_h0(hs), orbs)
 
-function Base.show(io::IO, ham::Hamiltonian)
+function Base.show(io::IO, ::MIME"text/plain", ham::Hamiltonian)
     i = get(io, :indent, "")
     print(io, i, summary(ham), "\n",
 "$i  Bloch harmonics  : $(length(ham.harmonics)) ($(displaymatrixtype(ham)))
@@ -263,6 +269,40 @@ Base.size(h::HamiltonianHarmonic, n) = size(h.h, n)
 Base.size(h::HamiltonianHarmonic) = size(h.h)
 
 bravais(h::Hamiltonian) = bravais(h.lattice)
+
+push!(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L} = push!(h, SVector(dn...))
+push!(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} = push!(h, SVector(dn...))
+function push!(h::Hamiltonian{<:Any,L,M,A}, dn::SVector{L,Int}) where {L,M,A}
+    for hh in h.harmonics
+        hh.dn == dn && return hh
+    end
+    hh = HamiltonianHarmonic{L,M,A}(dn, size(h)...)
+    push!(h.harmonics, hh)
+    return hh
+end
+
+function Base.getindex(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L}
+    nh = findfirst(hh -> hh.dn == SVector(dn...), h.harmonics)
+    nh === nothing && throw(BoundsError(h, dn))
+    return h.harmonics[nh].h
+end
+
+Base.deleteat!(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} =
+    deleteat!(h, toSVector(dn))
+Base.deleteat!(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L} =
+    deleteat!(h, toSVector(dn))
+function Base.deleteat!(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L}
+    nh = findfirst(hh -> hh.dn == SVector(dn...), h.harmonics)
+    nh === nothing || deleteat!(h.harmonics, nh)
+    return h
+end
+
+# Base.setindex!(h::Hamiltonian{<:Any,L}, val, dn::NTuple{L,Int}) where {L} =
+#     setindex!(h, val, toSVector(dn), is...)
+# function Base.setindex!(h::Hamiltonian{<:Any,L}, val, dn::SVector{L,Int}, is...) where {L}
+#     hh = get_or_push!(h, dn)
+#     return setindex!(hh.h, val, is...)
+# end
 
 #######################################################################
 # auxiliary types
