@@ -196,13 +196,13 @@ dependent perturbations (e.g. disorder, gauge fields).
 Build the Bloch Hamiltonian matrix `bloch(h, (ϕ₁, ϕ₂, ...))` of a `h::Hamiltonian` on an
 `L`D lattice. (See also `bloch!` for a non-allocating version of `bloch`.)
 
-    hamiltonian(lat, func::Function, models...; kw...)
+    hamiltonian(lat, model, funcmodel::Function; kw...)
 
-For a function of the form `func(;params...)::AbstractTightbindingModel`, produce a
-`h::ParametricHamiltonian` that efficiently generates a `Hamiltonian` when calling it as in
-`h(;params...)` with specific parameters as keyword arguments `params`. Additionally,
-`h(ϕ₁, ϕ₂, ...; params...)` generates the corresponding Bloch Hamiltonian matrix (equivalent
-to `h(;params...)(ϕ₁, ϕ₂, ...)`).
+For a function of the form `funcmodel(;params...)::TightbindingModel`, produce a
+`h::ParametricHamiltonian` that efficiently generates a `Hamiltonian` with model `model +
+funcmodel(;params...)` when calling it as in `h(;params...)` (using specific parameters as
+keyword arguments `params`). Additionally, `h(ϕ₁, ϕ₂, ...; params...)` generates the
+corresponding Bloch Hamiltonian matrix (equivalent to `h(;params...)(ϕ₁, ϕ₂, ...)`).
 
     lat |> hamiltonian([func, ] models...)
 
@@ -236,15 +236,15 @@ Parametric Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
 """
 hamiltonian(lat, t1, ts...; orbitals = missing, kw...) =
     _hamiltonian(lat, sanitize_orbs(orbitals, lat.unitcell.names), t1, ts...; kw...)
-_hamiltonian(lat::AbstractLattice, orbs, m::AbstractTightbindingModel; type::Type = Complex{numbertype(lat)}, kw...) =
-    hamiltonian_sparse(blocktype(orbs, type), lat, orbs, TightbindingModel(m); kw...)
-_hamiltonian(lat::AbstractLattice, orbs, f::Function, ts::AbstractTightbindingModel;
+_hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel; type::Type = Complex{numbertype(lat)}, kw...) =
+    hamiltonian_sparse(blocktype(orbs, type), lat, orbs, m; kw...)
+_hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel, f::Function;
             type::Type = Complex{numbertype(lat)}, kw...) =
-    parametric_hamiltonian(blocktype(orbs, type), lat, orbs, f, TightbindingModel(ts); kw...)
+    parametric_hamiltonian(blocktype(orbs, type), lat, orbs, m, f; kw...)
 
-hamiltonian(t::AbstractTightbindingModel...; kw...) =
+hamiltonian(t::TightbindingModel...; kw...) =
     z -> hamiltonian(z, t...; kw...)
-hamiltonian(f::Function, t::AbstractTightbindingModel...; kw...) =
+hamiltonian(f::Function, t::TightbindingModel...; kw...) =
     z -> hamiltonian(z, f, t...; kw...)
 hamiltonian(h::Hamiltonian) =
     z -> hamiltonian(z, h)
@@ -484,7 +484,8 @@ end
 
 Base.show(io::IO, pham::ParametricHamiltonian) = print(io, "Parametric ", pham.hamiltonian)
 
-function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, orbs, f::F, model; field = missing) where {M,E,L,T,F}
+function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, orbs, model, f::F;
+                                field = missing) where {M,E,L,T,F}
     builder = IJVBuilder{M}(lat, orbs)
     applyterms!(builder, terms(model)...)
     nels = length.(builder.ijvs) # element counters for each harmonic

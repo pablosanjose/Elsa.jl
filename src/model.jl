@@ -1,8 +1,7 @@
 #######################################################################
 # TightbindingModelTerm
 #######################################################################
-abstract type AbstractTightbindingModel end
-abstract type TightbindingModelTerm <: AbstractTightbindingModel end
+abstract type TightbindingModelTerm end
 
 struct OnsiteTerm{F,
                   S<:Union{Missing,Tuple{Vararg{NameType}}},
@@ -26,11 +25,11 @@ struct HoppingTerm{F,
     forcehermitian::Bool
 end
 
-(o::OnsiteTerm{<:Function})(r,dr) = o.o(r)
-(o::OnsiteTerm)(r,dr) = o.o
+(o::OnsiteTerm{<:Function})(r,dr) = o.coefficient * o.o(r)
+(o::OnsiteTerm)(r,dr) = o.coefficient * o.o
 
-(h::HoppingTerm{<:Function})(r, dr) = h.h(r, dr)
-(h::HoppingTerm)(r, dr) = h.h
+(h::HoppingTerm{<:Function})(r, dr) = h.coefficient * h.h(r, dr)
+(h::HoppingTerm)(r, dr) = h.coefficient * h.h
 
 sanitize_sublats(s::Missing) = missing
 sanitize_sublats(s::Integer) = (nametype(s),)
@@ -40,9 +39,9 @@ sanitize_sublats(n) = throw(ErrorException(
     "`sublats` for `onsite` must be either `missing`, an `s` or a tuple of `s`s, with `s::$NameType` is a sublattice name"))
 
 sanitize_sublatpairs(s::Missing) = missing
-sanitize_sublatpairs((s1, s2)::Tuple{2,Union{Integer,NameType}}) = ((nametype(s1), nametype(s2)),)
+sanitize_sublatpairs((s1, s2)::NTuple{2,Union{Integer,NameType}}) = ((nametype(s1), nametype(s2)),)
 sanitize_sublatpairs((s2, s1)::Pair) = (sanitize_sublatpairs(s1, s2),)
-sanitize_sublatpairs(s::Union{Integer,NameType}) = (sanitize_sublatpairs(s,s),)
+sanitize_sublatpairs(s::Union{Integer,NameType}) = sanitize_sublatpairs((s,s))
 sanitize_sublatpairs(s::NTuple{N,Any}) where {N} =
     ntuple(n -> first(sanitize_sublatpairs(s[n])), Val(N))
 sanitize_sublatpairs(s) = throw(ErrorException(
@@ -56,7 +55,7 @@ sublats(t::OnsiteTerm{<:Any,Missing}, lat::AbstractLattice) = collect(1:nsublats
 function sublats(t::OnsiteTerm{<:Any,<:Tuple}, lat::AbstractLattice)
     names = lat.unitcell.names
     s = Int[]
-    for name in t.terms
+    for name in t.sublats
         i = findfirst(isequal(name), names)
         i !== nothing && push!(s, i)
     end
@@ -68,7 +67,7 @@ sublats(t::HoppingTerm{<:Any,Missing}, lat::AbstractLattice) =
 function sublats(t::HoppingTerm{<:Any,<:Tuple}, lat::AbstractLattice)
     names = lat.unitcell.names
     s = Tuple{Int,Int}[]
-    for (n1, n2) in t.terms
+    for (n1, n2) in t.sublats
         i1 = findfirst(isequal(n1), names)
         i2 = findfirst(isequal(n2), names)
         i1 !== nothing && i2 !== nothing && push!(s, (i1, i2))
@@ -143,7 +142,7 @@ Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
     `hopping`
 """
 function onsite(o; sublats = missing, forcehermitian::Bool = true)
-    return OnsiteTerm(o, sanitize_sublats(sublats), 1, forcehermitian)
+    return TightbindingModel(OnsiteTerm(o, sanitize_sublats(sublats), 1, forcehermitian))
 end
 
 """
@@ -194,8 +193,8 @@ Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
     `onsite`
 """
 function hopping(h; sublats = missing, range::Real = 1, dn = missing, forcehermitian::Bool = true)
-    return HoppingTerm(h, sanitize_sublatpairs(sublats), sanitize_dn(dn),
-                       range + sqrt(eps(Float64)), 1, forcehermitian)
+    return TightbindingModel(HoppingTerm(h, sanitize_sublatpairs(sublats), sanitize_dn(dn),
+        range + sqrt(eps(Float64)), 1, forcehermitian))
 end
 
 Base.:*(x, o::OnsiteTerm) =
@@ -205,22 +204,22 @@ Base.:*(x, t::HoppingTerm) =
 Base.:*(t::TightbindingModelTerm, x) = x * t
 Base.:-(t::TightbindingModelTerm) = (-1) * t
 
-Base.:+(t1::TightbindingModelTerm, t2::TightbindingModelTerm) = TightbindingModel((t1, t2))
-Base.:-(t1::TightbindingModelTerm, t2::TightbindingModelTerm) = TightbindingModel((t1, -t2))
+# Base.:+(t1::TightbindingModelTerm, t2::TightbindingModelTerm) = TightbindingModel((t1, t2))
+# Base.:-(t1::TightbindingModelTerm, t2::TightbindingModelTerm) = TightbindingModel((t1, -t2))
 
 
 #######################################################################
 # TightbindingModel
 #######################################################################
-struct TightbindingModel{N,T<:Tuple{Vararg{TightbindingModelTerm,N}}} <: AbstractTightbindingModel
+struct TightbindingModel{N,T<:Tuple{Vararg{TightbindingModelTerm,N}}}
     terms::T
 end
 
 terms(t::TightbindingModel) = t.terms
-terms(t::TightbindingModelTerm) = (t,)
+# terms(t::TightbindingModelTerm) = (t,)
 
-TightbindingModel(m::TightbindingModel) = m
-TightbindingModel(t::AbstractTightbindingModel...) = TightbindingModel(tuplejoin(terms.(t)...))
+# TightbindingModel(m::TightbindingModel) = m
+TightbindingModel(ts::TightbindingModelTerm...) = TightbindingModel(ts)
 
 # External API #
 
@@ -228,10 +227,8 @@ Base.:*(x, m::TightbindingModel) = TightbindingModel(x .* m.terms)
 Base.:*(m::TightbindingModel, x) = x * m
 Base.:-(m::TightbindingModel) = TightbindingModel((-1) .* m.terms)
 
-Base.:+(m::TightbindingModel, t::TightbindingModelTerm) = TightbindingModel((m.terms..., t))
-Base.:+(t::TightbindingModelTerm, m::TightbindingModel) = TightbindingModel((t, m.terms...))
-Base.:-(m::TightbindingModel, t::TightbindingModelTerm) = m + (-t)
-Base.:-(t::TightbindingModelTerm, m::TightbindingModel) = t + (-m)
+Base.:+(m::TightbindingModel, t::TightbindingModel) = TightbindingModel((m.terms..., t.terms...))
+Base.:-(m::TightbindingModel, t::TightbindingModel) = m + (-t)
 
 function Base.show(io::IO, m::TightbindingModel{N}) where {N}
     ioindent = IOContext(io, :indent => "  ")
