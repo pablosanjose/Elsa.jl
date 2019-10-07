@@ -308,6 +308,8 @@ Base.size(h::HamiltonianHarmonic) = size(h.h)
 
 bravais(h::Hamiltonian) = bravais(h.lattice)
 
+issemibounded(h::Hamiltonian) = issemibounded(h.lattice)
+
 # Indexing #
 
 Base.push!(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L} = push!(h, SVector(dn...))
