@@ -51,9 +51,15 @@ transform!(s::S, f::F) where {S <: Sublat,F <: Function} = (s.sites .= f.(s.site
 #######################################################################
 struct Bravais{E,L,T,EL}
     matrix::SMatrix{E,L,T,EL}
+    semibounded::NTuple{L,Bool}
 end
 
-Bravais{E,T}() where {E,T} = Bravais(SMatrix{E,0,T,0}())
+Bravais{E,T}() where {E,T} = Bravais(SMatrix{E,0,T,0}(), ())
+Bravais(matrix::SMatrix, ::Missing) = Bravais(matrix)
+Bravais(matrix::SMatrix{E,L}, semibounded::Bool = false) where {E,L} =
+    Bravais(matrix, filltuple(semibounded, Val(L)))
+Bravais(matrix::SMatrix{E,L}, semibounded) where {E,L,L´} =
+    Bravais(matrix, ntuple(i -> i in semibounded), Val(L))
 
 displayvectors(br::Bravais) = displayvectors(br.matrix)
 
@@ -65,12 +71,17 @@ Base.show(io::IO, b::Bravais{E,L,T}) where {E,L,T} = print(io,
 # External API #
 
 """
-    bravais(vecs...)
-    bravais(matrix)
+    bravais(vecs...; semibounded = false)
+    bravais(matrix; semibounded = false)
 
 Create a `Bravais{E,L}` that adds `L` Bravais vectors `vecs` in `E` dimensional space,
 alternatively given as the columns of matrix `mat`. For higher instantiation efficiency
 enter `vecs` as `Tuple`s or `SVector`s and `mat` as `SMatrix`.
+
+To create semibounded lattices along some or all Bravais vectors, use `semibounded`. A
+`semibounded = true` makes all axes semibounded. A `semibounded = (axes::Int...)` indicates
+the indices of axes to be made semibounded. Note that semibounded lattices always extend
+toward positive multiples of Bravais vectors. To invert the direction, invert the vectors.
 
 We can scale a `b::Bravais` simply by multiplying it with a factor `a`, like `a * b`.
 
@@ -86,8 +97,13 @@ Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space.
   Vectors : ((1.0, 2.0), (3.0, 4.0))
   Matrix  : [1.0 3.0; 2.0 4.0]
 ```
+
+# See also:
+    semibounded
 """
-bravais(vs::Union{Tuple, AbstractVector}...) = Bravais(toSMatrix(vs...))
+bravais(vs::Union{Tuple, AbstractVector}...; semibounded = false) =
+    Bravais(toSMatrix(vs...), semibounded)
+
 bravais(lat::AbstractLattice) = lat.bravais.matrix
 
 transform(b::Bravais{E,0}, f::F) where {E,F<:Function} = b
@@ -97,11 +113,11 @@ function transform(b::Bravais{E,L,T}, f::F) where {E,L,T,F<:Function}
         ntuple(i -> f(b.matrix[:, i]) - f(z), Val(L))
     end
     matrix = hcat(svecs...)
-    return Bravais(matrix)
+    return Bravais(matrix, b.semibounded)
 end
 
-Base.:*(factor, b::Bravais) = Bravais(factor * b.matrix)
-Base.:*(b::Bravais, factor) = Bravais(b.matrix * factor)
+Base.:*(factor, b::Bravais) = Bravais(factor * b.matrix, b.semibounded)
+Base.:*(b::Bravais, factor) = Bravais(b.matrix * factor, b.semibounded)
 
 #######################################################################
 # Unitcell

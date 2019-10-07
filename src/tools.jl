@@ -26,6 +26,9 @@ toSVector(v::AbstractVector) = SVector(Tuple(v))
 _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
 # zerotuple(::Type{T}, ::Val{L}) where {T,L} = ntuple(_ -> zero(T), Val(L))
+
+filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
+
 function padright!(v::Vector, x, n::Integer)
     n0 = length(v)
     resize!(v, max(n, n0))
