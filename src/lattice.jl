@@ -241,6 +241,8 @@ lattice(s::Sublat, ss::Sublat...; kw...) where {E,T} = _lattice(Unitcell(s, ss..
 _lattice(u::Unitcell{E,T}) where {E,T} = Lattice(Bravais{E,T}(), u)
 lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = Lattice(br, Unitcell(s, ss...; kw...))
 
+issemibounded(lat::Lattice) where {L} = issemibounded(lat.bravais)
+
 #######################################################################
 # Supercell
 #######################################################################
@@ -318,6 +320,8 @@ function foreach_supersite(f::F, lat::Superlattice) where {F<:Function}
     end
     return nothing
 end
+
+issemibounded(lat::Superlattice) where {L} = issemibounded(lat.supercell)
 
 #######################################################################
 # AbstractLattice interface
