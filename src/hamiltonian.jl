@@ -12,7 +12,7 @@ HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Spa
 HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Matrix{M}} =
     HamiltonianHarmonic(dn, zeros(M, n, m))
 
-struct Hamiltonian{LA<:AbstractLattice,L,M,A<:Union{Missing,AbstractMatrix},
+struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
                    H<:HamiltonianHarmonic{L,M,A},F<:Union{Missing,Field},
                    O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}} <: AbstractArray{A,L}
     lattice::LA
@@ -29,9 +29,7 @@ function Hamiltonian(lat, hs::Vector{H}, field, orbs, n::Int, m::Int) where {L,M
     end
     return Hamiltonian(lat, hs, field, orbs)
 end
-Hamiltonian(lat::Superlattice, hs, field, orbs) =
-    Hamiltonian(lat, hs, field, missing, orbs)
-Hamiltonian(lat::Lattice, hs, field, orbs) =
+Hamiltonian(lat::AbstractLattice, hs, field, orbs) =
     Hamiltonian(lat, hs, field, optimized_h0(hs), orbs)
 
 Base.show(io::IO, ham::Hamiltonian) = show(io, MIME("text/plain"), ham)

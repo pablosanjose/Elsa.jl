@@ -7,31 +7,31 @@ module LatticePresets
 using Elsa
 using Elsa: NameType
 
-linear(; a0 = 1, kw...) =
-    lattice(a0 * bravais((1.,)), sublat((0.,); kw...))
+linear(; a0 = 1, semibounded = false, kw...) =
+    lattice(a0 * bravais((1.,); kw...), sublat((0.,); kw...))
 
 square(; a0 = 1, kw...) =
-    lattice(a0 * bravais((1., 0.), (0., 1.)), sublat((0., 0.); kw...))
+    lattice(a0 * bravais((1., 0.), (0., 1.); kw...), sublat((0., 0.); kw...))
 
 triangular(; a0 = 1, kw...) =
-    lattice(a0 * bravais(( cos(pi/3), sin(pi/3)),(-cos(pi/3), sin(pi/3))),
+    lattice(a0 * bravais(( cos(pi/3), sin(pi/3)),(-cos(pi/3), sin(pi/3)); kw...),
         sublat((0., 0.); kw...))
 
 honeycomb(; a0 = 1, kw...) =
-    lattice(a0 * bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3))),
+    lattice(a0 * bravais((cos(pi/3), sin(pi/3)), (-cos(pi/3), sin(pi/3)); kw...),
         sublat((0.0, -0.5/sqrt(3.0)), name = :A),
         sublat((0.0,  0.5/sqrt(3.0)), name = :B); kw...)
 
 cubic(; a0 = 1, kw...) =
-    lattice(a0 * bravais((1., 0., 0.), (0., 1., 0.), (0., 0., 1.)),
+    lattice(a0 * bravais((1., 0., 0.), (0., 1., 0.), (0., 0., 1.); kw...),
         sublat((0., 0., 0.)); kw...)
 
 fcc(; a0 = 1, kw...) =
-    lattice(a0 * bravais(@SMatrix([-1. -1. 0.; 1. -1. 0.; 0. 1. -1.])'/sqrt(2.)),
+    lattice(a0 * bravais(@SMatrix([-1. -1. 0.; 1. -1. 0.; 0. 1. -1.])'/sqrt(2.); kw...),
         sublat((0., 0., 0.)); kw...)
 
 bcc(; a0 = 1, kw...) =
-    lattice(a0 * bravais((1., 0., 0.), (0., 1., 0.), (0.5, 0.5, 0.5)),
+    lattice(a0 * bravais((1., 0., 0.), (0., 1., 0.), (0.5, 0.5, 0.5); kw...),
         sublat((0., 0., 0.)); kw...)
 
 end # module
