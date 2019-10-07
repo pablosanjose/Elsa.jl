@@ -446,6 +446,8 @@ Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
 """
 supercell(v::Union{SMatrix,Tuple,SVector,Integer}...; kw...) = lat -> supercell(lat, v...; kw...)
 
+supercell(lat::AbstractLattice{E,L}; kw...) where {E,L} =
+    supercell(lat, SMatrix{L,0,Int}(); kw...)
 supercell(lat::AbstractLattice{E,L}, factors::Vararg{<:Integer,L}; kw...) where {E,L} =
     _supercell(lat, factors...)
 supercell(lat::AbstractLattice{E,L}, factors::Vararg{<:Integer,L´}; kw...) where {E,L,L´} =
@@ -553,7 +555,7 @@ function supercell_semibounded(b::Bravais, s::SMatrix{L,L´,Int}) where {L,L´}
             return false
         end
     end
-    return SVector(ssb)
+    return SVector{L´,Bool}(ssb)
 end
 
 #######################################################################
