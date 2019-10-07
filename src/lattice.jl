@@ -355,8 +355,8 @@ sites(s::Int) = lat -> sites(lat, s)
 const TOOMANYITERS = 10^8
 
 """
-    supercell(lat::Lattice{E,L}, v::NTuple{L,Integer}...; region = missing)
-    supercell(lat::Lattice{E,L}, sc::SMatrix{L,L´,Int}; region = missing)
+    supercell(lat::AbstractLattice{E,L}, v::NTuple{L,Integer}...; region = missing)
+    supercell(lat::AbstractLattice{E,L}, sc::SMatrix{L,L´,Int}; region = missing)
 
 Generates a `Superlattice` from an `L`-dimensional lattice `lat` with Bravais vectors
 `br´= br * sc`, where `sc::SMatrix{L,L´,Int}` is the integer supercell matrix with the `L´`
@@ -366,11 +366,11 @@ Only sites at position `r` such that `region(r) == true` will be included in the
 If `region` is missing, a Bravais unit cell perpendicular to the `v` axes will be selected
 for the `L-L´` non-periodic directions.
 
-    supercell(lattice::Lattice{E,L}, factor::Integer; region = missing)
+    supercell(lattice::AbstractLattice{E,L}, factor::Integer; region = missing)
 
 Calls `supercell` with a uniformly scaled `sc = SMatrix{L,L}(factor * I)`
 
-    supercell(lattice::Lattice{E,L}, factors::Integer...; region = missing)
+    supercell(lattice::AbstractLattice, factors::Integer...; region = missing)
 
 Calls `supercell` with different scaling along each Bravais vector (diagonal supercell
 with factors along the diagonal)
@@ -424,14 +424,27 @@ Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
     unitcell
 """
 supercell(v::Union{SMatrix,Tuple,SVector,Integer}...; kw...) = lat -> supercell(lat, v...; kw...)
-supercell(lat::AbstractLattice{E,L}; kw...) where {E,L} = supercell(lat, SMatrix{L,0,Int}(); kw...)
+
+supercell(lat::AbstractLattice{E,L}, factors::Vararg{<:Integer,L}; kw...) where {E,L} =
+    _supercell(lat, factors...)
+supercell(lat::AbstractLattice{E,L}, factors::Vararg{<:Integer,L´}; kw...) where {E,L,L´} =
+    throw(ArgumentError("Provide either a single scaling factor or one for each of the $L lattice dimensions"))
 supercell(lat::AbstractLattice{E,L}, factor::Integer; kw...) where {E,L} =
-    supercell(lat, SMatrix{L,L,Int}(factor * I); kw...)
-supercell(lat::AbstractLattice{E,L}, factors::Vararg{Integer,L}; kw...) where {E,L} =
-    supercell(lat, SMatrix{L,L,Int}(Diagonal(SVector(factors))); kw...)
-supercell(lat::AbstractLattice{E,L}, vecs::NTuple{L,Int}...; kw...) where {E,L} =
-    supercell(lat, toSMatrix(Int, vecs...); kw...)
-function supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}; region = missing) where {E,L,L´}
+    _supercell(lat, ntuple(_ -> factor, Val(L))...)
+supercell(lat::AbstractLattice, vecs::NTuple{L,Integer}...; region = missing) where {L} =
+    _supercell(lat, toSMatrix(Int, vecs...), region)
+supercell(lat::AbstractLattice, s::SMatrix; region = missing) = _supercell(lat, s, region)
+
+function _supercell(lat::AbstractLattice{E,L}, factors::Vararg{Integer,L}) where {E,L,L´}
+    matrix = SMatrix{L,L,Int}(Diagonal(SVector(factors)))
+    sites = 1:nsites(lat)
+    cells = CartesianIndices((i -> 0 : i - 1).(factors))
+    mask = missing
+    supercell = Supercell(matrix, sites, cells, mask)
+    return Superlattice(lat.bravais, lat.unitcell, supercell)
+end
+
+function _supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}, region) where {E,L,L´}
     brmatrix = lat.bravais.matrix
     regionfunc = region === missing ? ribbonfunc(brmatrix, scmatrix) : region
     in_supercell_func = is_perp_dir(scmatrix)
@@ -449,7 +462,7 @@ function supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}; regi
             mask[i, dntup...] = in_supercell && regionfunc(r)
         end
     end
-    supercell = Supercell(scmatrix, 1:ns, cells, mask)
+    supercell = Supercell(scmatrix, 1:ns, cells, all(mask) ? missing : mask)
     return Superlattice(lat.bravais, lat.unitcell, supercell)
 end
 
