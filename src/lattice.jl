@@ -62,7 +62,7 @@ Base.show(io::IO, b::Bravais{E,L,T}) where {E,L,T} = print(io,
 "Bravais{$E,$L,$T} : set of $L Bravais vectors in $(E)D space.
   Vectors     : $(displayvectors(b))
   Matrix      : $(b.matrix),
-  Semibounded : $(iszero(b.semibounded) ? "none" : findall(b.semibounded))")
+  Semibounded : $(issemibounded(b) ? display_as_tuple(findall(b.semibounded)) : "none")")
 
 # External API #
 
@@ -124,6 +124,8 @@ end
 
 Base.:*(factor::Number, b::Bravais) = Bravais(factor * b.matrix, b.semibounded)
 Base.:*(b::Bravais, factor::Number) = Bravais(b.matrix * factor, b.semibounded)
+
+issemibounded(b::Bravais) = !iszero(b.semibounded)
 
 #######################################################################
 # Unitcell
@@ -187,7 +189,7 @@ displaynames(l::AbstractLattice) = display_as_tuple(l.unitcell.names, ":")
 
 function Base.show(io::IO, lat::Lattice)
     i = get(io, :indent, "")
-    hassemi = any(lat.bravais.semibounded)
+    hassemi = issemibounded(lat.bravais)
     print(io, i, summary(lat), "\n",
 "$i  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))", hassemi ? "
 $i    Semibounded   : $(display_as_tuple(findall(lat.bravais.semibounded)))" : "", "
@@ -262,7 +264,7 @@ nsites(s::Supercell{L,L´,Missing}) where {L,L´} = length(s.sites) * length(s.c
 Base.CartesianIndices(s::Supercell) = s.cells
 
 function Base.show(io::IO, s::Supercell{L,L´}) where {L,L´}
-    hassemi = any(s.semibounded)
+    hassemi = issemibounded(s)
     i = get(io, :indent, "")
     print(io, i,
 "Supercell{$L,$(L´)} for $(L´)D superlattice of the base $(L)D lattice
@@ -276,6 +278,8 @@ isinmask(s::Supercell{L,L´,Missing}, site, dn) where {L,L´} = true
 isinmask(s::Supercell{L,L´,<:OffsetArray}, site) where {L,L´} = s.mask[site]
 isinmask(s::Supercell{L,L´,Missing}, site) where {L,L´} = true
 
+issemibounded(sc::Supercell) where {L} = !iszero(sc.semibounded)
+
 #######################################################################
 # Superlattice
 #######################################################################
@@ -287,7 +291,7 @@ end
 
 function Base.show(io::IO, lat::Superlattice)
     i = get(io, :indent, "")
-    hassemi = any(lat.bravais.semibounded)
+    hassemi = issemibounded(lat.bravais)
     ioindent = IOContext(io, :indent => string(i, "  "))
     print(io, i, summary(lat), "\n",
 "$i  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))", hassemi ? "
