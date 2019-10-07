@@ -40,6 +40,7 @@ padright(sv::StaticVector{E1,T1}, x::T2, ::Val{E2}) where {E1,T1,E2,T2} =
     (T = promote_type(T1,T2); SVector{E2, T}(ntuple(i -> i > E1 ? x : convert(T, sv[i]), Val(E2))))
 padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
 padright(sv::StaticVector{E,T}, ::Val{E}) where {E,T} = sv
+padright(t::Tuple, x...) = Tuple(padright(SVector(t), x...))
 
 @inline padtotype(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,T2,S<:SMatrix{E2,L2,T2}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
