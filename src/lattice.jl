@@ -51,26 +51,35 @@ transform!(s::S, f::F) where {S <: Sublat,F <: Function} = (s.sites .= f.(s.site
 #######################################################################
 struct Bravais{E,L,T,EL}
     matrix::SMatrix{E,L,T,EL}
+    semibounded::SVector{L,Bool}
 end
 
-Bravais{E,T}() where {E,T} = Bravais(SMatrix{E,0,T,0}())
+Bravais{E,T}() where {E,T} = Bravais(SMatrix{E,0,T,0}(), ())
 
 displayvectors(br::Bravais) = displayvectors(br.matrix)
 
 Base.show(io::IO, b::Bravais{E,L,T}) where {E,L,T} = print(io,
 "Bravais{$E,$L,$T} : set of $L Bravais vectors in $(E)D space.
-  Vectors : $(displayvectors(b))
-  Matrix  : ", b.matrix)
+  Vectors     : $(displayvectors(b))
+  Matrix      : $(b.matrix),
+  Semibounded : $(issemibounded(b) ? display_as_tuple(findall(b.semibounded)) : "none")")
 
 # External API #
 
 """
-    bravais(vecs...)
-    bravais(matrix)
+    bravais(vecs...; semibounded = false)
+    bravais(matrix; semibounded = false)
 
 Create a `Bravais{E,L}` that adds `L` Bravais vectors `vecs` in `E` dimensional space,
 alternatively given as the columns of matrix `mat`. For higher instantiation efficiency
 enter `vecs` as `Tuple`s or `SVector`s and `mat` as `SMatrix`.
+
+To create semibounded lattices along some or all Bravais vectors, use `semibounded`. A
+`semibounded = true` makes all axes semibounded. A `semibounded = (axes::Int...)` indicates
+the indices of axes to be made semibounded. A tuple of Booleans, one per Bravais axes,
+`semibounded = issemi::NTuple{L,Bool}` is also allowed. Note that semibounded lattices
+always extend toward positive multiples of Bravais vectors. To invert the direction, invert
+the vectors.
 
 We can scale a `b::Bravais` simply by multiplying it with a factor `a`, like `a * b`.
 
@@ -86,9 +95,22 @@ Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space.
   Vectors : ((1.0, 2.0), (3.0, 4.0))
   Matrix  : [1.0 3.0; 2.0 4.0]
 ```
+
+# See also:
+    semibounded
 """
-bravais(vs::Union{Tuple, AbstractVector}...) = Bravais(toSMatrix(vs...))
+bravais(vs::Union{Tuple, AbstractVector}...; semibounded = false, kw...) =
+    (s = toSMatrix(vs...); Bravais(s, sanitize_semibounded(semibounded, s)))
+
 bravais(lat::AbstractLattice) = lat.bravais.matrix
+
+sanitize_semibounded(sb::Bool, ::SMatrix{E,L}) where {E,L} =
+    SVector(filltuple(sb, Val(L)))
+sanitize_semibounded(sb::Int, s::SMatrix{E,L}) where {E,L} =
+    sanitize_semibounded((sb,), s)
+sanitize_semibounded(sb::NTuple{L,Bool}, ::SMatrix{E,L}) where {E,L} = SVector(sb)
+sanitize_semibounded(sb, ::SMatrix{E,L}) where {E,L} =
+    SVector(ntuple(i -> i in sb, Val(L)))
 
 transform(b::Bravais{E,0}, f::F) where {E,F<:Function} = b
 
@@ -97,11 +119,13 @@ function transform(b::Bravais{E,L,T}, f::F) where {E,L,T,F<:Function}
         ntuple(i -> f(b.matrix[:, i]) - f(z), Val(L))
     end
     matrix = hcat(svecs...)
-    return Bravais(matrix)
+    return Bravais(matrix, b.semibounded)
 end
 
-Base.:*(factor, b::Bravais) = Bravais(factor * b.matrix)
-Base.:*(b::Bravais, factor) = Bravais(b.matrix * factor)
+Base.:*(factor::Number, b::Bravais) = Bravais(factor * b.matrix, b.semibounded)
+Base.:*(b::Bravais, factor::Number) = Bravais(b.matrix * factor, b.semibounded)
+
+issemibounded(b::Bravais) = !iszero(b.semibounded)
 
 #######################################################################
 # Unitcell
@@ -116,7 +140,7 @@ Unitcell(sublats::Sublat...; kw...) = Unitcell(promote(sublats...); kw...)
 function Unitcell(sublats::NTuple{N,Sublat{E,T}};
     dim::Val{E2} = Val(E),
     type::Type{T2} = float(T),
-    names = [s.name for s in sublats]) where {N,E,E2,T,T2}
+    names = [s.name for s in sublats], kw...) where {N,E,E2,T,T2}
     _names = nametype_vector(names, N)
     # Make sublat names unique
     allnames = NameType[:_]
@@ -139,9 +163,6 @@ nametype_vector(names::AbstractVector, ::Integer) = nametype.(names)
 nametype_vector(names::Tuple, ::Integer) = [nametype.(names)...]
 nametype_vector(name::Union{NameType,Int}, N::Integer) = fill(name, N)
 sanitize_names(names::Vector, ::Val{N}) where {N} = ntuple(n -> names[n], Val(N))
-# sanitize_orbs(o::NTuple{N,Tuple}, ::Val{N}) where {N} = (n -> nametype.(n)).(o)
-# sanitize_orbs(o::NTuple{M,<:Any}, ::Val{N}) where {M,N} =
-#     ntuple(n -> ntuple(m -> nametype(o[m]), Val(M)), Val(N))
 
 function uniquename(allnames, name, i)
     newname = nametype(Char(64+i)) # Lexicographic, starting from Char(65) = 'A'
@@ -168,8 +189,10 @@ displaynames(l::AbstractLattice) = display_as_tuple(l.unitcell.names, ":")
 
 function Base.show(io::IO, lat::Lattice)
     i = get(io, :indent, "")
+    hassemi = issemibounded(lat.bravais)
     print(io, i, summary(lat), "\n",
-"$i  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))
+"$i  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))", hassemi ? "
+$i    Semibounded   : $(display_as_tuple(findall(lat.bravais.semibounded)))" : "", "
 $i  Sublattices     : $(nsublats(lat))
 $i    Names         : $(displaynames(lat))
 $i    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell")
@@ -202,9 +225,10 @@ Lattice{3,1,Float32} : 1D lattice in 3D space
     Names         : (:A, :B)
     Sites         : (1, 1) --> 2 total per unit cell
 
-julia> LatticePresets.honeycomb(names = (:C, :D))
+julia> LatticePresets.honeycomb(semibounded = 1, names = (:C, :D))
 Lattice{2,2,Float64} : 2D lattice in 2D space
   Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+    Semibounded   : (1)
   Sublattices     : 2
     Names         : (:C, :D)
     Sites         : (1, 1) --> 2 total per unit cell
@@ -217,6 +241,8 @@ lattice(s::Sublat, ss::Sublat...; kw...) where {E,T} = _lattice(Unitcell(s, ss..
 _lattice(u::Unitcell{E,T}) where {E,T} = Lattice(Bravais{E,T}(), u)
 lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = Lattice(br, Unitcell(s, ss...; kw...))
 
+issemibounded(lat::Lattice) where {L} = issemibounded(lat.bravais)
+
 #######################################################################
 # Supercell
 #######################################################################
@@ -225,10 +251,12 @@ struct Supercell{L,L´,M<:Union{Missing,OffsetArray{Bool}},S<:SMatrix{L,L´}} # 
     sites::UnitRange{Int}
     cells::CartesianIndices{L,NTuple{L,UnitRange{Int}}}
     mask::M
+    semibounded::SVector{L´,Bool}
 end
 
-Supercell{L}(ns::Integer) where {L} =
-    Supercell(SMatrix{L,L,Int,L*L}(I), 1:ns, CartesianIndices(ntuple(_->0:0, Val(L))), missing)
+# Supercell{L}(ns::Integer) where {L} =
+#     Supercell(SMatrix{L,L,Int,L*L}(I), 1:ns, CartesianIndices(ntuple(_->0:0, Val(L))),
+#               missing, filltuple(false, Val(L)))
 
 dim(::Supercell{L,L´}) where {L,L´} = L´
 
@@ -238,17 +266,21 @@ nsites(s::Supercell{L,L´,Missing}) where {L,L´} = length(s.sites) * length(s.c
 Base.CartesianIndices(s::Supercell) = s.cells
 
 function Base.show(io::IO, s::Supercell{L,L´}) where {L,L´}
+    hassemi = issemibounded(s)
     i = get(io, :indent, "")
     print(io, i,
 "Supercell{$L,$(L´)} for $(L´)D superlattice of the base $(L)D lattice
 $i  Supervectors  : $(displayvectors(s.matrix))
-$i  Supersites    : $(nsites(s))")
+$i  Supersites    : $(nsites(s))", hassemi ? "
+$i  Semibounded   : $(display_as_tuple(findall(s.semibounded)))" : "")
 end
 
 isinmask(s::Supercell{L,L´,<:OffsetArray}, site, dn) where {L,L´} = s.mask[site, Tuple(dn)...]
 isinmask(s::Supercell{L,L´,Missing}, site, dn) where {L,L´} = true
 isinmask(s::Supercell{L,L´,<:OffsetArray}, site) where {L,L´} = s.mask[site]
 isinmask(s::Supercell{L,L´,Missing}, site) where {L,L´} = true
+
+issemibounded(sc::Supercell) where {L} = !iszero(sc.semibounded)
 
 #######################################################################
 # Superlattice
@@ -261,9 +293,11 @@ end
 
 function Base.show(io::IO, lat::Superlattice)
     i = get(io, :indent, "")
+    hassemi = issemibounded(lat.bravais)
     ioindent = IOContext(io, :indent => string(i, "  "))
     print(io, i, summary(lat), "\n",
-"$i  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))
+"$i  Bravais vectors : $(displayvectors(lat.bravais.matrix; digits = 6))", hassemi ? "
+$i    Semibounded   : $(display_as_tuple(findall(lat.bravais.semibounded)))" : "", "
 $i  Sublattices     : $(nsublats(lat))
 $i    Names         : $(displaynames(lat))
 $i    Sites         : $(display_as_tuple(sublatsites(lat))) --> $(nsites(lat)) total per unit cell\n")
@@ -287,24 +321,11 @@ function foreach_supersite(f::F, lat::Superlattice) where {F<:Function}
     return nothing
 end
 
+issemibounded(lat::Superlattice) where {L} = issemibounded(lat.supercell)
+
 #######################################################################
 # AbstractLattice interface
 #######################################################################
-# # find SVector type that can hold all orbital amplitudes in any lattice sites
-# orbitaltype(lat::AbstractLattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
-#     _orbitaltype(SVector{1,Tv}, lat.unitcell.orbitals...)
-# _orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
-#     (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
-# _orbitaltype(t::Type{SVector{N,Tv}}) where {N,Tv} = t
-# _orbitaltype(t::Type{SVector{1,Tv}}) where {Tv} = Tv
-
-# # find SMatrix type that can hold all matrix elements between lattice sites
-# blocktype(lat::AbstractLattice{E,L,T}, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
-#     _blocktype(orbitaltype(lat, Tv))
-# _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
-# _blocktype(::Type{S}) where {S<:Number} = S
-
-# numorbitals(lat::AbstractLattice) = length.(lat.unitcell.orbitals)
 
 numbertype(::AbstractLattice{E,L,T}) where {E,L,T} = T
 
@@ -352,15 +373,15 @@ sites(s::Int) = lat -> sites(lat, s)
 #######################################################################
 # supercell
 #######################################################################
-const TOOMANYITERS = 10^8
-
 """
     supercell(lat::AbstractLattice{E,L}, v::NTuple{L,Integer}...; region = missing)
     supercell(lat::AbstractLattice{E,L}, sc::SMatrix{L,L´,Int}; region = missing)
 
 Generates a `Superlattice` from an `L`-dimensional lattice `lat` with Bravais vectors
 `br´= br * sc`, where `sc::SMatrix{L,L´,Int}` is the integer supercell matrix with the `L´`
-vectors `v`s as columns. If no `v` are given, the superlattice will be bounded.
+vectors `v`s as columns. If no `v` are given, the superlattice will be bounded. If `lat` has
+semibounded axes, these cannot be mixed with any other axes (they can only be removed, kept
+intact or scaled by a factor, see below).
 
 Only sites at position `r` such that `region(r) == true` will be included in the supercell.
 If `region` is missing, a Bravais unit cell perpendicular to the `v` axes will be selected
@@ -436,15 +457,17 @@ supercell(lat::AbstractLattice, vecs::NTuple{L,Integer}...; region = missing) wh
 supercell(lat::AbstractLattice, s::SMatrix; region = missing) = _supercell(lat, s, region)
 
 function _supercell(lat::AbstractLattice{E,L}, factors::Vararg{Integer,L}) where {E,L,L´}
-    matrix = SMatrix{L,L,Int}(Diagonal(SVector(factors)))
+    scmatrix = SMatrix{L,L,Int}(Diagonal(SVector(factors)))
     sites = 1:nsites(lat)
     cells = CartesianIndices((i -> 0 : i - 1).(factors))
     mask = missing
-    supercell = Supercell(matrix, sites, cells, mask)
+    semibounded = supercell_semibounded(lat, scmatrix)
+    supercell = Supercell(scmatrix, sites, cells, mask, semibounded)
     return Superlattice(lat.bravais, lat.unitcell, supercell)
 end
 
 function _supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}, region) where {E,L,L´}
+    semibounded = supercell_semibounded(lat, scmatrix)
     brmatrix = lat.bravais.matrix
     regionfunc = region === missing ? ribbonfunc(brmatrix, scmatrix) : region
     in_supercell_func = is_perp_dir(scmatrix)
@@ -462,7 +485,7 @@ function _supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}, reg
             mask[i, dntup...] = in_supercell && regionfunc(r)
         end
     end
-    supercell = Supercell(scmatrix, 1:ns, cells, all(mask) ? missing : mask)
+    supercell = Supercell(scmatrix, 1:ns, cells, all(mask) ? missing : mask, semibounded)
     return Superlattice(lat.bravais, lat.unitcell, supercell)
 end
 
@@ -513,6 +536,24 @@ function supercell_cells(lat::Lattice{E,L}, regionfunc, in_supercell_func) where
     end
     c = CartesianIndices(iter)
     return c
+end
+
+supercell_semibounded(lat::Lattice, s::SMatrix) = supercell_semibounded(lat.bravais, s)
+function supercell_semibounded(b::Bravais, s::SMatrix{L,L´,Int}) where {L,L´}
+    lsb = b.semibounded
+    err = ArgumentError("Cannot mix semibounded axes in a supercell")
+    ssb = ntuple(Val(L´)) do i
+        vec_semi = s[lsb, i]
+        vec_other = s[(!).(lsb), i]
+        if iszero(vec_other)
+            count(!iszero, vec_semi) != 1 && throw(err)
+            return true
+        else
+            iszero(vec_semi) || throw(err)
+            return false
+        end
+    end
+    return SVector(ssb)
 end
 
 #######################################################################
@@ -598,7 +639,7 @@ function unitcell(lat::Superlattice)
     newoffsets = supercell_offsets(lat)
     newsites = supercell_sites(lat)
     unitcell = Unitcell(newsites, lat.unitcell.names, newoffsets)
-    bravais = lat.bravais * lat.supercell.matrix
+    bravais = Bravais(lat.bravais.matrix * lat.supercell.matrix, lat.supercell.semibounded)
     return Lattice(bravais, unitcell)
 end
 
@@ -615,4 +656,57 @@ function supercell_sites(lat::Superlattice)
     bravais = lat.bravais.matrix
     foreach_supersite((s, oldi, dn, newi) -> newsites[newi] = bravais * dn + oldsites[oldi], lat)
     return newsites
+end
+
+#######################################################################
+# semibounded
+#######################################################################
+"""
+    semibounded(lat::AbstractLattice, axes)
+
+Create an AbstractLattice like `lat` but with a specific set of semibound axes. These can be
+a boolean (i.e. all or none are semibounded), a tuple of booleans (one per axis) or a
+collection of axis indices to make semibounded
+
+    lat |> semibounded(axes)
+
+Function form equivalent to semibounded(lat, axes)
+
+# Examples
+```jldoctest
+julia> semibounded(LatticePresets.honeycomb(), 2)
+Lattice{2,2,Float64} : 2D lattice in 2D space
+  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+    Semibounded   : (2)
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Sites         : (1, 1) --> 2 total per unit cell
+
+julia> LatticePresets.honeycomb() |> supercell(4) |> semibounded((true, false))
+Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
+  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+  Sublattices     : 2
+    Names         : (:A, :B)
+    Sites         : (1, 1) --> 2 total per unit cell
+  Supercell{2,2} for 2D superlattice of the base 2D lattice
+    Supervectors  : ((4, 0), (0, 4))
+    Supersites    : 32
+    Semibounded   : (1)
+```
+"""
+semibounded(axes) = lat -> semibounded(lat, axes)
+
+function semibounded(lat::Lattice, axes = true)
+    matrix = lat.bravais.matrix
+    sb = sanitize_semibounded(axes, matrix)
+    br = Bravais(matrix, sb)
+    return Lattice(br, lat.unitcell)
+end
+
+function semibounded(lat::Superlattice, axes = true)
+    sc = lat.supercell
+    matrix = lat.bravais.matrix * sc.matrix
+    sb = sanitize_semibounded(axes, matrix)
+    scell = Supercell(sc.matrix, sc.sites, sc.cells, sc.mask, sb)
+    return Superlattice(lat.bravais, lat.unitcell, scell)
 end

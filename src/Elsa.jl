@@ -7,7 +7,7 @@ import Base: convert, iterate, ==, tail
 import SparseArrays: sparse!, mul!, getcolptr
 
 export sublat, bravais, lattice, hopping, onsite, hamiltonian, randomstate,
-       mul!, supercell, unitcell, bloch, bloch!, blochflat, blochflat!, sites
+       mul!, supercell, unitcell, semibounded, bloch, bloch!, sites
     #    unitlattice, combine, transform, transform!, bound,
     #    sitepositions, neighbors, bravaismatrix, marchingmesh
 # export MomentaKPM, dosKPM
@@ -19,6 +19,8 @@ export @SMatrix, @SVector, SMatrix, SVector
 # const nametype = string
 const NameType = Symbol
 const nametype = Symbol
+
+const TOOMANYITERS = 10^8
 
 include("iterators.jl")
 include("presets.jl")
