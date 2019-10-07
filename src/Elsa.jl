@@ -20,6 +20,8 @@ export @SMatrix, @SVector, SMatrix, SVector
 const NameType = Symbol
 const nametype = Symbol
 
+const TOOMANYITERS = 10^8
+
 include("iterators.jl")
 include("presets.jl")
 include("lattice.jl")

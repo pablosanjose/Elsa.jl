@@ -373,8 +373,6 @@ sites(s::Int) = lat -> sites(lat, s)
 #######################################################################
 # supercell
 #######################################################################
-const TOOMANYITERS = 10^8
-
 """
     supercell(lat::AbstractLattice{E,L}, v::NTuple{L,Integer}...; region = missing)
     supercell(lat::AbstractLattice{E,L}, sc::SMatrix{L,L´,Int}; region = missing)
