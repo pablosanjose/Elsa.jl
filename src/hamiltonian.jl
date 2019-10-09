@@ -33,7 +33,6 @@ Hamiltonian(lat::AbstractLattice, hs, field, orbs) =
 
 Base.show(io::IO, ham::Hamiltonian) = show(io, MIME("text/plain"), ham)
 function Base.show(io::IO, ::MIME"text/plain", ham::Hamiltonian)
-    slat = issuperlattice(ham.lattice)
     i = get(io, :indent, "")
     print(io, i, summary(ham), "\n",
 "$i  Bloch harmonics  : $(length(ham.harmonics)) ($(displaymatrixtype(ham)))
