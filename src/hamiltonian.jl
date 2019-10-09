@@ -18,7 +18,6 @@ struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
     lattice::LA
     harmonics::Vector{H}
     field::F
-    matrix::A
     orbitals::O
 end
 
@@ -30,7 +29,7 @@ function Hamiltonian(lat, hs::Vector{H}, field, orbs, n::Int, m::Int) where {L,M
     return Hamiltonian(lat, hs, field, orbs)
 end
 Hamiltonian(lat::AbstractLattice, hs, field, orbs) =
-    Hamiltonian(lat, hs, field, optimized_h0(hs), orbs)
+    Hamiltonian(lat, hs, field, orbs)
 
 Base.show(io::IO, ham::Hamiltonian) = show(io, MIME("text/plain"), ham)
 function Base.show(io::IO, ::MIME"text/plain", ham::Hamiltonian)
@@ -70,29 +69,6 @@ displayelements(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = "$N × $N blocks ($T)
 displayelements(::Type{T}) where {T} = "scalar ($T)"
 displayorbitals(h::Hamiltonian) =
     replace(replace(string(h.orbitals), "Symbol(\"" => ":"), "\")" => "")
-
-# work matrix to avoid reallocations when summing harmonics
-function optimized_h0(hs::Vector{HamiltonianHarmonic{L,M,A}}) where {L,M,A<:SparseMatrixCSC}
-    Tv = eltype(M)
-    h0 = first(hs)
-    n, m = size(h0.h)
-    iszero(h0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
-    nh = length(hs)
-    builder = SparseMatrixBuilder{M}(n, m)
-    for col in 1:m
-        for i in eachindex(hs)
-            h = hs[i].h
-            for p in nzrange(h, col)
-                v = i == 1 ? nonzeros(h)[p] : zero(M)
-                row = rowvals(h)[p]
-                pushtocolumn!(builder, row, v, false) # skips repeated rows
-            end
-        end
-        finalisecolumn!(builder)
-    end
-    ho = sparse(builder)
-    return ho
-end
 
 # Internal API #
 
@@ -295,7 +271,7 @@ hamiltonian(h::Hamiltonian) =
 
 (h::Hamiltonian)(phases...) = bloch(h, phases...)
 
-Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.field, Matrix(h.matrix))
+Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.field, h.orbitals)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
 Base.copy(h::Hamiltonian) = Hamiltonian(h.lattice, copy.(h.harmonics), h.field)
@@ -675,18 +651,10 @@ Overwrite `matrix` with the Bloch Hamiltonian matrix of `h`, for the specified B
 phases `ϕs`. In terms of Bloch wavevector `k`, `ϕs = k * bravais(h)`. If all `ϕs` are
 omitted, the intracell Hamiltonian is returned instead.
 
-    bloch!(h::Hamiltonian, ϕs::Real...)
-    bloch!(h::Hamiltonian, ϕs::NTuple{L,Real})
-    bloch!(h::Hamiltonian, ϕs::AbstractVector{Real})
+A suitable, non-initialized `matrix` can be obtained with `similar(h)`.
 
-Same as above, using the internal `h.matrix` as `matrix`. Care should be taken with aliasing
-using this syntax, as assigning `b1 = bloch!(h, ϕs₁)` and subsequently calling `bloch!`
-again with different phases, `b2 = bloch!(h, ϕs₂)`, would result in `b1 === b2`.
-For a copying version of `bloch!` without this caveat, see `bloch`.
-
-    h |> bloch!(ϕs...)
-
-Functional form, equivalent to `bloch!(h, ϕs...)`
+If `optimize!(h)` is called before the first call to `bloch!`, performance will increase by
+avoiding memory reshuffling.
 
 # Examples
 ```
@@ -699,30 +667,11 @@ julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch
 ```
 
 # See also:
-    bloch
-
+    bloch, optimize!
 """
-bloch!(phases...) = h -> bloch!(h, phases...)
-bloch!(h::Hamiltonian, ϕs...) = bloch!(h.matrix, h, ϕs...)
-bloch!(matrix, h::Hamiltonian, ϕs...) =
-    add_harmonics!(optimized_zerobloch!(matrix, h), h, ϕs...)
-
-# On first call, h.matrix is optimized, but not the first (zero, often largest) harmonic.
-function optimized_zerobloch!(matrix::A, h::Hamiltonian{<:Lattice,<:Any,<:Any,A}) where {L,M,A<:SparseMatrixCSC}
-    h0 = first(h.harmonics).h
-    if length(h0.nzval) != length(h.matrix.nzval) # first call, align first harmonic h0 with
-        copy!(h0.colptr, h.matrix.colptr)         # optimized h.matrix
-        copy!(h0.rowval, h.matrix.rowval)
-        copy!(h0.nzval,  h.matrix.nzval)
-        matrix === h.matrix || copy!(matrix, h.matrix)  # Also copy optimized h.matrix to matrix
-    else  # if h.matrix, assume it's dirty and overwrite. Otherwise copy first harmonic, already optimized
-        matrix === h.matrix ? copy!(h.matrix.nzval, h0.nzval) : copy!(matrix, h0)
-    end
-    return matrix
-end
-
-function optimized_zerobloch!(matrix::A, h::Hamiltonian{<:Lattice,<:Any,<:Any,A}) where {L,M,A<:Matrix}
+function bloch!(matrix::A, h::Hamiltonian{LA,L,M,A}, ϕs...) where {LA,L,M,A}
     copy!(matrix, first(h.harmonics).h)
+    return add_harmonics!(matrix, h, ϕs...)
 end
 
 add_harmonics!(zerobloch, h::Hamiltonian, ϕs::Number...) =
@@ -732,8 +681,6 @@ add_harmonics!(zerobloch, h::Hamiltonian, ϕs::Tuple) =
 add_harmonics!(zerobloch, h::Hamiltonian, ::SVector{0}) = zerobloch
 
 function add_harmonics!(zerobloch::A, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{L}) where {L,M,A<:SparseMatrixCSC}
-    (rowvals(h.matrix) == rowvals(zerobloch) && h.matrix.colptr == zerobloch.colptr) ||
-        throw(ArgumentError("Unaligned bloch matrices"))
     for ns in 2:length(h.harmonics)
         hh = h.harmonics[ns]
         hhmatrix = hh.h
@@ -772,8 +719,9 @@ Hamiltonian is returned instead.
 
 Functional forms of `bloch`, equivalent to `bloch(h, phases...)`
 
-Note: This function allocates a new matrix on each call. For a non-allocating version of
-`bloch`, see `bloch!`.
+This function allocates a new matrix on each call. For a non-allocating version of `bloch`,
+see `bloch!`. If `optimize!(h)` is called before the first call to `bloch`, performance will
+increase by avoiding memory reshuffling.
 
 # Examples
 ```
@@ -787,10 +735,53 @@ julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch
 
 # See also:
     bloch!
-
 """
 bloch(phases...) = h -> bloch(h, phases...)
-bloch(h::Hamiltonian, phases...) = bloch!(similar(h.matrix), h, phases...)
+bloch(h::Hamiltonian, phases...) = bloch!(similar(h), h, phases...)
+
+"""
+    similar(h::Hamiltonian)
+
+Create an uninitialized array of the same type of the Hamiltonian's matrix.
+"""
+Base.similar(h::Hamiltonian) = similar(h.harmonics[1].h)
+
+"""
+    optimize!(h::Hamiltonian)
+
+Prepare a sparse Hamiltonian `h` to increase the performance of subsequent calls to
+`bloch(h, ϕs...)` and `bloch!(matrix, h, ϕs...)` by minimizing memory reshufflings
+
+# See also:
+    bloch, bloch!
+"""
+function optimize!(ham::Hamiltonian{LA,L,M,A}) where {LA,L,M,A<:SparseMatrixCSC}
+    Tv = eltype(M)
+    h0 = first(ham.harmonics)
+    n, m = size(h0.h)
+    iszero(h0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
+    nh = length(ham.harmonics)
+    builder = SparseMatrixBuilder{M}(n, m)
+    for col in 1:m
+        for i in eachindex(ham.harmonics)
+            h = ham.harmonics[i].h
+            for p in nzrange(h, col)
+                v = i == 1 ? nonzeros(h)[p] : zero(M)
+                row = rowvals(h)[p]
+                pushtocolumn!(builder, row, v, false) # skips repeated rows
+            end
+        end
+        finalisecolumn!(builder)
+    end
+    ho = sparse(builder)
+    copy!(h0.h, ho) # Inject new structural zeros into zero harmonics
+    return ham
+end
+
+function optimize!(ham::Hamiltonian{LA,L,M,A}) where {LA,L,M,A<:AbstractMatrix}
+    @warn "Hamiltonian is not sparse. Nothing changed."
+    return ham
+end
 
 #######################################################################
 # Flattened bloch
