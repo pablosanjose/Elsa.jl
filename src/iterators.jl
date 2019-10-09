@@ -296,7 +296,7 @@ Base.eltype(::SparseMatrixReader{Tv,Ti}) where {Tv,Ti} = Tuple{Ti,Ti,Tv}
 
 Base.length(s::SparseMatrixReader) = nnz(s.matrix)
 
-function iterate(s::SparseMatrixReader, state = (1, 1))
+function Base.iterate(s::SparseMatrixReader, state = (1, 1))
     (ptr, col) = state
     ptr > length(s) && return nothing
     @inbounds while ptr > s.matrix.colptr[col + 1] - 1

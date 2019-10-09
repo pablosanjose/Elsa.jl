@@ -3,21 +3,14 @@ module Elsa
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays
       #FFTW, ProgressMeter, FillArrays
 
-import Base: convert, iterate, ==, tail
-import SparseArrays: sparse!, mul!, getcolptr
-
 export sublat, bravais, lattice, hopping, onsite, hamiltonian, randomstate,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!,
        sites
-    #    unitlattice, combine, transform, transform!, bound,
-    #    sitepositions, neighbors, bravaismatrix, marchingmesh
-# export MomentaKPM, dosKPM
+
 export LatticePresets, RegionPresets
 
 export @SMatrix, @SVector, SMatrix, SVector
 
-# const NameType = String
-# const nametype = string
 const NameType = Symbol
 const nametype = Symbol
 

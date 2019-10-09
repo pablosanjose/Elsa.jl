@@ -3,26 +3,14 @@
 # to instantiate types and convert between instances. (For parametric types, unless overridden,
 # you get an implicit internal constructor without parameters, so no need to define that externally)
 
-convert(::Type{T}, l::T) where T<:Tuple{Vararg{Sublat}} = l
-convert(::Type{Tuple{Vararg{Sublat{E,T}}}}, l::Tuple{Vararg{Sublat}}) where {E,T} = Sublat{E,T}.(l)
+Base.convert(::Type{T}, l::T) where T<:Tuple{Vararg{Sublat}} = l
+Base.convert(::Type{Tuple{Vararg{Sublat{E,T}}}}, l::Tuple{Vararg{Sublat}}) where {E,T} = Sublat{E,T}.(l)
 
-convert(::Type{T}, l::T) where T<:Sublat = l
-convert(::Type{T}, l::Sublat) where T<:Sublat = T(l)
+Base.convert(::Type{T}, l::T) where T<:Sublat = l
+Base.convert(::Type{T}, l::Sublat) where T<:Sublat = T(l)
 
-convert(::Type{T}, l::T) where T<:Bravais = l
-convert(::Type{T}, l::Bravais) where T<:Bravais = T(l)
-
-# convert(::Type{T}, l::T) where T<:System = l
-# convert(::Type{T}, l::System) where T<:System = T(l)
-
-# convert(::Type{T}, l::T) where T<:Operator = l
-# convert(::Type{T}, l::Operator) where T<:Operator = T(l)
-
-# convert(::Type{T}, l::T) where T<:Block = l
-# convert(::Type{T}, l::Block) where T<:Block = T(l)
-
-# convert(::Type{T}, l::T) where T<:Model = l
-# convert(::Type{T}, l::Model) where T<:Model = T(l)
+Base.convert(::Type{T}, l::T) where T<:Bravais = l
+Base.convert(::Type{T}, l::Bravais) where T<:Bravais = T(l)
 
 # Constructors for conversion
 
@@ -37,18 +25,6 @@ Base.promote_rule(::Type{Sublat{E1,T1}}, ::Type{Sublat{E2,T2}}) where {E1,E2,T1,
 
 Bravais{E,L,T}(b::Bravais) where {E,L,T} =
     Bravais(padtotype(b.matrix, SMatrix{E,L,T}))
-
-# System{E,L,T,Tv}(s::System) where {E,L,T,Tv} =
-#     System(convert(Lattice{E,L,T,Tv}, s.lattice), Operator{Tv,L}(s.hamiltonian),
-#            Operator{Tv,L}(s.velocity), s.sysinfo)
-
-# Operator{Tv,L}(o::Operator) where {Tv,L} =
-#     Operator{Tv,L}(o.matrix, o.intra, o.inters, o.boundary)
-
-# Block{Tv,L}(b::Block) where {Tv,L} =
-#     Block{Tv,L}(b.ndist, b.matrix, b.sysinfo, b.nlinks)
-
-# Model{Tv}(m::Model) where {Tv} = Model{Tv}(m.terms...)
 
 # Promotion
 

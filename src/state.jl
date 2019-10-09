@@ -140,10 +140,10 @@ maybe_wrapstate(sv, lat::Lattice) = sv
 #######################################################################
 # mul!
 #######################################################################
-# function mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = false) where {L,V,S<:SupercellState{L,V}}
+# function SparseArrays.mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = false) where {L,V,S<:SupercellState{L,V}}
 #     C = t.vector
 #     B = s.vector
-#     celliter = CartesianIndices(tail(axes(B)))
+#     celliter = CartesianIndices(Base.tail(axes(B)))
 #     cols = 1:size(first(ham.harmonics).h, 2)
 #     pinvint = pinvmultiple(s.supercell.matrix)
 #     zeroV = zero(V)
