@@ -1,19 +1,19 @@
-#######################################################################
-# SupercellState
-#######################################################################
-struct SupercellBloch{L,T,M,H<:Hamiltonian{<:Superlattice,L,M}}
-    hamiltonian::H
-    phases::SVector{L,T}
-end
+# #######################################################################
+# # SupercellState
+# #######################################################################
+# struct SupercellBloch{L,T,M,H<:Hamiltonian{<:Superlattice,L,M}}
+#     hamiltonian::H
+#     phases::SVector{L,T}
+# end
 
-Base.summary(h::SupercellBloch{L,T,M}) where {L,T,M} =
-    "SupercellBloch{$L,$(eltype(M))}: Bloch Hamiltonian matrix lazily defined on a supercell"
+# Base.summary(h::SupercellBloch{L,T,M}) where {L,T,M} =
+#     "SupercellBloch{$L,$(eltype(M))}: Bloch Hamiltonian matrix lazily defined on a supercell"
 
-function Base.show(io::IO, sb::SupercellBloch)
-    ioindent = IOContext(io, :indent => string("  "))
-    print(io, summary(sb), "\n  Phases          : $(Tuple(sb.phases))\n")
-    print(ioindent, sb.hamiltonian.lattice.supercell)
-end
+# function Base.show(io::IO, sb::SupercellBloch)
+#     ioindent = IOContext(io, :indent => string("  "))
+#     print(io, summary(sb), "\n  Phases          : $(Tuple(sb.phases))\n")
+#     print(ioindent, sb.hamiltonian.lattice.supercell)
+# end
 
 #######################################################################
 # SupercellState
