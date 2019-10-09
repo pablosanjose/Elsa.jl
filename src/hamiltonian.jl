@@ -653,8 +653,8 @@ omitted, the intracell Hamiltonian is returned instead.
 
 A suitable, non-initialized `matrix` can be obtained with `similar(h)`.
 
-If `optimize!(h)` is called before the first call to `bloch!`, performance will increase by
-avoiding memory reshuffling.
+If `optimize!(h)` is called on a sparse Hamiltonian `h` before the first call to `bloch!`,
+performance will increase by avoiding memory reshuffling.
 
 # Examples
 ```
@@ -720,8 +720,8 @@ Hamiltonian is returned instead.
 Functional forms of `bloch`, equivalent to `bloch(h, phases...)`
 
 This function allocates a new matrix on each call. For a non-allocating version of `bloch`,
-see `bloch!`. If `optimize!(h)` is called before the first call to `bloch`, performance will
-increase by avoiding memory reshuffling.
+see `bloch!`. If `optimize!(h)` is called on a sparse Hamiltonian `h` before the first call
+to `bloch`, performance will increase by avoiding memory reshuffling.
 
 # Examples
 ```
