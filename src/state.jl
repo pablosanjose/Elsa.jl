@@ -104,7 +104,7 @@ function SparseArrays.mul!(t::S, hb::SupercellBloch, s::S, α::Number = true, β
     # Add α * blochphase * h * source to target
     Threads.@threads for ic in cells
         i = Tuple(ic)
-        # isemptycell(s, i) && continue # good for performance? Doesn't seem so
+        # isemptycell(s, i) && continue # good for performance? No much
         for h in ham.harmonics
             olddn = h.dn + SVector(i)
             newdn = new_dn(olddn, pinvint)
@@ -128,10 +128,10 @@ function SparseArrays.mul!(t::S, hb::SupercellBloch, s::S, α::Number = true, β
     return t
 end
 
-function isemptycell(s::SupercellState, cell)
-    ismasked(s.supercell) && return false
-    @inbounds for i in size(s.supercell.mask, 1)
-        s.supercell.mask[i, cell...] && return false
-    end
-    return true
-end
+# function isemptycell(s::SupercellState, cell)
+#     ismasked(s.supercell) || return false
+#     @inbounds for i in size(s.supercell.mask, 1)
+#         s.supercell.mask[i, cell...] && return false
+#     end
+#     return true
+# end
