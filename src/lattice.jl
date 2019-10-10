@@ -275,6 +275,9 @@ $i  Supersites    : $(nsites(s))", hassemi ? "
 $i  Semibounded   : $(display_as_tuple(findall(s.semibounded)))" : "")
 end
 
+ismasked(s::Supercell{L,L´,<:OffsetArray})  where {L,L´} = true
+ismasked(s::Supercell{L,L´,Missing})  where {L,L´} = false
+
 isinmask(s::Supercell{L,L´,<:OffsetArray}, site, dn) where {L,L´} = s.mask[site, Tuple(dn)...]
 isinmask(s::Supercell{L,L´,Missing}, site, dn) where {L,L´} = true
 isinmask(s::Supercell{L,L´,<:OffsetArray}, site) where {L,L´} = s.mask[site]
@@ -352,6 +355,12 @@ nsublats(lat::AbstractLattice) = length(lat.unitcell.names)
 
 issuperlattice(lat::Lattice) = false
 issuperlattice(lat::Superlattice) = true
+
+ismasked(lat::Lattice) = false
+ismasked(lat::Superlattice) = ismasked(lat.supercell)
+
+maskranges(lat::Superlattice) = (1:nsites(lat), lat.supercell.cells.indices...)
+maskranges(lat::Lattice) = (1:nsites(lat),)
 
 # External API #
 
