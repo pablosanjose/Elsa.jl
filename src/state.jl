@@ -102,15 +102,14 @@ function SparseArrays.mul!(t::S, hb::SupercellBloch, s::S, α::Number = true, β
         β != 0 ? rmul!(C, β) : fill!(C, zeroV)
     end
     # Add α * blochphase * h * source to target
-    #@inbounds Threads.@threads 
-    for ic in cells
+    @inbounds Threads.@threads for ic in cells
         i = Tuple(ic)
         # isemptycell(s, i) && continue # good for performance? Doesn't seem so
         for h in ham.harmonics
             olddn = h.dn + SVector(i)
             newdn = new_dn(olddn, pinvint)
             j = Tuple(wrap_dn(olddn, newdn, s.supercell.matrix))
-            j in cells || continue # boundaries in unwrapped directions
+            CartesianIndex(j) in cells || continue # boundaries in unwrapped directions
             α´ = α * cis(phases' * newdn)
             nzv = nonzeros(h.h)
             rv = rowvals(h.h)
