@@ -12,13 +12,14 @@ HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Spa
 HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Matrix{M}} =
     HamiltonianHarmonic(dn, zeros(M, n, m))
 
-struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
+mutable struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
                    H<:HamiltonianHarmonic{L,M,A},F<:Union{Missing,Field},
                    O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}} <: AbstractArray{A,L}
     lattice::LA
     harmonics::Vector{H}
     field::F
     orbitals::O
+    isoptimized::Bool
 end
 
 function Hamiltonian(lat, hs::Vector{H}, field, orbs, n::Int, m::Int) where {L,M,H<:HamiltonianHarmonic{L,M}}
@@ -29,7 +30,7 @@ function Hamiltonian(lat, hs::Vector{H}, field, orbs, n::Int, m::Int) where {L,M
     return Hamiltonian(lat, hs, field, orbs)
 end
 Hamiltonian(lat::AbstractLattice, hs, field, orbs) =
-    Hamiltonian(lat, hs, field, orbs)
+    Hamiltonian(lat, hs, field, orbs, false)
 
 Base.show(io::IO, ham::Hamiltonian) = show(io, MIME("text/plain"), ham)
 function Base.show(io::IO, ::MIME"text/plain", ham::Hamiltonian)
@@ -641,22 +642,56 @@ bravais(ph::ParametricHamiltonian) = bravais(ph.hamiltonian.lattice)
 Base.eltype(::ParametricHamiltonian{H}) where {L,M,H<:Hamiltonian{L,M}} = M
 
 #######################################################################
-# Bloch routines
+# SupercellBlochSparse
 #######################################################################
-struct SupercellBloch{L,T,H<:Hamiltonian{<:Superlattice}}
-    hamiltonian::H
+struct SupercellBlochSparse{M,L,T,S<:Supercell,H<:HamiltonianHarmonic{<:Any,M,<:SparseMatrixCSC}} <: AbstractSparseMatrix{M,Int}
+    harmonics::Vector{H}
+    supercell::S
     phases::SVector{L,T}
 end
 
-Base.summary(h::SupercellBloch{L,T}) where {L,T} =
-    "SupercellBloch{$L)}: Bloch Hamiltonian matrix lazily defined on an $(L)D supercell"
-
-function Base.show(io::IO, sb::SupercellBloch)
-    ioindent = IOContext(io, :indent => string("  "))
-    print(io, summary(sb), "\n  Phases          : $(Tuple(sb.phases))\n")
-    print(ioindent, sb.hamiltonian.lattice.supercell)
+struct SuperColptr{S<:SupercellBlochSparse} <: AbstractVector{Int}
+    s::S
 end
 
+struct SuperNonzeros{M,S<:SupercellBlochSparse{M}} <: AbstractVector{M}
+    s::S
+end
+
+function SupercellBlochSparse(h::Hamiltonian{<:Superlattice,<:Any,<:SparseMatrixCSC}, ϕs...)
+    harmonics = sort(h.harmonics, by = h -> h.dn)
+    supercell = h.lattice.supercell
+    phases = toSVector(ϕs)
+    return SupercellBlochSparse(harmonics, supercell, phases)
+end
+
+Base.summary(h::SupercellBlochSparse{L,M}) where {L,M} =
+    "SupercellBlochSparse{$L,$(eltype(M))}: Bloch Hamiltonian matrix lazily defined on an $(L)D supercell"
+
+function Base.show(io::IO, sb::SupercellBlochSparse)
+    ioindent = IOContext(io, :indent => string("  "))
+    print(io, summary(sb), "\n  Phases          : $(Tuple(sb.phases))\n")
+end
+
+cartesianindex(i, s::Supercell) = CartesianIndices(maskranges(s))[i]
+linearindex(c::CartesianIndex, s::Supercell) =
+    LinearIndices(CartesianIndices(Base.IdentityUnitRange.(maskranges(s))))[s]
+
+struct SupercellColumnIterator{H<:HamiltonianHarmonic}
+    h::Vector{H}
+    col::Int
+end
+
+# API #
+
+Base.size(s::SupercellBlochSparse, i...) = size(first(s.harmonics).h)
+function SparseArrays.nzrange(s::SupercellBlochSparse, col)
+    
+end
+
+#######################################################################
+# Bloch routines
+#######################################################################
 """
     bloch!(matrix, h::Hamiltonian{<:Lattice}, ϕs::Real...)
     bloch!(matrix, h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real})
@@ -691,7 +726,7 @@ function bloch!(matrix::A, h::Hamiltonian{<:Lattice,L,M,A}, ϕs...) where {L,M,A
     return add_harmonics!(matrix, h, ϕs...)
 end
 
-bloch(h::Hamiltonian{<:Superlattice}, ϕs...) = SupercellBloch(h, toSVector(ϕs))
+bloch(h::Hamiltonian{<:Superlattice}, ϕs...) = SupercellBlochSparse(optimize!(h), toSVector(ϕs))
 
 add_harmonics!(zerobloch, h::Hamiltonian, ϕs::Number...) =
     add_harmonics!(zerobloch, h, toSVector(ϕs))
@@ -746,7 +781,7 @@ to `bloch`, performance will increase by avoiding memory reshuffling.
 
     bloch(h::Hamiltonian{<:Superlattice}, ϕs...)
 
-Build a `SupercellBloch` object that lazily implements the Bloch Hamiltonian in the
+Build a `SupercellBlochSparse` object that lazily implements the Bloch Hamiltonian in the
 `Superlattice` without actually building the matrix (e.g. for matrix-free diagonalization).
 
 # Examples

@@ -359,6 +359,10 @@ issuperlattice(lat::Superlattice) = true
 ismasked(lat::Lattice) = false
 ismasked(lat::Superlattice) = ismasked(lat.supercell)
 
+maskranges(lat::Lattice) = (1:nsites(lat),)
+maskranges(lat::Superlattice) = maskranges(lat.supercell)
+maskranges(s::Supercell) = (s.sites, s.cells.indices...)
+
 # External API #
 
 """

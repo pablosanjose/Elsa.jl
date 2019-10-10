@@ -11,9 +11,6 @@ SupercellState(lat::Superlattice{E,L,T};
       vector = OffsetArray{orbitaltype(lat, Tv)}(undef, maskranges(lat))) where {E,L,T,Tv} =
     SupercellState(vector, lat.supercell)
 
-maskranges(lat::Superlattice{E,L}) where {E,L} = (1:nsites(lat), lat.supercell.cells.indices...)
-maskranges(lat::Lattice{E,L}) where {E,L} = (1:nsites(lat),)
-
 displayeltype(s::SupercellState{V}) where {V<:Number} = V
 displayeltype(s::SupercellState{V}) where {T,N,V<:SVector{N,T}} = T
 
@@ -83,12 +80,13 @@ Base.copy(s::SupercellState) = SupercellState(copy(s.vector), s.supercell)
 Base.similar(s::SupercellState) = SupercellState(similar(s.vector),  s.supercell)
 Base.size(s::SupercellState, i...) = size(s.vector, i...)
 Base.length(s::SupercellState) = length(s.vector)
-Base.getindex(s::SupercellState, i...) = getindex(s.vector, i...)
+@inline Base.getindex(s::SupercellState, i...) = getindex(s.vector, i...)
 
 ######################################################################
 # mul!
 ######################################################################
-function SparseArrays.mul!(t::S, hb::SupercellBloch, s::S, α::Number = true, β::Number = false) where {V,S<:SupercellState{V}}
+function SparseArrays.mul!(t::S, hb::SupercellBlochSparse, s::S, 
+                           α::Number = true, β::Number = false) where {V,S<:SupercellState{V}}
     C = t.vector
     B = s.vector
     ham = hb.hamiltonian
