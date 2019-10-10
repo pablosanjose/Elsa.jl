@@ -1,7 +1,7 @@
 #######################################################################
-# SupercellState
+# States can be a simple Vector (for <:Lattice) or a SupercellState
 #######################################################################
-struct SupercellState{V,S<:Supercell,A<:OffsetArray{V}}
+struct SupercellState{V,S<:Supercell,A<:OffsetArray{V}} <: AbstractVector{V}
     vector::A
     supercell::S
 end
@@ -20,16 +20,35 @@ displayeltype(s::SupercellState{V}) where {T,N,V<:SVector{N,T}} = T
 displayorbsize(s::SupercellState{V}) where {V<:Number} = 1
 displayorbsize(s::SupercellState{V}) where {T,N,V<:SVector{N,T}} = N
 
-Base.show(io::IO, s::SupercellState{V,S}) where {V,L,L´,S<:Supercell{L,L´}} =
+Base.show(io::IO, s::SupercellState) = show(io, MIME("text/plain"), s)
+Base.show(io::IO, ::MIME"text/plain", s::SupercellState{V,S}) where {V,L,L´,S<:Supercell{L,L´}} =
     print(io,
 "SupercellState{$L} : state of an $(L)D Superlattice
   Element type     : $(displayeltype(s))
   Max orbital size : $(displayorbsize(s))
   Sites            : $(nsites(s.supercell))")
 
-Base.copy!(t::S, s::S) where {S<:SupercellState} = SupercellState(copy!(t.vector, s.vector), s.supercell)
-Base.copy(s::SupercellState) = SupercellState(copy(s.vector), s.supercell)
-Base.similar(s::SupercellState) = SupercellState(similar(s.vector),  s.supercell)
+function floatsorbs(V::Type{<:SVector}, T)
+    n, r = divrem(sizeof(eltype(V)), sizeof(T))
+    N = length(V) # orbitals
+    r == 0 || throw(
+        error("Unexpected error: cannot reinterpret orbital type $V as a number of floats"))
+    return n, N
+end
+
+function floatsorbs(V::Type{<:Number}, T)
+    n, r = divrem(sizeof(V), sizeof(T))
+    N = 1 # orbitals
+    r == 0 || throw(
+        error("Unexpected error: cannot reinterpret orbital type $V as a number of floats"))
+    return n, N
+end
+
+function maybe_wrapstate(sv, lat::Superlattice)
+    o = OffsetArray(sv, maskranges(lat))
+    return SupercellState(o, lat.supercell)
+end
+maybe_wrapstate(sv, lat::Lattice) = sv
 
 # External API #
 
@@ -59,109 +78,61 @@ function randomstate(h::Hamiltonian{LA}; type::Type{Tv} = Complex{T}) where {E,L
     return maybe_wrapstate(sv, lat)
 end
 
-# # Auxiliary #
+Base.copy!(t::S, s::S) where {S<:SupercellState} = SupercellState(copy!(t.vector, s.vector), s.supercell)
+Base.copy(s::SupercellState) = SupercellState(copy(s.vector), s.supercell)
+Base.similar(s::SupercellState) = SupercellState(similar(s.vector),  s.supercell)
+Base.size(s::SupercellState, i...) = size(s.vector, i...)
+Base.length(s::SupercellState) = length(s.vector)
+Base.getindex(s::SupercellState, i...) = getindex(s.vector, i...)
 
-# function randomstate2(lat::Lattice{E,L,T}; type::Type{Tv} = Complex{T}) where {E,L,T,Tv}
-#     v = maskedrand(lat, type, 1:nsites(lat))
-#     return v
-# end
-
-# function randomstate2(lat::Superlattice{E,L,T}; type::Type{Tv} = Complex{T}) where {E,L,T,Tv}
-#     v = maskedrand(lat, type, cellmaskaxes(lat)...)
-#     return SupercellState(v, lat.supercell)
-# end
-
-# function maskedrand(lat, type, siteiter, celliter...)
-#     V = orbitaltype(lat, type)
-#     lcell = length.(celliter)
-#     lsite = length(siteiter)
-#     v = rand(V, lsite, lcell...)
-#     norbs = length.(lat.unitcell.orbitals)
-#     for c in CartesianIndices(lcell), s in 1:nsublats(lat)
-#         norb = norbs[s]
-#         for j in siterange(lat, s)
-#             v[j, Tuple(c)...]
-#             # v[j, Tuple(c)...] = mask(v[j, Tuple(c)...], norb)
-#             # v[j, Tuple(c)...] *= mask(V, norb)
-#         end
-#     end
-#     # rmul!(v, inv(norm(v)))
-#     # return OffsetArray(v, siteiter, celliter...)
-# end
-
-# mask(::Type{SVector{L,T}}, norb) where {L,T} =
-#     SMatrix{L,L,T}(Diagonal(SVector(ntuple(i -> i > norb ? zero(T) : one(T), Val(L)))))
-# mask(::Type{T}, norb) where {T<:Number} = one(T)
-# mask(s::SVector{L,T}, norb) where {L,T} =
-#     SVector(ntuple(i -> i > norb ? zero(T) : s[i], Val(L)))
-# mask(s::Number, norb) = s
-
-function floatsorbs(V::Type{<:SVector}, T)
-    n, r = divrem(sizeof(eltype(V)), sizeof(T))
-    N = length(V) # orbitals
-    r == 0 || throw(
-        error("Unexpected error: cannot reinterpret orbital type $V as a number of floats"))
-    return n, N
-end
-
-function floatsorbs(V::Type{<:Number}, T)
-    n, r = divrem(sizeof(V), sizeof(T))
-    N = 1 # orbitals
-    r == 0 || throw(
-        error("Unexpected error: cannot reinterpret orbital type $V as a number of floats"))
-    return n, N
-end
-
-function maybe_wrapstate(sv, lat::Superlattice)
-    o = OffsetArray(sv, maskranges(lat))
-    return SupercellState(o, lat.supercell)
-end
-maybe_wrapstate(sv, lat::Lattice) = sv
-
-#######################################################################
+######################################################################
 # mul!
-#######################################################################
-# function SparseArrays.mul!(t::S, ham::Hamiltonian{L}, s::S, α::Number = true, β::Number = false) where {L,V,S<:SupercellState{L,V}}
-#     C = t.vector
-#     B = s.vector
-#     celliter = CartesianIndices(Base.tail(axes(B)))
-#     cols = 1:size(first(ham.harmonics).h, 2)
-#     pinvint = pinvmultiple(s.supercell.matrix)
-#     zeroV = zero(V)
-#     # Scale target by β
-#     if β != 1
-#         β != 0 ? rmul!(C, β) : fill!(C, zeroV)
-#     end
-#     # Add α * blochphase * h * source to target
-#     @inbounds Threads.@threads for ic in celliter
-#         i = Tuple(ic)
-#         # isemptycell(s, i) && continue # good for performance? Check
-#         for h in ham.harmonics
-#             olddn = h.dn + SVector(i)
-#             newdn = new_dn(olddn, pinvint)
-#             j = Tuple(wrap_dn(olddn, newdn, s.supercell.matrix))
-#             α´ = α * cis(s.phases' * newdn)
-#             nzv = nonzeros(h.h)
-#             rv = rowvals(h.h)
-#             for col in cols
-#                 αxj = B[col, i...] * α´
-#                 for p in nzrange(h.h, col)
-#                     C[rv[p], j...] += applyfield(ham.field, nzv[p], rv[p], col, h.dn) * αxj
-#                 end
-#             end
-#         end
-#     end
-#     # Filter out sites not in supercell
-#     @simd for j in eachindex(t.vector)
-#         @inbounds isinmask(s.supercell, j) || (t.vector[j] = zeroV)
-#     end
-#     return t
-# end
+######################################################################
+function SparseArrays.mul!(t::S, hb::SupercellBloch, s::S, α::Number = true, β::Number = false) where {V,S<:SupercellState{V}}
+    C = t.vector
+    B = s.vector
+    ham = hb.hamiltonian
+    phases = hb.phases
+    cells = s.supercell.cells
+    cols = 1:size(first(ham.harmonics).h, 2)
+    pinvint = pinvmultiple(s.supercell.matrix)
+    zeroV = zero(V)
+    # Scale target by β
+    if β != 1
+        β != 0 ? rmul!(C, β) : fill!(C, zeroV)
+    end
+    # Add α * blochphase * h * source to target
+    #@inbounds Threads.@threads 
+    for ic in cells
+        i = Tuple(ic)
+        # isemptycell(s, i) && continue # good for performance? Doesn't seem so
+        for h in ham.harmonics
+            olddn = h.dn + SVector(i)
+            newdn = new_dn(olddn, pinvint)
+            j = Tuple(wrap_dn(olddn, newdn, s.supercell.matrix))
+            j in cells || continue # boundaries in unwrapped directions
+            α´ = α * cis(phases' * newdn)
+            nzv = nonzeros(h.h)
+            rv = rowvals(h.h)
+            for col in cols
+                αxj = B[col, i...] * α´
+                for p in nzrange(h.h, col)
+                    C[rv[p], j...] += applyfield(ham.field, nzv[p], rv[p], col, h.dn) * αxj
+                end
+            end
+        end
+    end
+    # Filter out sites not in supercell
+    @simd for j in eachindex(t.vector)
+        @inbounds isinmask(s.supercell, j) || (t.vector[j] = zeroV)
+    end
+    return t
+end
 
-# function isemptycell(s::SupercellState, cell)
-#     ismasked(s.supercell) && return false
-#     @inbounds for i in size(s.supercell.mask, 1)
-#         s.supercell.mask[i, cell...] && return false
-#     end
-#     return true
-# end
+function isemptycell(s::SupercellState, cell)
+    ismasked(s.supercell) && return false
+    @inbounds for i in size(s.supercell.mask, 1)
+        s.supercell.mask[i, cell...] && return false
+    end
+    return true
+end

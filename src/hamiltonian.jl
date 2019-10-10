@@ -643,13 +643,13 @@ Base.eltype(::ParametricHamiltonian{H}) where {L,M,H<:Hamiltonian{L,M}} = M
 #######################################################################
 # Bloch routines
 #######################################################################
-struct SupercellBloch{L,T,M,H<:Hamiltonian{<:Superlattice,L,M}}
+struct SupercellBloch{L,T,H<:Hamiltonian{<:Superlattice}}
     hamiltonian::H
     phases::SVector{L,T}
 end
 
-Base.summary(h::SupercellBloch{L,T,M}) where {L,T,M} =
-    "SupercellBloch{$L,$(eltype(M))}: Bloch Hamiltonian matrix lazily defined on a supercell"
+Base.summary(h::SupercellBloch{L,T}) where {L,T} =
+    "SupercellBloch{$L)}: Bloch Hamiltonian matrix lazily defined on an $(L)D supercell"
 
 function Base.show(io::IO, sb::SupercellBloch)
     ioindent = IOContext(io, :indent => string("  "))
@@ -697,8 +697,9 @@ add_harmonics!(zerobloch, h::Hamiltonian, ϕs::Number...) =
     add_harmonics!(zerobloch, h, toSVector(ϕs))
 add_harmonics!(zerobloch, h::Hamiltonian, ϕs::Tuple) =
     add_harmonics!(zerobloch, h, toSVector(ϕs))
-add_harmonics!(zerobloch, h::Hamiltonian, ::SVector{0}) = zerobloch
 
+add_harmonics!(zerobloch::A, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{0}) where {L,M,A<:SparseMatrixCSC} =
+    zerobloch
 function add_harmonics!(zerobloch::A, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{L}) where {L,M,A<:SparseMatrixCSC}
     for ns in 2:length(h.harmonics)
         hh = h.harmonics[ns]
