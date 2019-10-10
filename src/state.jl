@@ -124,11 +124,3 @@ function SparseArrays.mul!(t::S, hb::SupercellBloch, s::S, α::Number = true, β
     end
     return t
 end
-
-# function isemptycell(s::SupercellState, cell)
-#     ismasked(s.supercell) || return false
-#     @inbounds for i in size(s.supercell.mask, 1)
-#         s.supercell.mask[i, cell...] && return false
-#     end
-#     return true
-# end
