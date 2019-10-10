@@ -10,7 +10,7 @@ struct Mesh{D,V,S} <: AbstractMesh{D}   # D is dimension of parameter space
     simplices::S                        # Iterable simplex container (generator, vector,...)
 end
 
-Mesh{D}(vertices::V, adjmat, simplices::GT) where {D,V,GT} = Mesh{D,V,GT}(vertices, adjmat, simplices)
+Mesh{D}(vertices::V, adjmat, simplices::S) where {D,V,S} = Mesh{D,V,S}(vertices, adjmat, simplices)
 
 Base.show(io::IO, mesh::Mesh{D}) where {D} = print(io,
 "Mesh{$D}: mesh in $D-dimensional space
@@ -18,11 +18,18 @@ Base.show(io::IO, mesh::Mesh{D}) where {D} = print(io,
   Edges     : $(nedges(mesh))
   Simplices : $(nsimplices(mesh))")
 
-nvertices(m::Mesh) = length(m.vertices)
+# nvertices(m::Mesh) = length(m.vertices)
 
-nsimplices(m::Mesh) = length(m.simplices)
+# nsimplices(m::Mesh) = length(m.simplices)
 
-nedges(m::Mesh) = nnz(m.adjmat)
+# nedges(m::Mesh) = nnz(m.adjmat)
+
+vertices(m::Mesh) = m.vertices
+
+edges(m::Mesh, src) = nzrange(m.adjmat, src)
+
+destination(m::Mesh, edge) = rowvals(m.adjmat)[edge]
+
 
 ######################################################################
 # Special meshes

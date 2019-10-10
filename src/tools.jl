@@ -115,7 +115,7 @@ end
 
 # allorderedpairs(v) = [(i, j) for i in v, j in v if i >= j]
 
-# # Like copyto! but with potentially different tensor orders
+# # Like copyto! but with potentially different tensor orders (taken from Base.copyto!)
 # function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
 #                     src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
 #     isempty(Rdest) && return dest

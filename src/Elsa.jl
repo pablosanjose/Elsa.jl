@@ -1,6 +1,7 @@
 module Elsa
 
-using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays
+using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
+      ProgressMeter
       #FFTW, ProgressMeter, FillArrays
 
 export sublat, bravais, lattice, hopping, onsite, hamiltonian, randomstate,
@@ -27,8 +28,8 @@ include("state.jl")
 # include("system.jl")
 # include("system_methods.jl")
 # include("KPM.jl")
-# include("mesh.jl")
-# include("bandstructure.jl")
+include("mesh.jl")
+include("bandstructure.jl")
 include("convert.jl")
 include("tools.jl")
 

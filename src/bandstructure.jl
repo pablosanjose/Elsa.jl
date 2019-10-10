@@ -1,40 +1,60 @@
 #######################################################################
-# Spectrum
+# Spectrum and Bandstructure
 #######################################################################
-
-struct Spectrum{D,Tv,MK<:Mesh{D},ME<:Mesh{D}}   # D is dimension of parameter space
-    eigvecs::Array{Tv,3}
-    eigvals::Matrix{Tv}
-    mesh::MK
-    bands::Vector{ME}
+struct Spectrum{M,T}
+    states::Matrix{M}
+    energies::Vector{T}
 end
 
-function spectrum(hfunc::Function, argmesh::Mesh; 
-                  levels::Union{Int,Missing} = missing, degtol = sqrt(eps()), 
-                  randomshift = missing, kw...)
-    hsample = hfunc(first(argmesh.verts)...)
-    Tv = eltype(hsample)
-    dimh = ψlen = size(hsample, 1)
-    nϵ = levels === missing ? dimh : levels
-    nk = nvertices(argmesh)
-    eigvals = Matrix{Tv}(undef, (nϵ, nk))
-    eigvecs = Array{Tv,3}(undef, (ψlen, nϵ, nk))
-    hwork = Matrix{Tv}(undef, (dimh, dimh))
-    @showprogress "Diagonalising: " for (n,k) in enumerate(argmesh.verts)
-        (ϵk, ψk) = _spectrum(hfunc(k...), hwork; levels = nϵ, kw...)
-        # sort_spectrum!(energies_nk, states_nk, ordering)
-        # resolve_degeneracies!(ϵk, ψk, vfunc, k, degtol)
-        copyslice!(eigvals, CartesianIndices((1:nϵ, n:n)),
-                   ϵk,      CartesianIndices(1:nϵ))
-        copyslice!(eigvecs, CartesianIndices((1:ψlen, 1:nϵ, n:n)),
-                   ψk,      CartesianIndices((1:ψlen, 1:nϵ)))
+struct Band{D,M,T}
+    states::Matrix{Union{M,Missing}}
+    energies::Vector{Union{T,Missing}}
+    mesh::Mesh{D}
+end
+
+struct Bandstructure{D,M,T}   # D is dimension of parameter space
+    bands::Vector{Band{D,M,T}}
+    mesh::Mesh{D}
+end
+
+# API #
+
+function bandstructure(h::Hamiltonian{<:Lattice,<:Any,M}, mesh::Mesh{D};
+                       levels = missing, degtol = sqrt(eps()), minprojection = 0.5, kw...) where {M,D}
+    T = eltype(M)
+    nϵ = levels === missing ? size(h, 1) : levels
+    dimh = size(h, 1)
+    nk = nvertices(mesh)
+    ψks = Vector{Matrix{M}}(undef, nk)
+    ϵks = Vector{Vector{T}}(undef, nk)
+    hwork = similar(h)
+    #@showprogress "Diagonalising: "
+    for (n, ϕs) in enumerate(vertices(mesh))
+        (ϵk, ψk) = _spectrum(bloch!(hwork, h, ϕs...); levels = nϵ, kw...)
+        ψks[n] = ψk
+        ϵks[n] = ϵk
+    end
+    bands = Band{D,M,T}[Band(zeros(missing, nk, dimh), zeros(missing, nk), mesh) for _ in nϵ]
+    #@showprogress "Connecting bands: "
+    for src in eachindex(vertices(mesh)), edge in edges(mesh, src)
+        dst = destination(mesh, edge)
+        ψk = ψks[dst]
+        ϵk = ϵks[dst]
+        for band in bands
+            proj, index = findmax(abs.(band.states[src]' * ψk))
+            if proj > minprojection
+                copyto!(band.states, CartesianIndices(dst:dst, axes(band.states, 2)),
+                        ψk, CartesianIndices((axes(ψk, 1), index:index)))
+                band.energies[dst] = ϵk[index]
+            end
+        end
     end
 end
 
-function _spectrum(h, hwork; levels = 2, method = missing, kw...)
-    if method === :exact || method === missing && (size(h, 1) < 129 || levels/size(h,1) > 0.2)
-        s = spectrum_direct(h, hwork; levels = levels, kw...)
-    elseif method === :arnoldi
+function _spectrum(h; levels = 2, method = missing, kw...)
+    if method === :exact
+        s = spectrum_direct(h; levels = levels, kw...)
+    elseif method === :arpack
         s = spectrum_arpack(h; levels = levels, kw...)
     else
         throw(ArgumentError("Unknown method. Choose between :arnoldi or :exact"))
@@ -43,18 +63,66 @@ function _spectrum(h, hwork; levels = 2, method = missing, kw...)
 end
 
 function spectrum_direct(h, hwork; levels = 2, kw...)
-    hwork .= h
-    dimh = size(h, 1)
-    range = ((dimh - levels)÷2 + 1):((dimh + levels)÷2)
-    ee = eigen!(Hermitian(hwork), range, kw...)
+    ee = eigen!(h, range, kw...)
     energies, states = ee.values, ee.vectors
     return (energies, states)
 end
 
 function spectrum_arpack(h; levels = 2, sigma = 1.0im, kw...)
     (energies, states, _) = eigs(h; sigma = sigma, nev = levels, kw...)
-    return (real.(energies), states)
+    return (energies, states)
 end
+
+#######################################################################
+# Old
+#######################################################################
+
+# function spectrum(hfunc::Function, argmesh::Mesh;
+#                   levels::Union{Int,Missing} = missing, degtol = sqrt(eps()),
+#                   randomshift = missing, kw...)
+#     hsample = hfunc(first(argmesh.verts)...)
+#     Tv = eltype(hsample)
+#     dimh = ψlen = size(hsample, 1)
+#     nϵ = levels === missing ? dimh : levels
+#     nk = nvertices(argmesh)
+#     eigvals = Matrix{Tv}(undef, (nϵ, nk))
+#     eigvecs = Array{Tv,3}(undef, (ψlen, nϵ, nk))
+#     hwork = Matrix{Tv}(undef, (dimh, dimh))
+#     @showprogress "Diagonalising: " for (n,k) in enumerate(argmesh.verts)
+#         (ϵk, ψk) = _spectrum(hfunc(k...), hwork; levels = nϵ, kw...)
+#         # sort_spectrum!(energies_nk, states_nk, ordering)
+#         # resolve_degeneracies!(ϵk, ψk, vfunc, k, degtol)
+#         copyslice!(eigvals, CartesianIndices((1:nϵ, n:n)),
+#                    ϵk,      CartesianIndices(1:nϵ))
+#         copyslice!(eigvecs, CartesianIndices((1:ψlen, 1:nϵ, n:n)),
+#                    ψk,      CartesianIndices((1:ψlen, 1:nϵ)))
+#     end
+# end
+
+# function _spectrum(h, hwork; levels = 2, method = missing, kw...)
+#     if method === :exact || method === missing && (size(h, 1) < 129 || levels/size(h,1) > 0.2)
+#         s = spectrum_direct(h, hwork; levels = levels, kw...)
+#     elseif method === :arnoldi
+#         s = spectrum_arpack(h; levels = levels, kw...)
+#     else
+#         throw(ArgumentError("Unknown method. Choose between :arnoldi or :exact"))
+#     end
+#     return s
+# end
+
+# function spectrum_direct(h, hwork; levels = 2, kw...)
+#     hwork .= h
+#     dimh = size(h, 1)
+#     range = ((dimh - levels)÷2 + 1):((dimh + levels)÷2)
+#     ee = eigen!(Hermitian(hwork), range, kw...)
+#     energies, states = ee.values, ee.vectors
+#     return (energies, states)
+# end
+
+# function spectrum_arpack(h; levels = 2, sigma = 1.0im, kw...)
+#     (energies, states, _) = eigs(h; sigma = sigma, nev = levels, kw...)
+#     return (real.(energies), states)
+# end
 
 resolve_degeneracies!(energies, states, vfunc::Missing, kn, degtol) = nothing
 function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}, degtol) where {L}
