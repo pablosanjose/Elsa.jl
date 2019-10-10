@@ -88,10 +88,6 @@ _blocktype(::Type{S}) where {S<:Number} = S
 
 blocktype(h::Hamiltonian{LA,L,M}) where {LA,L,M} = M
 
-isnumblocktype(h::Hamiltonian) = isnumblocktype(blocktype(h))
-isnumblocktype(h::Number) = true
-isnumblocktype(h) = false
-
 function nhoppings(ham::Hamiltonian)
     count = 0
     for h in ham.harmonics
