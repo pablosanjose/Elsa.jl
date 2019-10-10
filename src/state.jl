@@ -102,7 +102,7 @@ function SparseArrays.mul!(t::S, hb::SupercellBloch, s::S, α::Number = true, β
         β != 0 ? rmul!(C, β) : fill!(C, zeroV)
     end
     # Add α * blochphase * h * source to target
-    @inbounds Threads.@threads for ic in cells
+    Threads.@threads for ic in cells
         i = Tuple(ic)
         # isemptycell(s, i) && continue # good for performance? Doesn't seem so
         for h in ham.harmonics
@@ -114,9 +114,9 @@ function SparseArrays.mul!(t::S, hb::SupercellBloch, s::S, α::Number = true, β
             nzv = nonzeros(h.h)
             rv = rowvals(h.h)
             for col in cols
-                αxj = B[col, i...] * α´
+                @inbounds αxj = B[col, i...] * α´
                 for p in nzrange(h.h, col)
-                    C[rv[p], j...] += applyfield(ham.field, nzv[p], rv[p], col, h.dn) * αxj
+                    @inbounds C[rv[p], j...] += applyfield(ham.field, nzv[p], rv[p], col, h.dn) * αxj
                 end
             end
         end
