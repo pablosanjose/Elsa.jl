@@ -11,9 +11,6 @@ SupercellState(lat::Superlattice{E,L,T};
       vector = OffsetArray{orbitaltype(lat, Tv)}(undef, maskranges(lat))) where {E,L,T,Tv} =
     SupercellState(vector, lat.supercell)
 
-maskranges(lat::Superlattice{E,L}) where {E,L} = (1:nsites(lat), lat.supercell.cells.indices...)
-maskranges(lat::Lattice{E,L}) where {E,L} = (1:nsites(lat),)
-
 displayeltype(s::SupercellState{V}) where {V<:Number} = V
 displayeltype(s::SupercellState{V}) where {T,N,V<:SVector{N,T}} = T
 

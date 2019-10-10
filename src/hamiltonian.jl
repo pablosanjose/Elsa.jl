@@ -28,8 +28,6 @@ function Hamiltonian(lat, hs::Vector{H}, field, orbs, n::Int, m::Int) where {L,M
     end
     return Hamiltonian(lat, hs, field, orbs)
 end
-Hamiltonian(lat::AbstractLattice, hs, field, orbs) =
-    Hamiltonian(lat, hs, field, orbs)
 
 Base.show(io::IO, ham::Hamiltonian) = show(io, MIME("text/plain"), ham)
 function Base.show(io::IO, ::MIME"text/plain", ham::Hamiltonian)
