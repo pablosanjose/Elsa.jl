@@ -5,30 +5,33 @@
 abstract type AbstractMesh{D} end
 
 struct Mesh{D,V,S} <: AbstractMesh{D}   # D is dimension of parameter space
-    vertices::V                         # Iterable vertex container (generator, vector,...)
+    vertices::V                         # Iterable vertex container (generator, vector,...) -> SVector{E,T}
     adjmat::SparseMatrixCSC{Bool,Int}   # Directed graph: only dest > src
-    simplices::S                        # Iterable simplex container (generator, vector,...)
+    simplices::S                        # Iterable simplex container (generator, vector,...) -> NTuple{D+1,Int}
 end
 
 Mesh{D}(vertices::V, adjmat, simplices::S) where {D,V,S} = Mesh{D,V,S}(vertices, adjmat, simplices)
 
-Base.show(io::IO, mesh::Mesh{D}) where {D} = print(io,
-"Mesh{$D}: mesh in $D-dimensional space
-  Vertices  : $(nvertices(mesh))
-  Edges     : $(nedges(mesh))
-  Simplices : $(nsimplices(mesh))")
+function Base.show(io::IO, mesh::Mesh{D}) where {D}
+    i = get(io, :indent, "")
+    print(io,
+"$(i)Mesh{$D}: mesh of a $D-dimensional manifold
+$i  Vertices   : $(nvertices(mesh))
+$i  Edges      : $(nedges(mesh))
+$i  Simplices  : $(nsimplices(mesh))")
+end
 
-# nvertices(m::Mesh) = length(m.vertices)
+nvertices(m::Mesh) = length(m.vertices)
 
-# nsimplices(m::Mesh) = length(m.simplices)
+nsimplices(m::Mesh) = length(m.simplices)
 
-# nedges(m::Mesh) = nnz(m.adjmat)
+nedges(m::Mesh) = nnz(m.adjmat)
 
 vertices(m::Mesh) = m.vertices
 
 edges(m::Mesh, src) = nzrange(m.adjmat, src)
 
-destination(m::Mesh, edge) = rowvals(m.adjmat)[edge]
+edgedest(m::Mesh, edge) = rowvals(m.adjmat)[edge]
 
 
 ######################################################################

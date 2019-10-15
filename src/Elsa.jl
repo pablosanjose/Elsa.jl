@@ -1,12 +1,12 @@
 module Elsa
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      ProgressMeter
+      ProgressMeter, Arpack
       #FFTW, ProgressMeter, FillArrays
 
 export sublat, bravais, lattice, hopping, onsite, hamiltonian, randomstate,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!,
-       sites
+       sites, bandstructure
 
 export LatticePresets, RegionPresets
 

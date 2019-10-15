@@ -6,21 +6,37 @@ struct Spectrum{M,T}
     energies::Vector{T}
 end
 
-struct Band{D,M,T}
+struct Band{M,T,D,MD<:Mesh{D}}
     states::Matrix{Union{M,Missing}}
     energies::Vector{Union{T,Missing}}
-    mesh::Mesh{D}
+    mesh::MD
 end
 
-struct Bandstructure{D,M,T}   # D is dimension of parameter space
-    bands::Vector{Band{D,M,T}}
-    mesh::Mesh{D}
+function Band{M,T}(mesh::Mesh, dimh::Int) where {M,T}
+    nk = nvertices(mesh)
+    states = Union{M,Missing}[missing for _ in 1:dimh, _ in 1:nk]
+    energies = Union{T,Missing}[missing for _ in 1:nk]
+    return Band(states, energies, mesh)
+end
+
+struct Bandstructure{M,T,D,MD<:Mesh{D}}   # D is dimension of parameter space
+    bands::Vector{Band{M,T,D,MD}}
+    mesh::MD
+end
+
+function Base.show(io::IO, b::Bandstructure{M,T,D}) where {M,T,D}
+    ioindent = IOContext(io, :indent => string("  "))
+    print(io,
+"Bandstructure: bands for a $(D)D hamiltonian
+  Bands        : $(length(b.bands))
+  Element type : $(displayelements(M))")
+    print(ioindent, "\n", b.mesh)
 end
 
 # API #
 
-function bandstructure(h::Hamiltonian{<:Lattice,<:Any,M}, mesh::Mesh{D};
-                       levels = missing, degtol = sqrt(eps()), minprojection = 0.5, kw...) where {M,D}
+function bandstructure(h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD;
+                       levels = missing, degtol = sqrt(eps()), minprojection = 0.5, kw...) where {M,D,MD<:Mesh{D}}
     T = eltype(M)
     nϵ = levels === missing ? size(h, 1) : levels
     dimh = size(h, 1)
@@ -28,30 +44,34 @@ function bandstructure(h::Hamiltonian{<:Lattice,<:Any,M}, mesh::Mesh{D};
     ψks = Vector{Matrix{M}}(undef, nk)
     ϵks = Vector{Vector{T}}(undef, nk)
     hwork = similar(h)
-    #@showprogress "Diagonalising: "
-    for (n, ϕs) in enumerate(vertices(mesh))
+    @showprogress "Diagonalising: " for (n, ϕs) in enumerate(vertices(mesh))
         (ϵk, ψk) = _spectrum(bloch!(hwork, h, ϕs...); levels = nϵ, kw...)
         ψks[n] = ψk
         ϵks[n] = ϵk
     end
-    bands = Band{D,M,T}[Band(zeros(missing, nk, dimh), zeros(missing, nk), mesh) for _ in nϵ]
-    #@showprogress "Connecting bands: "
-    for src in eachindex(vertices(mesh)), edge in edges(mesh, src)
-        dst = destination(mesh, edge)
+    bands = Band{M,T,D,MD}[Band{M,T}(mesh, dimh) for _ in 1:nϵ]
+    # seed bands
+    for (nb, band) in enumerate(bands), i in 1:dimh
+        band.states[i, 1] = ψks[1][i, nb]
+        band.energies[1] = ϵks[1][nb]
+    end
+    @showprogress "Connecting bands: " for src in 1:nk, edge in edges(mesh, src)
+        dst = edgedest(mesh, edge)
         ψk = ψks[dst]
         ϵk = ϵks[dst]
         for band in bands
-            proj, index = findmax(abs.(band.states[src]' * ψk))
+            proj, index = findmax(abs.(ψk' * view(band.states, :, src)))
             if proj > minprojection
-                copyto!(band.states, CartesianIndices(dst:dst, axes(band.states, 2)),
-                        ψk, CartesianIndices((axes(ψk, 1), index:index)))
+                copyto!(band.states, CartesianIndices((1:dimh, dst:dst)),
+                        ψk, CartesianIndices((1:dimh, index:index)))
                 band.energies[dst] = ϵk[index]
             end
         end
     end
+    return Bandstructure(bands, mesh)
 end
 
-function _spectrum(h; levels = 2, method = missing, kw...)
+function _spectrum(h; levels = 2, method = :arpack, kw...)
     if method === :exact
         s = spectrum_direct(h; levels = levels, kw...)
     elseif method === :arpack
@@ -62,8 +82,8 @@ function _spectrum(h; levels = 2, method = missing, kw...)
     return s
 end
 
-function spectrum_direct(h, hwork; levels = 2, kw...)
-    ee = eigen!(h, range, kw...)
+function spectrum_direct(h; levels = 2, kw...)
+    ee = eigen!(h; kw...)
     energies, states = ee.values, ee.vectors
     return (energies, states)
 end
