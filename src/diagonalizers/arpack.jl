@@ -25,10 +25,11 @@
 #     return Eigen(real(λs), ϕs)
 # end
 
-ArpackMethod(; levels = 6, kw...) = ArpackMethod(levels, (nev = levels, values(kw)...))
+ArpackMethod(; levels = 6, kw...) = ArpackMethod((nev = levels, values(kw)...))
 
-diagonalizer(method::ArpackMethod, matrix::SparseMatrixCSC) = Diagonalizer(method, matrix)
+# Registers method as available
+diagonalizer(method::ArpackMethod, matrix; kw...) = Diagonalizer(method, matrix; kw...)
 
-function _spectrum(d::Diagonalizer{<:ArpackMethod})
-    
-end
+# function diagonalize(d::Diagonalizer{<:ArpackMethod})
+
+# end

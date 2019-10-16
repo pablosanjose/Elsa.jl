@@ -124,6 +124,8 @@ uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 [[ProgressMeter]]
 deps = ["Distributed", "Printf"]
 git-tree-sha1 = "fab12b19f198dd148ca467ac4e4f12ecd0241819"
+repo-rev = "master"
+repo-url = "https://github.com/timholy/ProgressMeter.jl.git"
 uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
 version = "1.1.0"
 

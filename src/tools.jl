@@ -101,6 +101,19 @@ end
 
 isnonnegative(ndist) = iszero(ndist) || ispositive(ndist)
 
+_copy!(dest, src) = copy!(dest, src)
+function _copy!(dst::Matrix{T}, src::SparseMatrixCSC) where {T}
+    axes(dst) == axes(src) || throw(ArgumentError(
+        "arrays must have the same axes for copy!"))
+    fill!(dst, zero(T))
+    for col in 1:size(src,1)
+        for p in nzrange(src, col)
+            dst[rowvals(src)[p], col] = nonzeros(src)[p]
+        end
+    end
+    return dst
+end
+
 # pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')
 
 # padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)

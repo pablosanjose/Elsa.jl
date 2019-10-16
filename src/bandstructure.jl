@@ -42,7 +42,7 @@ bandstructure(h::Hamiltonian{<:Any, L}, mesh = marchingmesh(ntuple(_ -> 10, Val(
 
 function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD) where {M,D,MD<:Mesh{D}}
     T = eltype(M)
-    nϵ = levels === missing ? size(h, 1) : levels
+    nϵ = d.levels
     dimh = size(h, 1)
     nk = nvertices(mesh)
     ϵks = Matrix{T}(undef, nϵ, nk)
@@ -65,7 +65,7 @@ function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh
         dst = edgedest(mesh, edge)
         for band in bands
             proj, bandidx = findmostparallel(ψks, dst, band, src)
-            if proj > minprojection
+            if proj > d.minprojection
                 copyslice!(band.states, CartesianIndices((1:dimh, dst:dst)),
                            ψks, CartesianIndices((1:dimh, bandidx:bandidx, dst:dst)))
                 copyslice!(band.energies, CartesianIndices((dst:dst)),
@@ -74,31 +74,6 @@ function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh
         end
     end
     return Bandstructure(bands, mesh)
-end
-
-function _spectrum(h::AbstractArray{M}; levels = 2, method = :arpack, kw...) where {M}
-    # T = eltype(M)
-    # if method === :exact
-    #     ϵ, ψ = spectrum_direct(Hermitian(h); levels = levels, kw...)
-    # elseif method === :arpack
-    #     ϵ, ψ = spectrum_arpack(h; levels = levels, kw...)
-    # else
-    #     throw(ArgumentError("Unknown method. Choose between :arnoldi or :exact"))
-    # end
-    # ϵ, ψ = spectrum_direct(Hermitian(h); levels = levels, kw...)
-    ϵ, ψ = eigen!(Hermitian(h))
-    return ϵ, ψ
-end
-
-function spectrum_direct(h::AbstractArray{M}; levels = 2, kw...) where {M}
-    T = eltype(M)
-    energies, states = eigen!(h; kw...)
-    return energies, states
-end
-
-function spectrum_arpack(h; levels = 2, sigma = 1.0im, kw...)
-    (energies, states, _) = eigs(h; sigma = sigma, nev = levels, kw...)
-    return (energies, states)
 end
 
 function findmostparallel(ψks::Array{M,3}, dst, band, src) where {M}

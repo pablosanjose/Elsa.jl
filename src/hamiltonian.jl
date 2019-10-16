@@ -689,21 +689,23 @@ julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch
 # See also:
     bloch, optimize!, similarmatrix
 """
-function bloch!(matrix::A, h::Hamiltonian{<:Lattice,L,M,A}, ϕs...) where {L,M,A}
-    copy!(matrix, first(h.harmonics).h)
+function bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M,A}, ϕs...) where {L,M,A}
+    _copy!(matrix, first(h.harmonics).h) # faster version than Base
     return add_harmonics!(matrix, h, ϕs...)
 end
+bloch!(matrix::Hermitian, h::Hamiltonian, ϕs...) = (bloch!(matrix.data, h, ϕs...); matrix)
 
 bloch(h::Hamiltonian{<:Superlattice}, ϕs...) = SupercellBloch(h, toSVector(ϕs))
 
+add_harmonics!(zerobloch, h::Hamiltonian) = zerobloch
 add_harmonics!(zerobloch, h::Hamiltonian, ϕs::Number...) =
     add_harmonics!(zerobloch, h, toSVector(ϕs))
 add_harmonics!(zerobloch, h::Hamiltonian, ϕs::Tuple) =
     add_harmonics!(zerobloch, h, toSVector(ϕs))
 
-add_harmonics!(zerobloch::A, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{0}) where {L,M,A<:SparseMatrixCSC} =
+add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{0}) where {L,M,A<:SparseMatrixCSC} =
     zerobloch
-function add_harmonics!(zerobloch::AbstractArray, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{L}) where {L,M,A<:SparseMatrixCSC}
+function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{L}) where {L,M,A<:SparseMatrixCSC}
     for ns in 2:length(h.harmonics)
         hh = h.harmonics[ns]
         hhmatrix = hh.h
@@ -738,6 +740,10 @@ Bloch wavevector `k`, `ϕs = k * bravais(h)`. If all `ϕs` are omitted, the intr
 Hamiltonian is returned instead. If the Hamiltonian is defined on a `Superlattice`, the
 evaluation of the Bloch Hamiltonian is deferred until it is used (e.g. in a multiplication).
 
+    bloch(h::Hamiltonian{<:Lattice})
+
+Build the intra-cell Hamiltonian matrix of `h`, without adding any Bloch harmonics.
+
     h |> bloch(ϕs...)
     h(ϕs...)
 
@@ -765,8 +771,8 @@ julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch
 # See also:
     bloch!
 """
-bloch(phases...) = h -> bloch(h, phases...)
-bloch(h::Hamiltonian{<:Lattice}, phases...) = bloch!(similar(h), h, phases...)
+bloch(phases::Number...) = h -> bloch(h, phases...)
+bloch(h::Hamiltonian{<:Lattice}, phases...) = bloch!(similarmatrix(h), h, phases...)
 
 """
     similarmatrix(h::Hamiltonian)
