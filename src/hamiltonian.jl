@@ -280,8 +280,9 @@ Base.size(h::HamiltonianHarmonic) = size(h.h)
 
 function LinearAlgebra.ishermitian(h::Hamiltonian)
     for hh in h.harmonics
+        isnonnegative(hh.dn) || continue
         isassigned(h, -hh.dn) || return false
-        hh.matrix == h[-hh.dn].matrix' || return false
+        hh.h == h[-hh.dn]' || return false
     end
     return true
 end
@@ -304,9 +305,10 @@ function Base.push!(h::Hamiltonian{<:Any,L,M,A}, dn::SVector{L,Int}) where {L,M,
     return h
 end
 
-@inline function Base.getindex(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L}
-    dnv = SVector(dn...)
-    nh = findfirst(hh -> hh.dn == dnv, h.harmonics)
+Base.getindex(h::Hamiltonian, dn::Vararg{Int}) = getindex(h, SVector(dn))
+Base.getindex(h::Hamiltonian, dn::NTuple) = getindex(h, SVector(dn))
+@inline function Base.getindex(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L}
+    nh = findfirst(hh -> hh.dn == dn, h.harmonics)
     nh === nothing && throw(BoundsError(h, dn))
     return h.harmonics[nh].h
 end
@@ -321,12 +323,10 @@ function Base.deleteat!(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L}
     return h
 end
 
-Base.isassigned(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} = isassigned(h, dn)
-function Base.isassigned(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L}
-    dnv = SVector(dn...)
-    nh = findfirst(hh -> hh.dn == dnv, h.harmonics)
-    return nh !== nothing
-end
+Base.isassigned(h::Hamiltonian, dn::Vararg{Int}) = isassigned(h, SVector(dn))
+Base.isassigned(h::Hamiltonian, dn::NTuple) = isassigned(h, SVector(dn))
+Base.isassigned(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L} =
+    findfirst(hh -> hh.dn == dn, h.harmonics) != nothing
 
 #######################################################################
 # auxiliary types
@@ -773,7 +773,7 @@ bloch(h::Hamiltonian{<:Lattice}, phases...) = bloch!(similar(h), h, phases...)
 
 Create an uninitialized matrix of the same type of the Hamiltonian's matrix.
 """
-Base.similarmatrix(h::Hamiltonian) = similar(h.harmonics[1].h)
+similarmatrix(h::Hamiltonian) = similar(h.harmonics[1].h)
 
 """
     optimize!(h::Hamiltonian)

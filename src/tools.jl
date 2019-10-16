@@ -91,6 +91,16 @@ function isgrowing(vs::AbstractVector, i0 = 1)
     return true
 end
 
+function ispositive(ndist)
+    result = false
+    for i in ndist
+        i == 0 || (result = i > 0; break)
+    end
+    return result
+end
+
+isnonnegative(ndist) = iszero(ndist) || ispositive(ndist)
+
 # pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')
 
 # padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
@@ -118,19 +128,19 @@ end
 # Like copyto! but with potentially different tensor orders (taken from Base.copyto!)
 function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
                     src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
-    # isempty(Rdest) && return dest
-    # if length(Rdest) != length(Rsrc)
-    #     throw(ArgumentError("source and destination must have same length (got $(length(Rsrc)) and $(length(Rdest)))"))
-    # end
-    # checkbounds(dest, first(Rdest))
-    # checkbounds(dest, last(Rdest))
-    # checkbounds(src, first(Rsrc))
-    # checkbounds(src, last(Rsrc))
-    # src′ = Base.unalias(dest, src)
-    # @inbounds for (Is, Id) in zip(Rsrc, Rdest)
-    #     @inbounds dest[Id] = src′[Is]
-    # end
-    # return dest
+    isempty(Rdest) && return dest
+    if length(Rdest) != length(Rsrc)
+        throw(ArgumentError("source and destination must have same length (got $(length(Rsrc)) and $(length(Rdest)))"))
+    end
+    checkbounds(dest, first(Rdest))
+    checkbounds(dest, last(Rdest))
+    checkbounds(src, first(Rsrc))
+    checkbounds(src, last(Rsrc))
+    src′ = Base.unalias(dest, src)
+    @inbounds for (Is, Id) in zip(Rsrc, Rdest)
+        @inbounds dest[Id] = src′[Is]
+    end
+    return dest
 end
 
 ######################################################################

@@ -40,7 +40,7 @@ end
 bandstructure(h::Hamiltonian{<:Any, L}, mesh = marchingmesh(ntuple(_ -> 10, Val(L))); kw...) where {L} =
     bandstructure!(diagonalizer(h; kw...), h, mesh) # barrier for type-unstable diagonalizer
 
-function bandstructure!(d::Diagnoalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD) where {M,D,MD<:Mesh{D}}
+function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD) where {M,D,MD<:Mesh{D}}
     T = eltype(M)
     nϵ = levels === missing ? size(h, 1) : levels
     dimh = size(h, 1)

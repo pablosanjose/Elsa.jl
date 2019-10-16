@@ -21,6 +21,7 @@ export sublat, bravais, lattice, hopping, onsite, hamiltonian, randomstate,
 export LatticePresets, RegionPresets
 
 export @SMatrix, @SVector, SMatrix, SVector
+export ishermitian
 
 const NameType = Symbol
 const nametype = Symbol

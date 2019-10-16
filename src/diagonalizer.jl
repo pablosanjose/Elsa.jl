@@ -44,7 +44,7 @@ LinearAlgebraMethod(; kw...) = LinearAlgebraMethod(values(kw))
 
 diagonalizer(method::LinearAlgebraMethod, matrix::Matrix) = Diagonalizer(method, matrix)
 
-function diagonalize(d::Diagonalizer{<:LinearAlgebraMethod}, degtol = )
+function diagonalize(d::Diagonalizer{<:LinearAlgebraMethod})
     ϵ, ψ = eigen!(d.matrix; d.options...)
     resolve_degeneracies!(ϵ, ψ, d.codiag)
     return ϵ, ψ
