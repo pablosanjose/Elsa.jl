@@ -278,6 +278,15 @@ Base.size(h::Hamiltonian) = size(first(h.harmonics).h)
 Base.size(h::HamiltonianHarmonic, n) = size(h.h, n)
 Base.size(h::HamiltonianHarmonic) = size(h.h)
 
+function LinearAlgebra.ishermitian(h::Hamiltonian)
+    for hh in h.harmonics
+        isassigned(h, -hh.dn) || return false
+        hh.matrix == h[-hh.dn].matrix' || return false
+    end
+    return true
+end
+
+
 bravais(h::Hamiltonian) = bravais(h.lattice)
 
 issemibounded(h::Hamiltonian) = issemibounded(h.lattice)
@@ -339,7 +348,7 @@ end
 IJV{L,M}(dn::SVector{L} = zero(SVector{L,Int})) where {L,M} =
     IJV(dn, Int[], Int[], M[])
 
-function IJVBuilder{M}(lat::AbstractLattice{E,L,T}, orbs) where {E,L,T,M}
+function IJVBuilder(::Type{M}, lat::AbstractLattice{E,L,T}, orbs) where {E,L,T,M}
     ijvs = IJV{L,M}[]
     kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
     return IJVBuilder(lat, orbs, ijvs, kdtrees)
@@ -372,7 +381,7 @@ Base.push!(h::IJV, (i, j, v)) = (push!(h.i, i); push!(h.j, j); push!(h.v, v))
 # hamiltonian_sparse
 #######################################################################
 function hamiltonian_sparse(::Type{M}, lat::AbstractLattice{E,L}, orbs, model; field = missing) where {E,L,M}
-    builder = IJVBuilder{M}(lat, orbs)
+    builder = IJVBuilder(M, lat, orbs)
     applyterms!(builder, terms(model)...)
     HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
     n = nsites(lat)
@@ -540,7 +549,7 @@ Base.show(io::IO, pham::ParametricHamiltonian) = print(io, "Parametric ", pham.h
 
 function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, orbs, model, f::F;
                                 field = missing) where {M,E,L,T,F}
-    builder = IJVBuilder{M}(lat, orbs)
+    builder = IJVBuilder(M, lat, orbs)
     applyterms!(builder, terms(model)...)
     nels = length.(builder.ijvs) # element counters for each harmonic
     model_f = f()
@@ -662,7 +671,7 @@ omitted, the intracell Hamiltonian is returned instead. If the Hamiltonian is de
 `Superlattice`, the evaluation of the Bloch Hamiltonian is deferred until it is used (e.g.
 in a multiplication).
 
-A suitable, non-initialized `matrix` can be obtained with `similar(h)`.
+A suitable, non-initialized `matrix` can be obtained with `similarmatrix(h)`.
 
 If `optimize!(h)` is called on a sparse Hamiltonian `h` before the first call to `bloch!`,
 performance will increase by avoiding memory reshuffling.
@@ -678,7 +687,7 @@ julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch
 ```
 
 # See also:
-    bloch, optimize!
+    bloch, optimize!, similarmatrix
 """
 function bloch!(matrix::A, h::Hamiltonian{<:Lattice,L,M,A}, ϕs...) where {L,M,A}
     copy!(matrix, first(h.harmonics).h)
@@ -694,7 +703,7 @@ add_harmonics!(zerobloch, h::Hamiltonian, ϕs::Tuple) =
 
 add_harmonics!(zerobloch::A, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{0}) where {L,M,A<:SparseMatrixCSC} =
     zerobloch
-function add_harmonics!(zerobloch::A, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{L}) where {L,M,A<:SparseMatrixCSC}
+function add_harmonics!(zerobloch::AbstractArray, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{L}) where {L,M,A<:SparseMatrixCSC}
     for ns in 2:length(h.harmonics)
         hh = h.harmonics[ns]
         hhmatrix = hh.h
@@ -710,7 +719,7 @@ function add_harmonics!(zerobloch::A, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVec
     return zerobloch
 end
 
-function add_harmonics!(zerobloch::A, h::Hamiltonian{<:Lattice,L,M,A}, phases::SVector{L}) where {L,M,A<:Matrix}
+function add_harmonics!(zerobloch::AbstractArray, h::Hamiltonian{<:Lattice,L,M,A}, phases::SVector{L}) where {L,M,A<:Matrix}
     for ns in 2:length(h.harmonics)
         hh = h.harmonics[ns]
         ephi = cis(phases' * hh.dn)
@@ -760,11 +769,11 @@ bloch(phases...) = h -> bloch(h, phases...)
 bloch(h::Hamiltonian{<:Lattice}, phases...) = bloch!(similar(h), h, phases...)
 
 """
-    similar(h::Hamiltonian)
+    similarmatrix(h::Hamiltonian)
 
-Create an uninitialized array of the same type of the Hamiltonian's matrix.
+Create an uninitialized matrix of the same type of the Hamiltonian's matrix.
 """
-Base.similar(h::Hamiltonian) = similar(h.harmonics[1].h)
+Base.similarmatrix(h::Hamiltonian) = similar(h.harmonics[1].h)
 
 """
     optimize!(h::Hamiltonian)

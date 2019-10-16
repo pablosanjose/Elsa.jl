@@ -33,59 +33,67 @@ function Base.show(io::IO, b::Bandstructure{M,T,D}) where {M,T,D}
     print(ioindent, "\n", b.mesh)
 end
 
-# API #
+#######################################################################
+# bandstructure
+#######################################################################
 
-function bandstructure(h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD;
-                       levels = missing, degtol = sqrt(eps()), minprojection = 0.5, kw...) where {M,D,MD<:Mesh{D}}
+bandstructure(h::Hamiltonian{<:Any, L}, mesh = marchingmesh(ntuple(_ -> 10, Val(L))); kw...) where {L} =
+    bandstructure!(diagonalizer(h; kw...), h, mesh) # barrier for type-unstable diagonalizer
+
+function bandstructure!(d::Diagnoalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD) where {M,D,MD<:Mesh{D}}
     T = eltype(M)
     nϵ = levels === missing ? size(h, 1) : levels
     dimh = size(h, 1)
     nk = nvertices(mesh)
-    ψks = Vector{Matrix{M}}(undef, nk)
-    ϵks = Vector{Vector{T}}(undef, nk)
-    hwork = similar(h)
+    ϵks = Matrix{T}(undef, nϵ, nk)
+    ψks = Array{M,3}(undef, dimh, nϵ, nk)
     @showprogress "Diagonalising: " for (n, ϕs) in enumerate(vertices(mesh))
-        (ϵk, ψk) = _spectrum(bloch!(hwork, h, ϕs...); levels = nϵ, kw...)
-        ψks[n] = ψk
-        ϵks[n] = ϵk
+        bloch!(d.matrix, h, ϕs)
+        (ϵk, ψk) = diagonalize(d)
+        copyslice!(ϵks, CartesianIndices((1:nϵ, n:n)),
+                   ϵk,  CartesianIndices((1:nϵ,)))
+        copyslice!(ψks, CartesianIndices((1:dimh, 1:nϵ, n:n)),
+                   ψk,  CartesianIndices((1:dimh, 1:nϵ)))
     end
     bands = Band{M,T,D,MD}[Band{M,T}(mesh, dimh) for _ in 1:nϵ]
     # seed bands
-    for (nb, band) in enumerate(bands), i in 1:dimh
-        band.states[i, 1] = ψks[1][i, nb]
-        band.energies[1] = ϵks[1][nb]
+    @inbounds for (nb, band) in enumerate(bands), i in 1:dimh
+        band.states[i, 1] = ψks[i, nb, 1]
+        band.energies[1] = ϵks[nb, 1]
     end
     @showprogress "Connecting bands: " for src in 1:nk, edge in edges(mesh, src)
         dst = edgedest(mesh, edge)
-        ψk = ψks[dst]
-        ϵk = ϵks[dst]
         for band in bands
-            proj, index = findmax(abs.(ψk' * view(band.states, :, src)))
+            proj, bandidx = findmostparallel(ψks, dst, band, src)
             if proj > minprojection
-                copyto!(band.states, CartesianIndices((1:dimh, dst:dst)),
-                        ψk, CartesianIndices((1:dimh, index:index)))
-                band.energies[dst] = ϵk[index]
+                copyslice!(band.states, CartesianIndices((1:dimh, dst:dst)),
+                           ψks, CartesianIndices((1:dimh, bandidx:bandidx, dst:dst)))
+                copyslice!(band.energies, CartesianIndices((dst:dst)),
+                           ϵks  , CartesianIndices((bandidx:bandidx, dst:dst)))
             end
         end
     end
     return Bandstructure(bands, mesh)
 end
 
-function _spectrum(h; levels = 2, method = :arpack, kw...)
-    if method === :exact
-        s = spectrum_direct(h; levels = levels, kw...)
-    elseif method === :arpack
-        s = spectrum_arpack(h; levels = levels, kw...)
-    else
-        throw(ArgumentError("Unknown method. Choose between :arnoldi or :exact"))
-    end
-    return s
+function _spectrum(h::AbstractArray{M}; levels = 2, method = :arpack, kw...) where {M}
+    # T = eltype(M)
+    # if method === :exact
+    #     ϵ, ψ = spectrum_direct(Hermitian(h); levels = levels, kw...)
+    # elseif method === :arpack
+    #     ϵ, ψ = spectrum_arpack(h; levels = levels, kw...)
+    # else
+    #     throw(ArgumentError("Unknown method. Choose between :arnoldi or :exact"))
+    # end
+    # ϵ, ψ = spectrum_direct(Hermitian(h); levels = levels, kw...)
+    ϵ, ψ = eigen!(Hermitian(h))
+    return ϵ, ψ
 end
 
-function spectrum_direct(h; levels = 2, kw...)
-    ee = eigen!(h; kw...)
-    energies, states = ee.values, ee.vectors
-    return (energies, states)
+function spectrum_direct(h::AbstractArray{M}; levels = 2, kw...) where {M}
+    T = eltype(M)
+    energies, states = eigen!(h; kw...)
+    return energies, states
 end
 
 function spectrum_arpack(h; levels = 2, sigma = 1.0im, kw...)
@@ -93,6 +101,25 @@ function spectrum_arpack(h; levels = 2, sigma = 1.0im, kw...)
     return (energies, states)
 end
 
+function findmostparallel(ψks::Array{M,3}, dst, band, src) where {M}
+    T = real(eltype(M))
+    dimh, nϵ, nk = size(ψks)
+    maxproj = zero(T)
+    idx = 0
+    any(i -> band.states[i, src] === missing, 1:dimh) && return maxproj, idx
+    @inbounds for j in 1:nϵ
+        proj = zero(M)
+        @simd for i in 1:dimh
+            proj += ψks[i, j, dst]' * band.states[i, src]
+        end
+        absproj = T(abs(tr(proj)))
+        if maxproj < absproj
+            idx = j
+            maxproj = absproj
+        end
+    end
+    return maxproj, idx
+end
 #######################################################################
 # Old
 #######################################################################
