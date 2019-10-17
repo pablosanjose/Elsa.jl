@@ -47,7 +47,17 @@ function diagonalizer(h::Hamiltonian{<:Lattice,<:Any,M,<:SparseMatrixCSC};
     return d
 end
 
+#######################################################################
+# Codiagonalization
+#######################################################################
+struct Codiagonalizer{H}
+    h::H
+end
+
 resolve_degeneracies!(ϵ, ψ, codiag::Missing) = (ϵ, ψ)
+function resolve_degeneracies!(ϵ, ψ, codiag::Codiagonalizer{<:Hamiltonian})
+    
+end
 
 #######################################################################
 # Diagonalize methods
