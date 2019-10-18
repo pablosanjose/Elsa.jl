@@ -6,6 +6,12 @@ git-tree-sha1 = "380e36c66edfa099cd90116b24c1ce8cafccac40"
 uuid = "621f4979-c628-5d54-868e-fcf4e3e8185c"
 version = "0.4.1"
 
+[[Arpack]]
+deps = ["BinaryProvider", "Libdl", "LinearAlgebra"]
+git-tree-sha1 = "07a2c077bdd4b6d23a40342a8a108e2ee5e58ab6"
+uuid = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
+version = "0.3.1"
+
 [[Base64]]
 uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 
@@ -17,9 +23,9 @@ version = "0.5.6"
 
 [[Compat]]
 deps = ["Base64", "Dates", "DelimitedFiles", "Distributed", "InteractiveUtils", "LibGit2", "Libdl", "LinearAlgebra", "Markdown", "Mmap", "Pkg", "Printf", "REPL", "Random", "Serialization", "SharedArrays", "Sockets", "SparseArrays", "Statistics", "Test", "UUIDs", "Unicode"]
-git-tree-sha1 = "84aa74986c5b9b898b0d1acaf3258741ee64754f"
+git-tree-sha1 = "ed2c4abadf84c53d9e58510b5fc48912c2336fbb"
 uuid = "34da2185-b29b-5c13-b0c7-acf172513d20"
-version = "2.1.0"
+version = "2.2.0"
 
 [[Conda]]
 deps = ["JSON", "VersionParsing"]
@@ -47,9 +53,9 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[FFTW]]
 deps = ["AbstractFFTs", "BinaryProvider", "Conda", "Libdl", "LinearAlgebra", "Reexport", "Test"]
-git-tree-sha1 = "03f8776fbdae28c20c0d1d2ae4e090cd1dfcd247"
+git-tree-sha1 = "6c5b420da0b8c12098048561b8d58f81adea506f"
 uuid = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
-version = "1.0.0"
+version = "1.0.1"
 
 [[InteractiveUtils]]
 deps = ["Markdown"]
@@ -73,9 +79,9 @@ uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 
 [[LinearMaps]]
 deps = ["LinearAlgebra", "SparseArrays"]
-git-tree-sha1 = "b32e88a3a99685a38780f5b31fc1e0af28f01477"
+git-tree-sha1 = "ecd59376591724b29db3728f54ee885ecbeb2395"
 uuid = "7a12625a-238d-50fd-b39a-03d52299707e"
-version = "2.5.1"
+version = "2.5.2"
 
 [[Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
@@ -107,7 +113,7 @@ uuid = "69de0a69-1ddd-5017-9359-2bf0b02dc9f0"
 version = "0.3.7"
 
 [[Pkg]]
-deps = ["Dates", "LibGit2", "Libdl", "Logging", "Markdown", "Printf", "REPL", "Random", "SHA", "UUIDs"]
+deps = ["Dates", "LibGit2", "Markdown", "Printf", "REPL", "Random", "SHA", "UUIDs"]
 uuid = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 
 [[Printf]]
@@ -116,9 +122,11 @@ uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 
 [[ProgressMeter]]
 deps = ["Distributed", "Printf"]
-git-tree-sha1 = "0f08e0e74e5b160ca20d3962a2620038b75881c7"
+git-tree-sha1 = "fab12b19f198dd148ca467ac4e4f12ecd0241819"
+repo-rev = "master"
+repo-url = "https://github.com/timholy/ProgressMeter.jl.git"
 uuid = "92933f4c-e287-5a05-a399-4b506db050ca"
-version = "1.0.0"
+version = "1.1.0"
 
 [[REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets"]
@@ -133,6 +141,12 @@ deps = ["Pkg"]
 git-tree-sha1 = "7b1d07f411bc8ddb7977ec7f377b97b158514fe0"
 uuid = "189a3867-3050-52da-a836-e630ba90ab69"
 version = "0.2.0"
+
+[[Requires]]
+deps = ["Test"]
+git-tree-sha1 = "f6fbf4ba64d295e146e49e021207993b6b48c7d1"
+uuid = "ae029012-a4dd-5104-9daa-d747884805df"
+version = "0.5.2"
 
 [[SHA]]
 uuid = "ea8e919c-243c-51af-8825-aaa63cd721ce"

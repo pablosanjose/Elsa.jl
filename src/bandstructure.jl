@@ -1,112 +1,208 @@
 #######################################################################
-# Spectrum
+# Spectrum and Bandstructure
+#######################################################################
+struct Spectrum{M,T}
+    states::Matrix{M}
+    energies::Vector{T}
+end
+
+struct Band{M,T,D,MD<:Mesh{D}}
+    states::Matrix{Union{M,Missing}}
+    energies::Vector{Union{T,Missing}}
+    mesh::MD
+end
+
+function Band{M,T}(mesh::Mesh, dimh::Int) where {M,T}
+    nk = nvertices(mesh)
+    states = Union{M,Missing}[missing for _ in 1:dimh, _ in 1:nk]
+    energies = Union{T,Missing}[missing for _ in 1:nk]
+    return Band(states, energies, mesh)
+end
+
+struct Bandstructure{M,T,D,MD<:Mesh{D}}   # D is dimension of parameter space
+    bands::Vector{Band{M,T,D,MD}}
+    mesh::MD
+end
+
+function Base.show(io::IO, b::Bandstructure{M,T,D}) where {M,T,D}
+    ioindent = IOContext(io, :indent => string("  "))
+    print(io,
+"Bandstructure: bands for a $(D)D hamiltonian
+  Bands        : $(length(b.bands))
+  Element type : $(displayelements(M))")
+    print(ioindent, "\n", b.mesh)
+end
+
+#######################################################################
+# bandstructure
 #######################################################################
 
-struct Spectrum{D,Tv,MK<:Mesh{D},ME<:Mesh{D}}   # D is dimension of parameter space
-    eigvecs::Array{Tv,3}
-    eigvals::Matrix{Tv}
-    mesh::MK
-    bands::Vector{ME}
-end
+bandstructure(h::Hamiltonian{<:Any, L}, mesh = marchingmesh(ntuple(_ -> 10, Val(L))); kw...) where {L} =
+    bandstructure!(diagonalizer(h; kw...), h, mesh) # barrier for type-unstable diagonalizer
 
-function spectrum(hfunc::Function, argmesh::Mesh; 
-                  levels::Union{Int,Missing} = missing, degtol = sqrt(eps()), 
-                  randomshift = missing, kw...)
-    hsample = hfunc(first(argmesh.verts)...)
-    Tv = eltype(hsample)
-    dimh = ψlen = size(hsample, 1)
-    nϵ = levels === missing ? dimh : levels
-    nk = nvertices(argmesh)
-    eigvals = Matrix{Tv}(undef, (nϵ, nk))
-    eigvecs = Array{Tv,3}(undef, (ψlen, nϵ, nk))
-    hwork = Matrix{Tv}(undef, (dimh, dimh))
-    @showprogress "Diagonalising: " for (n,k) in enumerate(argmesh.verts)
-        (ϵk, ψk) = _spectrum(hfunc(k...), hwork; levels = nϵ, kw...)
-        # sort_spectrum!(energies_nk, states_nk, ordering)
-        # resolve_degeneracies!(ϵk, ψk, vfunc, k, degtol)
-        copyslice!(eigvals, CartesianIndices((1:nϵ, n:n)),
-                   ϵk,      CartesianIndices(1:nϵ))
-        copyslice!(eigvecs, CartesianIndices((1:ψlen, 1:nϵ, n:n)),
-                   ψk,      CartesianIndices((1:ψlen, 1:nϵ)))
-    end
-end
-
-function _spectrum(h, hwork; levels = 2, method = missing, kw...)
-    if method === :exact || method === missing && (size(h, 1) < 129 || levels/size(h,1) > 0.2)
-        s = spectrum_direct(h, hwork; levels = levels, kw...)
-    elseif method === :arnoldi
-        s = spectrum_arpack(h; levels = levels, kw...)
-    else
-        throw(ArgumentError("Unknown method. Choose between :arnoldi or :exact"))
-    end
-    return s
-end
-
-function spectrum_direct(h, hwork; levels = 2, kw...)
-    hwork .= h
+function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD) where {M,D,MD<:Mesh{D}}
+    T = eltype(M)
+    nϵ = d.levels
     dimh = size(h, 1)
-    range = ((dimh - levels)÷2 + 1):((dimh + levels)÷2)
-    ee = eigen!(Hermitian(hwork), range, kw...)
-    energies, states = ee.values, ee.vectors
-    return (energies, states)
-end
-
-function spectrum_arpack(h; levels = 2, sigma = 1.0im, kw...)
-    (energies, states, _) = eigs(h; sigma = sigma, nev = levels, kw...)
-    return (real.(energies), states)
-end
-
-resolve_degeneracies!(energies, states, vfunc::Missing, kn, degtol) = nothing
-function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}, degtol) where {L}
-    degsubspaces = degeneracies(energies, degtol)
-    if !(degsubspaces === nothing)
-        for subspaceinds in degsubspaces
-            for axis = 1:L
-                v = vfunc(kn, axis)  # Need to do it in-place for each subspace
-                subspace = view(states, :, subspaceinds)
-                vsubspace = subspace' * v * subspace
-                veigen = eigen!(vsubspace)
-                subspace .= subspace * veigen.vectors
-                success = !hasdegeneracies(veigen.values, degtol)
-                success && break
-            end
-        end
+    nk = nvertices(mesh)
+    ϵks = Matrix{T}(undef, nϵ, nk)
+    ψks = Array{M,3}(undef, dimh, nϵ, nk)
+    p = Progress(nk, "Step 1/2 - Diagonalising: ")
+    for (n, ϕs) in enumerate(vertices(mesh))
+        bloch!(d.matrix, h, ϕs)
+        (ϵk, ψk) = diagonalize(d)
+        copyslice!(ϵks, CartesianIndices((1:nϵ, n:n)),
+                   ϵk,  CartesianIndices((1:nϵ,)))
+        copyslice!(ψks, CartesianIndices((1:dimh, 1:nϵ, n:n)),
+                   ψk,  CartesianIndices((1:dimh, 1:nϵ)))
+        ProgressMeter.next!(p; showvalues = ())
     end
-    return nothing
-end
-
-function hasdegeneracies(energies, degtol)
-    has = false
-    for i in eachindex(energies), j in (i+1):length(energies)
-        if abs(energies[i] - energies[j]) < degtol
-            has = true
-            break
-        end
+    bands = Band{M,T,D,MD}[Band{M,T}(mesh, dimh) for _ in 1:nϵ]
+    # seed bands
+    @inbounds for (nb, band) in enumerate(bands), i in 1:dimh
+        band.states[i, 1] = ψks[i, nb, 1]
+        band.energies[1] = ϵks[nb, 1]
     end
-    return has
-end
-
-function degeneracies(energies, degtol)
-    if hasdegeneracies(energies, degtol)
-        deglist = Vector{Int}[]
-        isclassified = BitArray(false for _ in eachindex(energies))
-        for i in eachindex(energies)
-            isclassified[i] && continue
-            degeneracyfound = false
-            for j in (i + 1):length(energies)
-                if !isclassified[j] && abs(energies[i] - energies[j]) < degtol
-                    !degeneracyfound && push!(deglist, [i])
-                    degeneracyfound = true
-                    push!(deglist[end], j)
-                    isclassified[j] = true
+    p = Progress(nk, "Step 2/2 - Connecting bands: ")
+    for src in 1:nk
+        for edge in edges(mesh, src)
+            dst = edgedest(mesh, edge)
+            for band in bands
+                proj, bandidx = findmostparallel(ψks, dst, band, src)
+                if proj > d.minprojection
+                    copyslice!(band.states, CartesianIndices((1:dimh, dst:dst)),
+                            ψks, CartesianIndices((1:dimh, bandidx:bandidx, dst:dst)))
+                    copyslice!(band.energies, CartesianIndices((dst:dst)),
+                            ϵks  , CartesianIndices((bandidx:bandidx, dst:dst)))
                 end
             end
         end
-        return deglist
-    else
-        return nothing
+        ProgressMeter.next!(p; showvalues = ())
     end
+    return Bandstructure(bands, mesh)
 end
+
+function findmostparallel(ψks::Array{M,3}, dst, band, src) where {M}
+    T = real(eltype(M))
+    dimh, nϵ, nk = size(ψks)
+    maxproj = zero(T)
+    idx = 0
+    any(i -> band.states[i, src] === missing, 1:dimh) && return maxproj, idx
+    @inbounds for j in 1:nϵ
+        proj = zero(M)
+        @simd for i in 1:dimh
+            proj += ψks[i, j, dst]' * band.states[i, src]
+        end
+        absproj = T(abs(tr(proj)))
+        if maxproj < absproj
+            idx = j
+            maxproj = absproj
+        end
+    end
+    return maxproj, idx
+end
+#######################################################################
+# Old
+#######################################################################
+
+# function spectrum(hfunc::Function, argmesh::Mesh;
+#                   levels::Union{Int,Missing} = missing, degtol = sqrt(eps()),
+#                   randomshift = missing, kw...)
+#     hsample = hfunc(first(argmesh.verts)...)
+#     Tv = eltype(hsample)
+#     dimh = ψlen = size(hsample, 1)
+#     nϵ = levels === missing ? dimh : levels
+#     nk = nvertices(argmesh)
+#     eigvals = Matrix{Tv}(undef, (nϵ, nk))
+#     eigvecs = Array{Tv,3}(undef, (ψlen, nϵ, nk))
+#     hwork = Matrix{Tv}(undef, (dimh, dimh))
+#     @showprogress "Diagonalising: " for (n,k) in enumerate(argmesh.verts)
+#         (ϵk, ψk) = _spectrum(hfunc(k...), hwork; levels = nϵ, kw...)
+#         # sort_spectrum!(energies_nk, states_nk, ordering)
+#         # resolve_degeneracies!(ϵk, ψk, vfunc, k, degtol)
+#         copyslice!(eigvals, CartesianIndices((1:nϵ, n:n)),
+#                    ϵk,      CartesianIndices(1:nϵ))
+#         copyslice!(eigvecs, CartesianIndices((1:ψlen, 1:nϵ, n:n)),
+#                    ψk,      CartesianIndices((1:ψlen, 1:nϵ)))
+#     end
+# end
+
+# function _spectrum(h, hwork; levels = 2, method = missing, kw...)
+#     if method === :exact || method === missing && (size(h, 1) < 129 || levels/size(h,1) > 0.2)
+#         s = spectrum_direct(h, hwork; levels = levels, kw...)
+#     elseif method === :arnoldi
+#         s = spectrum_arpack(h; levels = levels, kw...)
+#     else
+#         throw(ArgumentError("Unknown method. Choose between :arnoldi or :exact"))
+#     end
+#     return s
+# end
+
+# function spectrum_direct(h, hwork; levels = 2, kw...)
+#     hwork .= h
+#     dimh = size(h, 1)
+#     range = ((dimh - levels)÷2 + 1):((dimh + levels)÷2)
+#     ee = eigen!(Hermitian(hwork), range, kw...)
+#     energies, states = ee.values, ee.vectors
+#     return (energies, states)
+# end
+
+# function spectrum_arpack(h; levels = 2, sigma = 1.0im, kw...)
+#     (energies, states, _) = eigs(h; sigma = sigma, nev = levels, kw...)
+#     return (real.(energies), states)
+# end
+
+resolve_degeneracies!(energies, states, vfunc::Missing, kn, degtol) = nothing
+# function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}, degtol) where {L}
+#     degsubspaces = degeneracies(energies, degtol)
+#     if !(degsubspaces === nothing)
+#         for subspaceinds in degsubspaces
+#             for axis = 1:L
+#                 v = vfunc(kn, axis)  # Need to do it in-place for each subspace
+#                 subspace = view(states, :, subspaceinds)
+#                 vsubspace = subspace' * v * subspace
+#                 veigen = eigen!(vsubspace)
+#                 subspace .= subspace * veigen.vectors
+#                 success = !hasdegeneracies(veigen.values, degtol)
+#                 success && break
+#             end
+#         end
+#     end
+#     return nothing
+# end
+
+# function hasdegeneracies(energies, degtol)
+#     has = false
+#     for i in eachindex(energies), j in (i+1):length(energies)
+#         if abs(energies[i] - energies[j]) < degtol
+#             has = true
+#             break
+#         end
+#     end
+#     return has
+# end
+
+# function degeneracies(energies, degtol)
+#     if hasdegeneracies(energies, degtol)
+#         deglist = Vector{Int}[]
+#         isclassified = BitArray(false for _ in eachindex(energies))
+#         for i in eachindex(energies)
+#             isclassified[i] && continue
+#             degeneracyfound = false
+#             for j in (i + 1):length(energies)
+#                 if !isclassified[j] && abs(energies[i] - energies[j]) < degtol
+#                     !degeneracyfound && push!(deglist, [i])
+#                     degeneracyfound = true
+#                     push!(deglist[end], j)
+#                     isclassified[j] = true
+#                 end
+#             end
+#         end
+#         return deglist
+#     else
+#         return nothing
+#     end
+# end
 
 
 # #######################################################################

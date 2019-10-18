@@ -5,18 +5,21 @@
 abstract type AbstractMesh{D} end
 
 struct Mesh{D,V,S} <: AbstractMesh{D}   # D is dimension of parameter space
-    vertices::V                         # Iterable vertex container (generator, vector,...)
+    vertices::V                         # Iterable vertex container (generator, vector,...) -> SVector{E,T}
     adjmat::SparseMatrixCSC{Bool,Int}   # Directed graph: only dest > src
-    simplices::S                        # Iterable simplex container (generator, vector,...)
+    simplices::S                        # Iterable simplex container (generator, vector,...) -> NTuple{D+1,Int}
 end
 
-Mesh{D}(vertices::V, adjmat, simplices::GT) where {D,V,GT} = Mesh{D,V,GT}(vertices, adjmat, simplices)
+Mesh{D}(vertices::V, adjmat, simplices::S) where {D,V,S} = Mesh{D,V,S}(vertices, adjmat, simplices)
 
-Base.show(io::IO, mesh::Mesh{D}) where {D} = print(io,
-"Mesh{$D}: mesh in $D-dimensional space
-  Vertices  : $(nvertices(mesh))
-  Edges     : $(nedges(mesh))
-  Simplices : $(nsimplices(mesh))")
+function Base.show(io::IO, mesh::Mesh{D}) where {D}
+    i = get(io, :indent, "")
+    print(io,
+"$(i)Mesh{$D}: mesh of a $D-dimensional manifold
+$i  Vertices   : $(nvertices(mesh))
+$i  Edges      : $(nedges(mesh))
+$i  Simplices  : $(nsimplices(mesh))")
+end
 
 nvertices(m::Mesh) = length(m.vertices)
 
@@ -24,20 +27,27 @@ nsimplices(m::Mesh) = length(m.simplices)
 
 nedges(m::Mesh) = nnz(m.adjmat)
 
+vertices(m::Mesh) = m.vertices
+
+edges(m::Mesh, src) = nzrange(m.adjmat, src)
+
+edgedest(m::Mesh, edge) = rowvals(m.adjmat)[edge]
+
+
 ######################################################################
 # Special meshes
 #######################################################################
 """
   marchingmesh(npoints::NTuple{D,Integer}[, box::SMatrix{D,D})
 
-Creates a D-dimensional marching-tetrahedra `Mesh`. The mesh is confined to the box defined 
+Creates a D-dimensional marching-tetrahedra `Mesh`. The mesh is confined to the box defined
 by the columns of `box`, and contains `npoints[i]` vertices along column i.
 
 # External links
 
 - Marching tetrahedra (https://en.wikipedia.org/wiki/Marching_tetrahedra) in Wikipedia
 """
-function marchingmesh(npoints::NTuple{D,Integer}, 
+function marchingmesh(npoints::NTuple{D,Integer},
                       box::SMatrix{D,D,T} = SMatrix{D,D,Float64}(I)) where {D,T<:AbstractFloat}
     projection = box ./ (SVector(npoints) - 1)' # Projects binary vector to m box with npoints
     cs = CartesianIndices(ntuple(n -> 1:npoints[n], Val(D)))

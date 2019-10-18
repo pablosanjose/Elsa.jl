@@ -91,6 +91,29 @@ function isgrowing(vs::AbstractVector, i0 = 1)
     return true
 end
 
+function ispositive(ndist)
+    result = false
+    for i in ndist
+        i == 0 || (result = i > 0; break)
+    end
+    return result
+end
+
+isnonnegative(ndist) = iszero(ndist) || ispositive(ndist)
+
+_copy!(dest, src) = copy!(dest, src)
+function _copy!(dst::Matrix{T}, src::SparseMatrixCSC) where {T}
+    axes(dst) == axes(src) || throw(ArgumentError(
+        "arrays must have the same axes for copy!"))
+    fill!(dst, zero(T))
+    for col in 1:size(src,1)
+        for p in nzrange(src, col)
+            dst[rowvals(src)[p], col] = nonzeros(src)[p]
+        end
+    end
+    return dst
+end
+
 # pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')
 
 # padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
@@ -115,23 +138,23 @@ end
 
 # allorderedpairs(v) = [(i, j) for i in v, j in v if i >= j]
 
-# # Like copyto! but with potentially different tensor orders
-# function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
-#                     src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
-#     isempty(Rdest) && return dest
-#     if length(Rdest) != length(Rsrc)
-#         throw(ArgumentError("source and destination must have same length (got $(length(Rsrc)) and $(length(Rdest)))"))
-#     end
-#     checkbounds(dest, first(Rdest))
-#     checkbounds(dest, last(Rdest))
-#     checkbounds(src, first(Rsrc))
-#     checkbounds(src, last(Rsrc))
-#     src′ = Base.unalias(dest, src)
-#     for (Is, Id) in zip(Rsrc, Rdest)
-#         @inbounds dest[Id] = src′[Is]
-#     end
-#     return dest
-# end
+# Like copyto! but with potentially different tensor orders (taken from Base.copyto!)
+function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
+                    src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
+    isempty(Rdest) && return dest
+    if length(Rdest) != length(Rsrc)
+        throw(ArgumentError("source and destination must have same length (got $(length(Rsrc)) and $(length(Rdest)))"))
+    end
+    checkbounds(dest, first(Rdest))
+    checkbounds(dest, last(Rdest))
+    checkbounds(src, first(Rsrc))
+    checkbounds(src, last(Rsrc))
+    src′ = Base.unalias(dest, src)
+    @inbounds for (Is, Id) in zip(Rsrc, Rdest)
+        @inbounds dest[Id] = src′[Is]
+    end
+    return dest
+end
 
 ######################################################################
 # Permutations (taken from Combinatorics.jl)
