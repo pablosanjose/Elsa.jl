@@ -15,7 +15,7 @@ end
 struct HoppingTerm{F,
                    S<:Union{Missing,Tuple{Vararg{Tuple{NameType,NameType}}}},
                    D<:Union{Missing,Tuple{Vararg{SVector{L,Int}}} where L},
-                   R<:Union{Missing,Real},
+                   R<:Union{Missing,AbstractFloat},
                    C} <: TightbindingModelTerm
     h::F
     sublats::S
@@ -194,8 +194,9 @@ Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
 """
 function hopping(h; sublats = missing, range::Real = 1, dn = missing, forcehermitian::Bool = true)
     return TightbindingModel(HoppingTerm(h, sanitize_sublatpairs(sublats), sanitize_dn(dn),
-        range + sqrt(eps(Float64)), 1, forcehermitian))
+        float(range) + sqrt(eps(float(range))), 1, forcehermitian))
 end
+
 
 Base.:*(x, o::OnsiteTerm) =
     OnsiteTerm(o.o, o.sublats, x * o.coefficient, o.forcehermitian)
@@ -216,10 +217,10 @@ struct TightbindingModel{N,T<:Tuple{Vararg{TightbindingModelTerm,N}}}
 end
 
 terms(t::TightbindingModel) = t.terms
-# terms(t::TightbindingModelTerm) = (t,)
 
-# TightbindingModel(m::TightbindingModel) = m
 TightbindingModel(ts::TightbindingModelTerm...) = TightbindingModel(ts)
+
+(m::TightbindingModel)(r, dr) = sum(t -> t(r, dr), m.terms)
 
 # External API #
 
