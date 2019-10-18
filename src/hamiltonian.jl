@@ -701,11 +701,10 @@ bloch!(matrix, h, ϕs::Number...) = _bloch!(matrix, h, toSVector(ϕs), 0)
 bloch!(matrix, h, ϕs::Tuple, axis = 0) = _bloch!(matrix, h, toSVector(ϕs), axis)
 bloch!(matrix, h, ϕs::SVector, axis = 0) = _bloch!(matrix, h, ϕs, axis)
 
-_bloch!(matrix::Hermitian, h::Hamiltonian, ϕs, axis) =
+_bloch!(matrix::Hermitian, h::Hamiltonian{<:Lattice,L,M}, ϕs, axis) where {L,M} =
     (_bloch!(matrix.data, h, ϕs, axis); matrix)
 
-function _bloch!(matrix::AbstractMatrix{M}, h::Hamiltonian{<:Lattice,L,M,A},
-                 ϕs::SVector, axis) where {L,M,A}
+function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axis) where {L,M}
     if iszero(axis)
         _copy!(matrix, first(h.harmonics).h) # faster copy!(dense, sparse) specialization
     else

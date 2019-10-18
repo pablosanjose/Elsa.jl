@@ -47,13 +47,15 @@ function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh
     nk = nvertices(mesh)
     ϵks = Matrix{T}(undef, nϵ, nk)
     ψks = Array{M,3}(undef, dimh, nϵ, nk)
-    @showprogress "Diagonalising: " for (n, ϕs) in enumerate(vertices(mesh))
+    p = Progress(nk, "Step 1/2 - Diagonalising: ")
+    for (n, ϕs) in enumerate(vertices(mesh))
         bloch!(d.matrix, h, ϕs)
         (ϵk, ψk) = diagonalize(d)
         copyslice!(ϵks, CartesianIndices((1:nϵ, n:n)),
                    ϵk,  CartesianIndices((1:nϵ,)))
         copyslice!(ψks, CartesianIndices((1:dimh, 1:nϵ, n:n)),
                    ψk,  CartesianIndices((1:dimh, 1:nϵ)))
+        ProgressMeter.next!(p; showvalues = ())
     end
     bands = Band{M,T,D,MD}[Band{M,T}(mesh, dimh) for _ in 1:nϵ]
     # seed bands
@@ -61,17 +63,21 @@ function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh
         band.states[i, 1] = ψks[i, nb, 1]
         band.energies[1] = ϵks[nb, 1]
     end
-    @showprogress "Connecting bands: " for src in 1:nk, edge in edges(mesh, src)
-        dst = edgedest(mesh, edge)
-        for band in bands
-            proj, bandidx = findmostparallel(ψks, dst, band, src)
-            if proj > d.minprojection
-                copyslice!(band.states, CartesianIndices((1:dimh, dst:dst)),
-                           ψks, CartesianIndices((1:dimh, bandidx:bandidx, dst:dst)))
-                copyslice!(band.energies, CartesianIndices((dst:dst)),
-                           ϵks  , CartesianIndices((bandidx:bandidx, dst:dst)))
+    p = Progress(nk, "Step 2/2 - Connecting bands: ")
+    for src in 1:nk
+        for edge in edges(mesh, src)
+            dst = edgedest(mesh, edge)
+            for band in bands
+                proj, bandidx = findmostparallel(ψks, dst, band, src)
+                if proj > d.minprojection
+                    copyslice!(band.states, CartesianIndices((1:dimh, dst:dst)),
+                            ψks, CartesianIndices((1:dimh, bandidx:bandidx, dst:dst)))
+                    copyslice!(band.energies, CartesianIndices((dst:dst)),
+                            ϵks  , CartesianIndices((bandidx:bandidx, dst:dst)))
+                end
             end
         end
+        ProgressMeter.next!(p; showvalues = ())
     end
     return Bandstructure(bands, mesh)
 end
@@ -147,56 +153,56 @@ end
 # end
 
 resolve_degeneracies!(energies, states, vfunc::Missing, kn, degtol) = nothing
-function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}, degtol) where {L}
-    degsubspaces = degeneracies(energies, degtol)
-    if !(degsubspaces === nothing)
-        for subspaceinds in degsubspaces
-            for axis = 1:L
-                v = vfunc(kn, axis)  # Need to do it in-place for each subspace
-                subspace = view(states, :, subspaceinds)
-                vsubspace = subspace' * v * subspace
-                veigen = eigen!(vsubspace)
-                subspace .= subspace * veigen.vectors
-                success = !hasdegeneracies(veigen.values, degtol)
-                success && break
-            end
-        end
-    end
-    return nothing
-end
+# function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}, degtol) where {L}
+#     degsubspaces = degeneracies(energies, degtol)
+#     if !(degsubspaces === nothing)
+#         for subspaceinds in degsubspaces
+#             for axis = 1:L
+#                 v = vfunc(kn, axis)  # Need to do it in-place for each subspace
+#                 subspace = view(states, :, subspaceinds)
+#                 vsubspace = subspace' * v * subspace
+#                 veigen = eigen!(vsubspace)
+#                 subspace .= subspace * veigen.vectors
+#                 success = !hasdegeneracies(veigen.values, degtol)
+#                 success && break
+#             end
+#         end
+#     end
+#     return nothing
+# end
 
-function hasdegeneracies(energies, degtol)
-    has = false
-    for i in eachindex(energies), j in (i+1):length(energies)
-        if abs(energies[i] - energies[j]) < degtol
-            has = true
-            break
-        end
-    end
-    return has
-end
+# function hasdegeneracies(energies, degtol)
+#     has = false
+#     for i in eachindex(energies), j in (i+1):length(energies)
+#         if abs(energies[i] - energies[j]) < degtol
+#             has = true
+#             break
+#         end
+#     end
+#     return has
+# end
 
-function degeneracies(energies, degtol)
-    if hasdegeneracies(energies, degtol)
-        deglist = Vector{Int}[]
-        isclassified = BitArray(false for _ in eachindex(energies))
-        for i in eachindex(energies)
-            isclassified[i] && continue
-            degeneracyfound = false
-            for j in (i + 1):length(energies)
-                if !isclassified[j] && abs(energies[i] - energies[j]) < degtol
-                    !degeneracyfound && push!(deglist, [i])
-                    degeneracyfound = true
-                    push!(deglist[end], j)
-                    isclassified[j] = true
-                end
-            end
-        end
-        return deglist
-    else
-        return nothing
-    end
-end
+# function degeneracies(energies, degtol)
+#     if hasdegeneracies(energies, degtol)
+#         deglist = Vector{Int}[]
+#         isclassified = BitArray(false for _ in eachindex(energies))
+#         for i in eachindex(energies)
+#             isclassified[i] && continue
+#             degeneracyfound = false
+#             for j in (i + 1):length(energies)
+#                 if !isclassified[j] && abs(energies[i] - energies[j]) < degtol
+#                     !degeneracyfound && push!(deglist, [i])
+#                     degeneracyfound = true
+#                     push!(deglist[end], j)
+#                     isclassified[j] = true
+#                 end
+#             end
+#         end
+#         return deglist
+#     else
+#         return nothing
+#     end
+# end
 
 
 # #######################################################################

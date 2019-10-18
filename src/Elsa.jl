@@ -16,7 +16,7 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
 
 export sublat, bravais, lattice, hopping, onsite, hamiltonian, randomstate,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!, similarmatrix,
-       sites, bandstructure
+       sites, bandstructure, marchingmesh
 
 export LatticePresets, RegionPresets
 

@@ -40,14 +40,14 @@ edgedest(m::Mesh, edge) = rowvals(m.adjmat)[edge]
 """
   marchingmesh(npoints::NTuple{D,Integer}[, box::SMatrix{D,D})
 
-Creates a D-dimensional marching-tetrahedra `Mesh`. The mesh is confined to the box defined 
+Creates a D-dimensional marching-tetrahedra `Mesh`. The mesh is confined to the box defined
 by the columns of `box`, and contains `npoints[i]` vertices along column i.
 
 # External links
 
 - Marching tetrahedra (https://en.wikipedia.org/wiki/Marching_tetrahedra) in Wikipedia
 """
-function marchingmesh(npoints::NTuple{D,Integer}, 
+function marchingmesh(npoints::NTuple{D,Integer},
                       box::SMatrix{D,D,T} = SMatrix{D,D,Float64}(I)) where {D,T<:AbstractFloat}
     projection = box ./ (SVector(npoints) - 1)' # Projects binary vector to m box with npoints
     cs = CartesianIndices(ntuple(n -> 1:npoints[n], Val(D)))
