@@ -81,7 +81,7 @@ _orbitaltype(t::Type{SVector{N,Tv}}) where {N,Tv} = t
 _orbitaltype(t::Type{SVector{1,Tv}}) where {Tv} = Tv
 
 # find SMatrix type that can hold all matrix elements between lattice sites
-blocktype(orbs, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
+blocktype(orbs, type::Type{Tv}) where {E,L,Tv} =
     _blocktype(orbitaltype(orbs, Tv))
 _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
 _blocktype(::Type{S}) where {S<:Number} = S
@@ -446,9 +446,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
 end
 
 orbsized(m, orbs) = orbsized(m, orbs, orbs)
-orbsized(m, o1::NTuple{D1}, o2::NTuple{D2}) where {D1,D2} =
-    SMatrix{D1,D2}(m)
-orbsized(m::Number, o1::NTuple{1}, o2::NTuple{1}) = m
+orbsized(m, o1::NTuple{D1}, o2::NTuple{D2}) where {D1,D2} = padtotype(m, SMatrix{D1,D2})
 
 dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
 dniter(dns, ::Val) = dns

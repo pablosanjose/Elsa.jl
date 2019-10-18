@@ -7,11 +7,11 @@ _toSMatrix(::Type{T}, s::SMatrix{N,M}) where {N,M,T} = convert(SMatrix{N,M,T}, s
 toSMatrix(ss::AbstractVector...) = toSMatrix(Tuple.(ss)...)
 toSMatrix(s::AbstractMatrix) = SMatrix{size(s,1), size(s,2)}(s)
 
+toSVector(::Tuple{}) = SVector{0,Float64}()
 toSVectors(vs...) = [promote(toSVector.(vs)...)...]
 toSVector(v::SVector) = v
 toSVector(v::NTuple{N,Number}) where {N} = SVector(v)
 toSVector(x::Number) = SVector{1}(x)
-toSVector(::Tuple{}) = SVector{0,Float64}()
 toSVector(::Type{T}, v) where {T} = T.(toSVector(v))
 toSVector(::Type{T}, ::Tuple{}) where {T} = SVector{0,T}()
 # Dynamic dispatch
@@ -45,10 +45,13 @@ padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T)
 padright(sv::StaticVector{E,T}, ::Val{E}) where {E,T} = sv
 padright(t::Tuple, x...) = Tuple(padright(SVector(t), x...))
 
-@inline padtotype(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,T2,S<:SMatrix{E2,L2,T2}} =
+@inline padtotype(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,S<:SMatrix{E2,L2}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
+@inline padtotype(s::UniformScaling, st::Type{S}) where {S<:SMatrix} = S(s)
+@inline padtotype(s::Number, ::Type{S}) where {S<:SMatrix} = S(s*I)
 @inline padtotype(s::Number, ::Type{T}) where {T<:Number} = T(s)
-@inline padtotype(s::SMatrix{1,1}, ::Type{T}) where {T<:Number} = T(first(s))
+@inline padtotype(s::AbstractArray, ::Type{T}) where {T<:Number} = T(first(s))
+@inline padtotype(s::UniformScaling, ::Type{T}) where {T<:Number} = T(s.λ)
 
 ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
 negative(s::SVector{L,<:Number}) where {L} = -s
