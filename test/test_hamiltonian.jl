@@ -25,7 +25,6 @@ end
             (:A => (:a, :b), :D => :c), :D => Val(4))
     lat = LatticePresets.honeycomb()
     for orb in orbs
-        @show orb
         @test hamiltonian(lat, onsite(1), orbitals = orb) isa Hamiltonian
     end
     @test hamiltonian(lat, onsite(1) + hopping(@SMatrix[1 2], sublats = (:A,:B)),
