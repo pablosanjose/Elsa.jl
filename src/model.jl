@@ -35,6 +35,7 @@ sanitize_sublats(s::Missing) = missing
 sanitize_sublats(s::Integer) = (nametype(s),)
 sanitize_sublats(s::NameType) = (s,)
 sanitize_sublats(s::Tuple) where {N} = nametype.(s)
+sanitize_sublats(s::Tuple{}) = ()
 sanitize_sublats(n) = throw(ErrorException(
     "`sublats` for `onsite` must be either `missing`, an `s` or a tuple of `s`s, with `s::$NameType` is a sublattice name"))
 
@@ -50,6 +51,7 @@ sanitize_sublatpairs(s) = throw(ErrorException(
 sanitize_dn(dn::Missing) = missing
 sanitize_dn(dn::Tuple{Vararg{Tuple}}) = SVector.(dn)
 sanitize_dn(dn::Tuple{Vararg{Integer}}) = (SVector(dn),)
+sanitize_dn(dn::Tuple{}) = ()
 
 sublats(t::OnsiteTerm{<:Any,Missing}, lat::AbstractLattice) = collect(1:nsublats(lat))
 function sublats(t::OnsiteTerm{<:Any,<:Tuple}, lat::AbstractLattice)

@@ -40,7 +40,7 @@ Sublat{2,Float64,2} : sublattice in 2D space with 2 orbitals per site
   Orbitals : (:upspin, :downspin)
 ```
 """
-sublat(sites::Vector{<:SVector}; name = :_) =
+sublat(sites::Vector{<:SVector}; name = :_, kw...) =
     Sublat(sites, nametype(name))
 sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) = sublat(toSVectors(vs...); kw...)
 
@@ -182,14 +182,8 @@ struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: Abstr
     bravais::B
     unitcell::U
 end
-function Lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,E,T}
-    L = min(E,L2) # L should not exceed E
-    Lattice(convert(Bravais{E,L,T}, bravais), unitcell)
-end
 
 displaynames(l::AbstractLattice) = display_as_tuple(l.unitcell.names, ":")
-# displayorbitals(l::AbstractLattice) =
-#     replace(replace(string(l.unitcell.orbitals), "Symbol(\"" => ":"), "\")" => "")
 
 function Base.show(io::IO, lat::Lattice)
     i = get(io, :indent, "")
@@ -243,9 +237,21 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
 """
 lattice(s::Sublat, ss::Sublat...; kw...) where {E,T} = _lattice(Unitcell(s, ss...; kw...))
 _lattice(u::Unitcell{E,T}) where {E,T} = Lattice(Bravais{E,T}(), u)
-lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = Lattice(br, Unitcell(s, ss...; kw...))
+lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = lattice(br, Unitcell(s, ss...; kw...))
+
+function lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,E,T}
+    L = min(E,L2) # L should not exceed E
+    Lattice(convert(Bravais{E,L,T}, bravais), unitcell)
+end
 
 issemibounded(lat::Lattice) where {L} = issemibounded(lat.bravais)
+
+"""
+    dims(lat::Lattice{E,L}) -> (E, L)
+
+Return a tuple `(E, L)` of the embedding and lattice dimensions of `lat`
+"""
+dims(lat::Lattice{E,L}) where {E,L} = E, L
 
 #######################################################################
 # Supercell

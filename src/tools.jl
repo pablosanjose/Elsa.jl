@@ -73,7 +73,8 @@ function pinvmultiple(s::SMatrix{L,L´}) where {L,L´}
     L < L´ && throw(DimensionMismatch("Supercell dimensions $(L´) cannot exceed lattice dimensions $L"))
     qrfact = qr(s)
     n = det(qrfact.R)
-    abs(n) < sqrt(eps(n)) && throw(ErrorException("Supercell appears to be singular"))
+    # Cannot check det(s) ≈ 0 because s can be non-square
+    abs(n) ≈ 0 && throw(ErrorException("Supercell appears to be singular"))
     pinverse = inv(qrfact.R) * qrfact.Q'
     return round.(Int, n * inv(qrfact.R) * qrfact.Q'), round(Int, n)
 end
