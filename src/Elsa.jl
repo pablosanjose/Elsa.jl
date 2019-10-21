@@ -14,14 +14,14 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
       ProgressMeter
       #FFTW
 
-export sublat, bravais, lattice, hopping, onsite, hamiltonian, randomstate,
+export sublat, bravais, lattice, dims, hopping, onsite, hamiltonian, randomstate,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!, similarmatrix,
        sites, bandstructure, marchingmesh
 
 export LatticePresets, RegionPresets
 
 export @SMatrix, @SVector, SMatrix, SVector
-export ishermitian
+export ishermitian, I
 
 const NameType = Symbol
 const nametype = Symbol

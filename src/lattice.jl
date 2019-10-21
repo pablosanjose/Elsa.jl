@@ -13,7 +13,7 @@ Base.empty(s::Sublat) = Sublat(empty(s.sites), s.name)
 Base.copy(s::Sublat) = Sublat(copy(s.sites), s.name)
 
 Base.show(io::IO, s::Sublat{E,T}) where {E,T} = print(io,
-"Sublat{$E,$T,$D} : sublattice of $T-typed sites in $(E)D space
+"Sublat{$E,$T} : sublattice of $T-typed sites in $(E)D space
   Sites    : $(length(s.sites))
   Name     : $(displayname(s))")
 
@@ -40,7 +40,7 @@ Sublat{2,Float64,2} : sublattice in 2D space with 2 orbitals per site
   Orbitals : (:upspin, :downspin)
 ```
 """
-sublat(sites::Vector{<:SVector}; name = :_) =
+sublat(sites::Vector{<:SVector}; name = :_, kw...) =
     Sublat(sites, nametype(name))
 sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) = sublat(toSVectors(vs...); kw...)
 
@@ -99,18 +99,18 @@ Bravais{2,2,Float64} : set of 2 Bravais vectors in 2D space.
 # See also:
     semibounded
 """
-bravais(vs::Union{Tuple, AbstractVector}...; semibounded = false, kw...) =
+bravais(vs::Union{Tuple,AbstractVector,AbstractMatrix}...; semibounded = false, kw...) =
     (s = toSMatrix(vs...); Bravais(s, sanitize_semibounded(semibounded, s)))
 
 bravais(lat::AbstractLattice) = lat.bravais.matrix
 
 sanitize_semibounded(sb::Bool, ::SMatrix{E,L}) where {E,L} =
-    SVector(filltuple(sb, Val(L)))
+    SVector{L,Bool}(filltuple(sb, Val(L))) # need to specify type becaus of L=0 case
 sanitize_semibounded(sb::Int, s::SMatrix{E,L}) where {E,L} =
     sanitize_semibounded((sb,), s)
-sanitize_semibounded(sb::NTuple{L,Bool}, ::SMatrix{E,L}) where {E,L} = SVector(sb)
+sanitize_semibounded(sb::NTuple{L,Bool}, ::SMatrix{E,L}) where {E,L} = SVector{L,Bool}(sb)
 sanitize_semibounded(sb, ::SMatrix{E,L}) where {E,L} =
-    SVector(ntuple(i -> i in sb, Val(L)))
+    SVector{L,Bool}(ntuple(i -> i in sb, Val(L)))
 
 transform(b::Bravais{E,0}, f::F) where {E,F<:Function} = b
 
@@ -137,10 +137,14 @@ struct Unitcell{E,T,N}
 end
 
 Unitcell(sublats::Sublat...; kw...) = Unitcell(promote(sublats...); kw...)
-function Unitcell(sublats::NTuple{N,Sublat{E,T}};
-    dim::Val{E2} = Val(E),
-    type::Type{T2} = float(T),
-    names = [s.name for s in sublats], kw...) where {N,E,E2,T,T2}
+Unitcell(sublats::NTuple{N,Sublat{E,T}};
+    dim = Val(E), type = float(T), names = [s.name for s in sublats], kw...) where {N,E,T} =
+    _Unitcell(sublats, dim, type, names)
+
+# Dynamic dispatch
+_Unitcell(sublats, dim::Integer, type, names) = _Unitcell(sublats, Val(dim), type, names)
+
+function _Unitcell(sublats::NTuple{N,Sublat}, dim::Val{E}, type::Type{T}, names) where {N,E,T}
     _names = nametype_vector(names, N)
     # Make sublat names unique
     allnames = NameType[:_]
@@ -148,11 +152,11 @@ function Unitcell(sublats::NTuple{N,Sublat{E,T}};
         _names[i] in allnames && (_names[i] = uniquename(allnames, _names[i], i))
         push!(allnames, _names[i])
     end
-    sites = SVector{E2,T2}[]
+    sites = SVector{E,T}[]
     offsets = [0]  # length(offsets) == length(sublats) + 1
     for s in eachindex(sublats)
         for site in sublats[s].sites
-            push!(sites, padright(site, Val(E2)))
+            push!(sites, padright(site, Val(E)))
         end
         push!(offsets, length(sites))
     end
@@ -178,14 +182,8 @@ struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: Abstr
     bravais::B
     unitcell::U
 end
-function Lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,E,T}
-    L = min(E,L2) # L should not exceed E
-    Lattice(convert(Bravais{E,L,T}, bravais), unitcell)
-end
 
 displaynames(l::AbstractLattice) = display_as_tuple(l.unitcell.names, ":")
-# displayorbitals(l::AbstractLattice) =
-#     replace(replace(string(l.unitcell.orbitals), "Symbol(\"" => ":"), "\")" => "")
 
 function Base.show(io::IO, lat::Lattice)
     i = get(io, :indent, "")
@@ -239,9 +237,21 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
 """
 lattice(s::Sublat, ss::Sublat...; kw...) where {E,T} = _lattice(Unitcell(s, ss...; kw...))
 _lattice(u::Unitcell{E,T}) where {E,T} = Lattice(Bravais{E,T}(), u)
-lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = Lattice(br, Unitcell(s, ss...; kw...))
+lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = lattice(br, Unitcell(s, ss...; kw...))
+
+function lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,E,T}
+    L = min(E,L2) # L should not exceed E
+    Lattice(convert(Bravais{E,L,T}, bravais), unitcell)
+end
 
 issemibounded(lat::Lattice) where {L} = issemibounded(lat.bravais)
+
+"""
+    dims(lat::Lattice{E,L}) -> (E, L)
+
+Return a tuple `(E, L)` of the embedding and lattice dimensions of `lat`
+"""
+dims(lat::Lattice{E,L}) where {E,L} = E, L
 
 #######################################################################
 # Supercell

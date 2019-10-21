@@ -15,7 +15,7 @@ end
 struct HoppingTerm{F,
                    S<:Union{Missing,Tuple{Vararg{Tuple{NameType,NameType}}}},
                    D<:Union{Missing,Tuple{Vararg{SVector{L,Int}}} where L},
-                   R<:Union{Missing,Real},
+                   R<:Union{Missing,AbstractFloat},
                    C} <: TightbindingModelTerm
     h::F
     sublats::S
@@ -35,6 +35,7 @@ sanitize_sublats(s::Missing) = missing
 sanitize_sublats(s::Integer) = (nametype(s),)
 sanitize_sublats(s::NameType) = (s,)
 sanitize_sublats(s::Tuple) where {N} = nametype.(s)
+sanitize_sublats(s::Tuple{}) = ()
 sanitize_sublats(n) = throw(ErrorException(
     "`sublats` for `onsite` must be either `missing`, an `s` or a tuple of `s`s, with `s::$NameType` is a sublattice name"))
 
@@ -50,6 +51,7 @@ sanitize_sublatpairs(s) = throw(ErrorException(
 sanitize_dn(dn::Missing) = missing
 sanitize_dn(dn::Tuple{Vararg{Tuple}}) = SVector.(dn)
 sanitize_dn(dn::Tuple{Vararg{Integer}}) = (SVector(dn),)
+sanitize_dn(dn::Tuple{}) = ()
 
 sublats(t::OnsiteTerm{<:Any,Missing}, lat::AbstractLattice) = collect(1:nsublats(lat))
 function sublats(t::OnsiteTerm{<:Any,<:Tuple}, lat::AbstractLattice)
@@ -110,6 +112,11 @@ form `r -> ...` for a position-dependent onsite energy. If `sublats` is specifie
 sublattice name or tuple thereof, `onsite` is only applied to sublattices with said names.
 If `forcehermitian` is true, the model will produce an Hermitian Hamiltonian.
 
+The dimension of `o::AbstractMatrix` must match the orbital dimension of applicable
+sublattices (see also `orbitals` option for `hamiltonian`). If `o::Number` it will be
+treated as `o * I` (proportional to identity matrix) when applied to multiorbital
+sublattices.
+
 `TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
 together to build more complicated `TightbindingModel`s.
 
@@ -161,6 +168,11 @@ and `dr` the bond vector). If `sublats` is specified as a sublattice name pair, 
 thereof, `hopping` is only applied between sublattices with said names. If `forcehermitian`
 is true, the model will produce an Hermitian Hamiltonian.
 
+The dimension of `h::AbstractMatrix` must match the orbital dimension of applicable
+sublattices (see also `orbitals` option for `hamiltonian`). If `h::Number` it will be
+treated as `h * I` (proportional to identity matrix) when applied to multiorbital
+sublattices.
+
 `TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
 together to build more complicated `TightbindingModel`s.
 
@@ -194,8 +206,9 @@ Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
 """
 function hopping(h; sublats = missing, range::Real = 1, dn = missing, forcehermitian::Bool = true)
     return TightbindingModel(HoppingTerm(h, sanitize_sublatpairs(sublats), sanitize_dn(dn),
-        range + sqrt(eps(Float64)), 1, forcehermitian))
+        float(range) + sqrt(eps(float(range))), 1, forcehermitian))
 end
+
 
 Base.:*(x, o::OnsiteTerm) =
     OnsiteTerm(o.o, o.sublats, x * o.coefficient, o.forcehermitian)
@@ -216,10 +229,10 @@ struct TightbindingModel{N,T<:Tuple{Vararg{TightbindingModelTerm,N}}}
 end
 
 terms(t::TightbindingModel) = t.terms
-# terms(t::TightbindingModelTerm) = (t,)
 
-# TightbindingModel(m::TightbindingModel) = m
 TightbindingModel(ts::TightbindingModelTerm...) = TightbindingModel(ts)
+
+(m::TightbindingModel)(r, dr) = sum(t -> t(r, dr), m.terms)
 
 # External API #
 

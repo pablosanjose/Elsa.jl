@@ -44,15 +44,6 @@ $i  Coordination     : $(nhoppings(ham) / nsites(ham))")
     issuperlattice(ham.lattice) && print(ioindent, "\n", ham.lattice.supercell)
 end
 
-# Base.show(io::IO, h::HamiltonianHarmonic) = show(io, MIME("text/plain"), h)
-# Base.show(io::IO, ::MIME"text/plain", h::HamiltonianHarmonic{L,M}) where {L,M} = print(io,
-# "HamiltonianHarmonic{$L,$(eltype(M))} : Bloch harmonic of $(L)D Hamiltonian
-#   Harmonic type   : $(displaymatrixtype(typeof(h.h)))
-#   Harmonic size   : $((n -> "$n × $n")(nsites(h)))
-#   Cell distance   : $(Tuple(h.dn))
-#   Element type    : $(displayelements(M))
-#   Elements        : $(_nnz(h.h))")
-
 Base.summary(::Hamiltonian{LA}) where {E,L,LA<:Lattice{E,L}} =
     "Hamiltonian{<:Lattice} : $(L)D Hamiltonian on a $(L)D Lattice in $(E)D space"
 
@@ -81,7 +72,7 @@ _orbitaltype(t::Type{SVector{N,Tv}}) where {N,Tv} = t
 _orbitaltype(t::Type{SVector{1,Tv}}) where {Tv} = Tv
 
 # find SMatrix type that can hold all matrix elements between lattice sites
-blocktype(orbs, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
+blocktype(orbs, type::Type{Tv}) where {E,L,Tv} =
     _blocktype(orbitaltype(orbs, Tv))
 _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
 _blocktype(::Type{S}) where {S<:Number} = S
@@ -122,8 +113,12 @@ _nnzdiag(s::Matrix) = count(!iszero, s[i,i] for i in 1:minimum(size(s)))
 nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : nsites(first(h.harmonics))
 nsites(h::HamiltonianHarmonic) = size(h.h, 1)
 
-sanitize_orbs(os::NTuple{M,Union{Tuple,Val}}, names::NTuple{N}) where {N,M} =
-    ntuple(n -> n > M ? (:a,) : sanitize_orbs(os[n]), Val(N))
+sanitize_orbs(o::Union{Val,NameType,Integer}, names::NTuple{N}) where {N} =
+    ntuple(n -> sanitize_orbs(o), Val(N))
+sanitize_orbs(o::NTuple{M,Union{NameType,Integer}}, names::NTuple{N}) where {M,N} =
+    (ont = nametype.(o); ntuple(n -> ont, Val(N)))
+sanitize_orbs(o::Missing, names) = sanitize_orbs((:a,), names)
+sanitize_orbs(o::Pair, names) = sanitize_orbs((o,), names)
 sanitize_orbs(os::NTuple{M,Pair}, names::NTuple{N}) where {N,M} =
     ntuple(Val(N)) do n
         for m in 1:M
@@ -131,17 +126,16 @@ sanitize_orbs(os::NTuple{M,Pair}, names::NTuple{N}) where {N,M} =
         end
         return (:a,)
     end
-sanitize_orbs(os::NTuple{M,Union{NameType,Integer}}, names::NTuple{N}) where {M,N} =
-    (ont = nametype.(os); ntuple(n -> ont , Val(N)))
-sanitize_orbs(o::Union{NameType,Integer,Pair,Val}, names) =
-    sanitize_orbs((_ -> o).(names), names)
-sanitize_orbs(o::Missing, names) = sanitize_orbs((:a,), names)
+sanitize_orbs(os::NTuple{M,Any}, names::NTuple{N}) where {N,M} =
+    ntuple(n -> n > M ? (:a,) : sanitize_orbs(os[n]), Val(N))
 
-sanitize_orbs(o::Integer) = nametype(o)
-sanitize_orbs(o::NameType) = o
-sanitize_orbs(o::Val{N}) where {N} = ntuple(_ -> :a, Val(N))
-sanitize_orbs(o::Tuple) = sanitize_orbs.(o)
+
 sanitize_orbs(p::Pair) = sanitize_orbs(last(p))
+sanitize_orbs(o::Integer) = (nametype(o),)
+sanitize_orbs(o::NameType) = (o,)
+sanitize_orbs(o::Val{N}) where {N} = ntuple(_ -> :a, Val(N))
+sanitize_orbs(o::NTuple{N,Union{Integer,NameType}}) where {N} = nametype.(o)
+sanitize_orbs(p) = throw(ArgumentError("Wrong format for orbitals, see `hamiltonian`"))
 
 # External API #
 """
@@ -446,9 +440,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
 end
 
 orbsized(m, orbs) = orbsized(m, orbs, orbs)
-orbsized(m, o1::NTuple{D1}, o2::NTuple{D2}) where {D1,D2} =
-    SMatrix{D1,D2}(m)
-orbsized(m::Number, o1::NTuple{1}, o2::NTuple{1}) = m
+orbsized(m, o1::NTuple{D1}, o2::NTuple{D2}) where {D1,D2} = padtotype(m, SMatrix{D1,D2})
 
 dniter(dns::Missing, ::Val{L}) where {L} = BoxIterator(zero(SVector{L,Int}))
 dniter(dns, ::Val) = dns
