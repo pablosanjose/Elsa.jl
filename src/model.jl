@@ -112,6 +112,11 @@ form `r -> ...` for a position-dependent onsite energy. If `sublats` is specifie
 sublattice name or tuple thereof, `onsite` is only applied to sublattices with said names.
 If `forcehermitian` is true, the model will produce an Hermitian Hamiltonian.
 
+The dimension of `o::AbstractMatrix` must match the orbital dimension of applicable
+sublattices (see also `orbitals` option for `hamiltonian`). If `o::Number` it will be
+treated as `o * I` (proportional to identity matrix) when applied to multiorbital
+sublattices.
+
 `TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
 together to build more complicated `TightbindingModel`s.
 
@@ -162,6 +167,11 @@ of the form `(r, dr) -> ...` for a position-dependent hopping (`r` is the bond c
 and `dr` the bond vector). If `sublats` is specified as a sublattice name pair, or tuple
 thereof, `hopping` is only applied between sublattices with said names. If `forcehermitian`
 is true, the model will produce an Hermitian Hamiltonian.
+
+The dimension of `h::AbstractMatrix` must match the orbital dimension of applicable
+sublattices (see also `orbitals` option for `hamiltonian`). If `h::Number` it will be
+treated as `h * I` (proportional to identity matrix) when applied to multiorbital
+sublattices.
 
 `TightbindingModelTerm`s created with `onsite` or `hopping` can be added or substracted
 together to build more complicated `TightbindingModel`s.
