@@ -49,83 +49,6 @@ function diagonalizer(h::Hamiltonian{<:Lattice,<:Any,M,<:SparseMatrixCSC};
 end
 
 #######################################################################
-# Codiagonalization
-#######################################################################
-struct VelocityCodiagonalizer{M,H<:Hamiltonian{<:Any,<:Any,M}} <: AbstractCodiagonalizer
-    h::H
-    degeneracies::Vector{Int}
-end
-VelocityCodiagonalizer(h::Hamiltonian{<:Any,<:Any,M}) where {M} =
-    VelocityCodiagonalizer(h, Int[])
-
-# ϵ is assumed sorted
-resolve_degeneracies!(ϵ, ψ, codiag::Missing) = (ϵ, ψ)
-# function resolve_degeneracies!(ϵ, ψ, codiag::VelocityCodiagonalizer, ϕs::SVector{L}) where {L}
-#     degeneracies!(codiag.degeneracies, ϵ)
-# end
-
-function degeneracies!(deglist, ϵs)
-    resize!(deglist, 0)
-    l = length(ϵs)
-    if l > 1
-        for (i, ϵ) in enumerate(ϵs)
-            if (i > 1 && ϵ ≈ ϵs[i - 1]) || (i < l && ϵ ≈ ϵs[i + 1])
-                push!(deglist, i)
-            end
-        end
-    end
-    return deglist
-end
-
-
-# function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}, degtol) where {L}
-#     degsubspaces = degeneracies(energies, degtol)
-#     if !(degsubspaces === nothing)
-#         for subspaceinds in degsubspaces
-#             for axis = 1:L
-#                 v = vfunc(kn, axis)  # Need to do it in-place for each subspace
-#                 subspace = view(states, :, subspaceinds)
-#                 vsubspace = subspace' * v * subspace
-#                 veigen = eigen!(vsubspace)
-#                 subspace .= subspace * veigen.vectors
-#                 success = !hasdegeneracies(veigen.values, degtol)
-#                 success && break
-#             end
-#         end
-#     end
-#     return nothing
-# end
-
-# function hasdegeneracies(sorted_ϵ, degtol)
-#     for i in 2:length(sorted_ϵ)
-#         abs(sorted_ϵ[i] - sorted_ϵ[i-1]) < degtol && return true
-#     end
-#     return false
-# end
-
-# function degeneracies(energies, degtol)
-#     if hasdegeneracies(energies, degtol)
-#         deglist = Vector{Int}[]
-#         isclassified = BitArray(false for _ in eachindex(energies))
-#         for i in eachindex(energies)
-#             isclassified[i] && continue
-#             degeneracyfound = false
-#             for j in (i + 1):length(energies)
-#                 if !isclassified[j] && abs(energies[i] - energies[j]) < degtol
-#                     !degeneracyfound && push!(deglist, [i])
-#                     degeneracyfound = true
-#                     push!(deglist[end], j)
-#                     isclassified[j] = true
-#                 end
-#             end
-#         end
-#         return deglist
-#     else
-#         return nothing
-#     end
-# end
-
-#######################################################################
 # Diagonalize methods
 #   (All but LinearAlgebraPackage `@require` some package to be loaded)
 #######################################################################
@@ -140,8 +63,8 @@ diagonalizer(method::LinearAlgebraPackage, matrix; kw...) = Diagonalizer(method,
 
 function diagonalize(d::Diagonalizer{<:LinearAlgebraPackage})
     ϵ, ψ = eigen!(d.matrix; sortby = λ -> abs(λ - d.origin), d.method.options...)
-    ϵ´, ψ´ = view(ϵ, 1:d.levels), view(ψ, :, 1:d.levels)
-    return ϵ´, ψ´
+    # ϵ´, ψ´ = view(ϵ, 1:d.levels), view(ψ, :, 1:d.levels)
+    # return ϵ´, ψ´
 end
 
 # Fallback for unloaded packages
@@ -168,3 +91,98 @@ struct ArnoldiPackagePackage{O,L,E} <: AbstractDiagonalizePackage
     lmap::L         # LinearMap for shift and invert
     engine::E       # Optional support for lmap (e.g. Pardiso solver or factorization)
 end
+
+
+#######################################################################
+# Codiagonalization
+#######################################################################
+struct VelocityCodiagonalizer{M,H<:Hamiltonian{<:Any,<:Any,M}} <: AbstractCodiagonalizer
+    h::H
+    degranges::Vector{UnitRange{Int}}
+    success::Vector{Bool}
+end
+VelocityCodiagonalizer(h::Hamiltonian{<:Any,<:Any,M}) where {M} =
+    VelocityCodiagonalizer(h, Int[], Bool[])
+
+# ϵ is assumed sorted
+resolve_degeneracies!(ϵ, ψ, d::Diagonalizer{<:Any,<:Any,Missing}, ϕs) = (ϵ, ψ)
+
+function resolve_degeneracies!(ϵ, ψ, d::Diagonalizer{<:Any,<:Any,<:AbstractCodiagonalizer}, ϕs)
+    issorted(ϵ) || throw(ArgumentError("Unsorted eigenvalues"))
+    if hasdegeneracies(ϵ)
+        finddegeneracies!(d.codiag.degranges, ϵ)
+    else
+        return ϵ, ψ
+    end
+    success = d.codiag.success
+    resize!(success, length(d.codiag.degranges))
+    fill!(success, false)
+    for v in codiag_matrices(d.codiag, ϕs)
+        all(success) && break
+        for (i,r) in enumerate(d.codiag.degranges)
+            success[i] || (success[i] = codiagonalize!(ϵ, ψ, v, r))
+        end
+    end
+    return ϵ, ψ
+end
+
+function hasdegeneracies(sorted_ϵ)
+    for i in 2:length(sorted_ϵ)
+        sorted_ϵ[i] ≈ sorted_ϵ[i-1] && return true
+    end
+    return false
+end
+
+finddegeneracies!(degranges, sorted_ϵ) = approxruns!(degranges, sorted_ϵ)
+
+codiag_matrices(d::Diagonalizer, ϕs::SVector{L}) where {L} =
+    (bloch!(d.matrix, d.codiag.h, ϕs; axis = i) for i in 1:L)
+
+function codiagonalize!(ϵ, ψ, v, r)
+    subspace = view(ψ, :, r)
+    vsubspace = subspace' * v * subspace
+    veigen = eigen!(vsubspace)
+    subspace .= subspace * veigen.vectors
+    success = !hasdegeneracies(veigen.values)
+    return success
+end
+
+# function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}, degtol) where {L}
+#     degsubspaces = degeneracies(energies, degtol)
+#     if !(degsubspaces === nothing)
+#         for subspaceinds in degsubspaces
+#             for axis = 1:L
+#                 v = vfunc(kn, axis)  # Need to do it in-place for each subspace
+#                 subspace = view(states, :, subspaceinds)
+#                 vsubspace = subspace' * v * subspace
+#                 veigen = eigen!(vsubspace)
+#                 subspace .= subspace * veigen.vectors
+#                 success = !hasdegeneracies(veigen.values, degtol)
+#                 success && break
+#             end
+#         end
+#     end
+#     return nothing
+# end
+
+# function degeneracies(energies, degtol)
+#     if hasdegeneracies(energies, degtol)
+#         deglist = Vector{Int}[]
+#         isclassified = BitArray(false for _ in eachindex(energies))
+#         for i in eachindex(energies)
+#             isclassified[i] && continue
+#             degeneracyfound = false
+#             for j in (i + 1):length(energies)
+#                 if !isclassified[j] && abs(energies[i] - energies[j]) < degtol
+#                     !degeneracyfound && push!(deglist, [i])
+#                     degeneracyfound = true
+#                     push!(deglist[end], j)
+#                     isclassified[j] = true
+#                 end
+#             end
+#         end
+#         return deglist
+#     else
+#         return nothing
+#     end
+# end

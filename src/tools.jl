@@ -59,7 +59,7 @@ negative(s::SVector{0,<:Number}) where {L} = s
 
 empty_sparse(::Type{M}, n, m) where {M} = sparse(Int[], Int[], M[], n, m)
 
-display_as_tuple(v, prefix = "") = isempty(v) ? "()" : 
+display_as_tuple(v, prefix = "") = isempty(v) ? "()" :
     string("(", prefix, join(v, string(", ", prefix)), ")")
 
 displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; kw...) where {E,L} =
@@ -116,6 +116,27 @@ function _copy!(dst::Matrix{T}, src::SparseMatrixCSC) where {T}
         end
     end
     return dst
+end
+
+approxruns(list::AbstractVector) = approxruns!(UnitRange{Int}[], list)
+function approxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector)
+    resize!(runs, 0)
+    len = length(list)
+    len < 2 && return runs
+    rmin = rmax = 1
+    prev = list[1]
+    @inbounds for i in 2:len
+        next = list[i]
+        if next ≈ prev
+            rmax = i
+        else
+            rmin < rmax && push!(runs, rmin:rmax)
+            rmin = rmax = i
+        end
+        prev = next
+    end
+    rmin < rmax && push!(runs, rmin:rmax)
+    return runs
 end
 
 # pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')

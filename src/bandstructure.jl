@@ -33,11 +33,33 @@ function Base.show(io::IO, b::Bandstructure{M,T,D}) where {M,T,D}
     print(ioindent, "\n", b.mesh)
 end
 
+# API #
+
+vertices(b::Band{<:Any,T,D}) where {T,D} =
+    Union{Missing,SVector{D+1,T}}[e === missing ? missing : SVector(Tuple(v)..., e)
+        for (v, e) in zip(vertices(b.mesh), b.energies)]
+
+function simplices(b::Band{<:Any,T,D}) where {T,D}
+    faces = SVector{D+1,SVector{D+1,real(T)}}[]
+    sizehint!(faces, length(b.mesh.simplices))
+    kverts = vertices(b.mesh)
+    for simplex in b.mesh.simplices
+        any(v -> b.energies[v] === missing, simplex) && continue
+        face = _face(simplex, kverts, b.energies)
+        push!(faces, face)
+    end
+    return faces
+end
+
+_face(simplex, kverts, energies) = (v -> _vertex(kverts[v], energies[v])).(simplex)
+_vertex(kv::SVector{D,T}, ϵ) where {D,T} = SVector{D+1,T}(Tuple(kv)..., T(real(ϵ)))
+
 #######################################################################
 # bandstructure
 #######################################################################
 
-bandstructure(h::Hamiltonian{<:Any, L}, mesh = marchingmesh(ntuple(_ -> 10, Val(L))); kw...) where {L} =
+bandstructure(h::Hamiltonian{<:Any,L,M},
+    mesh = marchingmesh(real(eltype(M)), ntuple(_ -> 10, Val(L))); kw...) where {L,M} =
     bandstructure!(diagonalizer(h; kw...), h, mesh) # barrier for type-unstable diagonalizer
 
 function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD) where {M,D,MD<:Mesh{D}}
@@ -51,6 +73,7 @@ function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh
     for (n, ϕs) in enumerate(vertices(mesh))
         bloch!(d.matrix, h, ϕs)
         (ϵk, ψk) = diagonalize(d)
+        resolve_degeneracies!(ϵk, ψk, d, ϕs)
         copyslice!(ϵks, CartesianIndices((1:nϵ, n:n)),
                    ϵk,  CartesianIndices((1:nϵ,)))
         copyslice!(ψks, CartesianIndices((1:dimh, 1:nϵ, n:n)),
@@ -67,13 +90,12 @@ function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh
     for src in 1:nk
         for edge in edges(mesh, src)
             dst = edgedest(mesh, edge)
-            for band in bands
+            for (n,band) in enumerate(bands)
                 proj, bandidx = findmostparallel(ψks, dst, band, src)
                 if proj > d.minprojection
                     copyslice!(band.states, CartesianIndices((1:dimh, dst:dst)),
-                            ψks, CartesianIndices((1:dimh, bandidx:bandidx, dst:dst)))
-                    copyslice!(band.energies, CartesianIndices((dst:dst)),
-                            ϵks  , CartesianIndices((bandidx:bandidx, dst:dst)))
+                        ψks, CartesianIndices((1:dimh, bandidx:bandidx, dst:dst)))
+                    band.energies[dst] = ϵks[bandidx, dst]
                 end
             end
         end
