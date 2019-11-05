@@ -1,69 +1,79 @@
 #######################################################################
 # Spectrum and Bandstructure
 #######################################################################
-struct Spectrum{M,T}
-    states::Matrix{M}
-    energies::Vector{T}
+# struct Spectrum{M,T}
+#     states::Matrix{M}
+#     energies::Vector{T}
+# end
+
+struct Band{M,A<:AbstractVector{M},MD<:Mesh}
+    mesh::MD    # Mesh with missing vertices removed
+    states::A   # Must be resizeable container to build & refine band
+    dimstates::Int
 end
 
-struct Band{M,T,D,MD<:Mesh{D}}
-    states::Matrix{Union{M,Missing}}
-    energies::Vector{Union{T,Missing}}
-    mesh::MD
-end
-
-function Band{M,T}(mesh::Mesh, dimh::Int) where {M,T}
+function Band{M}(mesh::Mesh, dimstates::Int) where {M}
     nk = nvertices(mesh)
-    states = Union{M,Missing}[missing for _ in 1:dimh, _ in 1:nk]
-    energies = Union{T,Missing}[missing for _ in 1:nk]
-    return Band(states, energies, mesh)
+    states = M[]
+    return Band(mesh, states, dimstates)
 end
 
-struct Bandstructure{M,T,D,MD<:Mesh{D}}   # D is dimension of parameter space
-    bands::Vector{Band{M,T,D,MD}}
-    mesh::MD
+struct Bandstructure{D,M,B<:Band{M},MD<:Mesh{D}}   # D is dimension of parameter space
+    bands::Vector{B}
+    kmesh::MD
 end
 
-function Base.show(io::IO, b::Bandstructure{M,T,D}) where {M,T,D}
+function Base.show(io::IO, b::Bandstructure{D,M}) where {D,M}
     ioindent = IOContext(io, :indent => string("  "))
     print(io,
 "Bandstructure: bands for a $(D)D hamiltonian
   Bands        : $(length(b.bands))
   Element type : $(displayelements(M))")
-    print(ioindent, "\n", b.mesh)
+    print(ioindent, "\n", b.kmesh)
 end
 
 # API #
 
-vertices(b::Band{<:Any,T,D}) where {T,D} =
-    Union{Missing,SVector{D+1,T}}[e === missing ? missing : SVector(Tuple(v)..., e)
-        for (v, e) in zip(vertices(b.mesh), b.energies)]
+# function vertices(b::Band{<:Any,T,D}) where {T,D} =
+#     Union{Missing,SVector{D+1,T}}[e === missing ? missing : SVector(Tuple(v)..., e)
+#         for (v, e) in zip(vertices(b.mesh), b.energies)]
 
-function simplices(b::Band{<:Any,T,D}) where {T,D}
-    faces = SVector{D+1,SVector{D+1,real(T)}}[]
-    sizehint!(faces, length(b.mesh.simplices))
-    kverts = vertices(b.mesh)
-    for simplex in b.mesh.simplices
-        any(v -> b.energies[v] === missing, simplex) && continue
-        face = _face(simplex, kverts, b.energies)
-        push!(faces, face)
-    end
-    return faces
-end
+# function vertmesh(b::Band{<:Any,T,D}) where {T,D}
+#     verts = filter(v -> v !== missing, vertices(b.mesh))
+#     faces = SVector{D+1,SVector{D+1,real(T)}}[]
+#     sizehint!(faces, length(b.mesh.simplices))
+#     kverts = vertices(b.mesh)
+#     for simplex in b.mesh.simplices
+#         any(v -> b.energies[v] === missing, simplex) && continue
+#         face = _face(simplex, kverts, b.energies)
+#         push!(faces, face)
+#     end
+#     return faces
+# end
 
-_face(simplex, kverts, energies) = (v -> _vertex(kverts[v], energies[v])).(simplex)
-_vertex(kv::SVector{D,T}, ϵ) where {D,T} = SVector{D+1,T}(Tuple(kv)..., T(real(ϵ)))
+# function simplices(b::Band{<:Any,T,D}) where {T,D}
+#     faces = SVector{D+1,SVector{D+1,real(T)}}[]
+#     sizehint!(faces, length(b.mesh.simplices))
+#     kverts = vertices(b.mesh)
+#     for simplex in b.mesh.simplices
+#         any(v -> b.energies[v] === missing, simplex) && continue
+#         face = _face(simplex, kverts, b.energies)
+#         push!(faces, face)
+#     end
+#     return faces
+# end
+
+# _face(simplex, kverts, energies) = (v -> _vertex(kverts[v], energies[v])).(simplex)
+# _vertex(kv::SVector{D,T}, ϵ) where {D,T} = SVector{D+1,T}(Tuple(kv)..., T(real(ϵ)))
 
 #######################################################################
 # bandstructure
 #######################################################################
+bandstructure(h::Hamiltonian{<:Any,L,M}, resolution::Integer = 13; kw...) where {L,M} =
+    bandstructure!(diagonalizer(h; kw...), h,  marchingmesh(h, resolution))
+    # barrier for type-unstable diagonalizer
 
-bandstructure(h::Hamiltonian{<:Any,L,M},
-    mesh = marchingmesh(real(eltype(M)), ntuple(_ -> 10, Val(L))); kw...) where {L,M} =
-    bandstructure!(diagonalizer(h; kw...), h, mesh) # barrier for type-unstable diagonalizer
-
-function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD) where {M,D,MD<:Mesh{D}}
-    T = eltype(M)
+function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD) where {M,D,T,MD<:Mesh{D,T}}
     nϵ = d.levels
     dimh = size(h, 1)
     nk = nvertices(mesh)
@@ -80,49 +90,120 @@ function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh
                    ψk,  CartesianIndices((1:dimh, 1:nϵ)))
         ProgressMeter.next!(p; showvalues = ())
     end
-    bands = Band{M,T,D,MD}[Band{M,T}(mesh, dimh) for _ in 1:nϵ]
-    # seed bands
-    @inbounds for (nb, band) in enumerate(bands), i in 1:dimh
-        band.states[i, 1] = ψks[i, nb, 1]
-        band.energies[1] = ϵks[nb, 1]
-    end
-    p = Progress(nk, "Step 2/2 - Connecting bands: ")
-    for src in 1:nk
-        for edge in edges(mesh, src)
-            dst = edgedest(mesh, edge)
-            for (n,band) in enumerate(bands)
-                proj, bandidx = findmostparallel(ψks, dst, band, src)
-                if proj > d.minprojection
-                    copyslice!(band.states, CartesianIndices((1:dimh, dst:dst)),
-                        ψks, CartesianIndices((1:dimh, bandidx:bandidx, dst:dst)))
-                    band.energies[dst] = ϵks[bandidx, dst]
-                end
-            end
-        end
+
+    bands = Band{M,Vector{M},Mesh{D+1,T,Vector{SVector{D+1,T}},Vector{NTuple{D+1,Int}}}}[]
+    bandindices = Vector{Int}(undef, nk) # the 1:nϵ index for each k point. 0 == missing
+    p = Progress(nϵ, "Step 2/2 - Connecting bands: ")
+    for nb in 1:nϵ
+        findbandindices!(bandindices, nb, ψks, mesh, d.minprojection)
+        # fill!(bandindices, nb)
+        band = extractband(bandindices, ϵks, ψks, mesh)
+        push!(bands, band)
         ProgressMeter.next!(p; showvalues = ())
     end
     return Bandstructure(bands, mesh)
 end
 
-function findmostparallel(ψks::Array{M,3}, dst, band, src) where {M}
+function findbandindices!(bandindices, nb, ψks, mesh, minprojection)
+    dimh, nϵ, nk = size(ψks)
+    fill!(bandindices, 0)
+    bandindices[1] = nb
+    for srck in 1:nk, edgek in edges(mesh, srck)
+        destk = edgedest(mesh, edgek)
+        srcb = bandindices[srck]
+        proj, destb = findmostparallel(ψks, destk, srcb, srck)
+        if proj > minprojection
+            if iszero(bandindices[destk])
+                bandindices[destk] = destb
+            elseif bandindices[destk] != destb
+                throw(error("Non-trivial band degeneracy detected. Resolution not yet implemented."))
+            end
+            # bandindices[destk] = destb
+        end
+    end
+    return bandindices
+end
+
+function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
     T = real(eltype(M))
     dimh, nϵ, nk = size(ψks)
     maxproj = zero(T)
-    idx = 0
-    any(i -> band.states[i, src] === missing, 1:dimh) && return maxproj, idx
-    @inbounds for j in 1:nϵ
+    destb = 0
+    srcb == 0 && return maxproj, destb
+    @inbounds for nb in 1:nϵ
         proj = zero(M)
         @simd for i in 1:dimh
-            proj += ψks[i, j, dst]' * band.states[i, src]
+            proj += ψks[i, nb, destk]' * ψks[i, srcb, srck]
         end
         absproj = T(abs(tr(proj)))
         if maxproj < absproj
-            idx = j
+            destb = nb
             maxproj = absproj
         end
     end
-    return maxproj, idx
+    return maxproj, destb
 end
+
+function extractband(bandindices, ϵks, ψks, mesh::Mesh{D,T}) where {D,T}
+    dimh, nϵ, nk = size(ψks)
+    states = similar(ψks, dimh * nk)
+    vertices = Vector{SVector{D+1,T}}(undef, nk)
+    k´ = 0
+    for (k, ind) in enumerate(bandindices)
+        if !iszero(ind)
+            k´ += 1
+            vertices[k´] = SVector(Tuple(mesh.vertices[k])..., ϵks[ind, k])
+            copyto!(states, 1 + dimh * (k´ - 1), ψks, 1 + dimh * (k - 1), dimh)
+            bandindices[k] = k´ # Reuse to store new vertex indices
+        end
+    end
+    if k´ < nk
+        resize!(vertices, k´)
+        resize!(states, k´ * dimh)
+        simplices = extractsimplices(mesh.simplices, bandindices)
+        adjmat = extractsadjacencies(mesh.adjmat, bandindices)
+    else
+        simplices = copy(vec(mesh.simplices))
+        adjmat = copy(mesh.adjmat)
+    end
+    mesh´ = Mesh(vertices, adjmat, simplices)
+    band = Band(mesh´, states, dimh)
+    return band
+end
+
+function extractsimplices(simplices::AbstractVector{NTuple{N,Int}}, indices) where {N}
+    simplices´ = similar(simplices)
+    n = 0
+    for simp in simplices
+        simp´ = ntuple(i -> indices[simp[i]], Val(N))
+        if all(!iszero, simp´)
+            n += 1
+            simplices´[n] = simp´
+        end
+    end
+    resize!(simplices´, n)
+    return simplices´
+end
+
+## This is simpler, but allocates more, and is slower
+# extractsadjacencies(adjmat, bandindices) =
+#     adjmat[(!iszero).(bandindices), (!iszero).(bandindices)]
+
+function extractsadjacencies(adjmat::AbstractSparseMatrix{Tv}, bandindices) where {Tv}
+    n = count(!iszero, bandindices)
+    b = SparseMatrixBuilder{Tv}(n, n)
+    for col in 1:size(adjmat, 2)
+        iszero(bandindices[col]) && continue
+        for ptr in nzrange(adjmat, col)
+            row = rowvals(adjmat)[ptr]
+            iszero(bandindices[row]) || pushtocolumn!(b, row, nonzeros(adjmat)[ptr])
+        end
+        finalizecolumn!(b)
+    end
+    adjmat´ = sparse(b)
+    return adjmat´
+end
+
 #######################################################################
 # Old
 #######################################################################
@@ -172,58 +253,6 @@ end
 # function spectrum_arpack(h; levels = 2, sigma = 1.0im, kw...)
 #     (energies, states, _) = eigs(h; sigma = sigma, nev = levels, kw...)
 #     return (real.(energies), states)
-# end
-
-resolve_degeneracies!(energies, states, vfunc::Missing, kn, degtol) = nothing
-# function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}, degtol) where {L}
-#     degsubspaces = degeneracies(energies, degtol)
-#     if !(degsubspaces === nothing)
-#         for subspaceinds in degsubspaces
-#             for axis = 1:L
-#                 v = vfunc(kn, axis)  # Need to do it in-place for each subspace
-#                 subspace = view(states, :, subspaceinds)
-#                 vsubspace = subspace' * v * subspace
-#                 veigen = eigen!(vsubspace)
-#                 subspace .= subspace * veigen.vectors
-#                 success = !hasdegeneracies(veigen.values, degtol)
-#                 success && break
-#             end
-#         end
-#     end
-#     return nothing
-# end
-
-# function hasdegeneracies(energies, degtol)
-#     has = false
-#     for i in eachindex(energies), j in (i+1):length(energies)
-#         if abs(energies[i] - energies[j]) < degtol
-#             has = true
-#             break
-#         end
-#     end
-#     return has
-# end
-
-# function degeneracies(energies, degtol)
-#     if hasdegeneracies(energies, degtol)
-#         deglist = Vector{Int}[]
-#         isclassified = BitArray(false for _ in eachindex(energies))
-#         for i in eachindex(energies)
-#             isclassified[i] && continue
-#             degeneracyfound = false
-#             for j in (i + 1):length(energies)
-#                 if !isclassified[j] && abs(energies[i] - energies[j]) < degtol
-#                     !degeneracyfound && push!(deglist, [i])
-#                     degeneracyfound = true
-#                     push!(deglist[end], j)
-#                     isclassified[j] = true
-#                 end
-#             end
-#         end
-#         return deglist
-#     else
-#         return nothing
-#     end
 # end
 
 
@@ -444,7 +473,7 @@ resolve_degeneracies!(energies, states, vfunc::Missing, kn, degtol) = nothing
 #                 pushtocolumn!(slinkbuilder, n_target, _rdr(r1, r2))
 #             end
 #         end
-#         finalisecolumn!(slinkbuilder)
+#         finalizecolumn!(slinkbuilder)
 #     end
 #     push!(bandlinks, Ilink(samplingilink.ndist, fill(Slink(sparse(slinkbuilder)), 1, 1)))
 #     return bandlinks

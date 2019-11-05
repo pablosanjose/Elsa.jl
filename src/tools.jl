@@ -118,8 +118,8 @@ function _copy!(dst::Matrix{T}, src::SparseMatrixCSC) where {T}
     return dst
 end
 
-approxruns(list::AbstractVector) = approxruns!(UnitRange{Int}[], list)
-function approxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector)
+approxruns(list::AbstractVector{T}, degtol = sqrt(eps(real(T)))) where {T} = approxruns!(UnitRange{Int}[], list)
+function approxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T}, degtol = sqrt(eps(real(T)))) where {T}
     resize!(runs, 0)
     len = length(list)
     len < 2 && return runs
@@ -127,7 +127,7 @@ function approxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector)
     prev = list[1]
     @inbounds for i in 2:len
         next = list[i]
-        if next ≈ prev
+        if abs(next - prev) < degtol
             rmax = i
         else
             rmin < rmax && push!(runs, rmin:rmax)
@@ -163,7 +163,7 @@ end
 
 # allorderedpairs(v) = [(i, j) for i in v, j in v if i >= j]
 
-# Like copyto! but with potentially different tensor orders (taken from Base.copyto!)
+# Like copyto! but with potentially different tensor orders (adapted from Base.copyto!)
 function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
                     src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
     isempty(Rdest) && return dest

@@ -252,7 +252,7 @@ function isintail(element, container, start::Int)
     return false
 end
 
-function finalisecolumn!(s::SparseMatrixBuilder, sortcol::Bool = true)
+function finalizecolumn!(s::SparseMatrixBuilder, sortcol::Bool = true)
     s.colcounter > s.n && throw(DimensionMismatch("Pushed too many columns to matrix"))
     if sortcol
         s.cosorter.offset = s.colptr[s.colcounter] - 1
@@ -264,9 +264,9 @@ function finalisecolumn!(s::SparseMatrixBuilder, sortcol::Bool = true)
     return nothing
 end
 
-function finalisecolumn!(s::SparseMatrixBuilder, ncols::Int)
+function finalizecolumn!(s::SparseMatrixBuilder, ncols::Int)
     for _ in 1:ncols
-        finalisecolumn!(s)
+        finalizecolumn!(s)
     end
     return nothing
 end

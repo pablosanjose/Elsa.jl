@@ -504,8 +504,8 @@ function _growhamiltonian(sys::System{E,L,T,Tv}, supercell::SMatrix{L,L2}, sitem
                     end
                 end
                 colsdone += 1
-                finalisecolumn!(opbuilder.intra.matrixbuilder)
-                foreach(block -> finalisecolumn!(block.matrixbuilder), opbuilder.inters)
+                finalizecolumn!(opbuilder.intra.matrixbuilder)
+                foreach(block -> finalizecolumn!(block.matrixbuilder), opbuilder.inters)
             end
         end
     end
@@ -519,7 +519,7 @@ function get_or_add_blockbuilder(op::OperatorBuilder{Tv,L}, ndist, colsdone) whe
         k = findfirstblock(op.inters, ndist)  # better than findfirst (less runtime variance)
         if iszero(k)    # not found, add a new block builder
             block = BlockBuilder{Tv,L}(ndist, dim(op))
-            finalisecolumn!(block.matrixbuilder, colsdone)
+            finalizecolumn!(block.matrixbuilder, colsdone)
             push!(op.inters, block)
             return block
         else

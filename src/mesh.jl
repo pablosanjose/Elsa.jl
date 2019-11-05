@@ -5,10 +5,14 @@
 abstract type AbstractMesh{D} end
 
 struct Mesh{D,T,V<:AbstractArray{SVector{D,T}},S} <: AbstractMesh{D}   # D is dimension of parameter space
-    vertices::V                         # Iterable vertex container with SVector{E,T} eltype
+    vertices::V                         # Iterable vertex container with SVector{D,T} eltype
     adjmat::SparseMatrixCSC{Bool,Int}   # Directed graph: only dest > src
     simplices::S                        # Iterable simplex container with NTuple{D+1,Int} eltype
 end
+
+# const Mesh{D,T} = Mesh{D,T,Vector{SVector{D,T}},Vector{Tuple{Int,Vararg{Int,D}}}}
+
+# Mesh{D,T}() where {D,T} = Mesh(SVector{D,T}[], sparse(Int[], Int[], Bool[]), NTuple{D+1,Int}[])
 
 function Base.show(io::IO, mesh::Mesh{D}) where {D}
     i = get(io, :indent, "")
@@ -36,19 +40,33 @@ edgedest(m::Mesh, edge) = rowvals(m.adjmat)[edge]
 # Special meshes
 #######################################################################
 """
-  marchingmesh([T::Type], npoints::NTuple{D,Integer}[, box::SMatrix{D,D})
+    marchingmesh(npoints::Integer...)
+    marchingmesh([box::AbstractMatrix{T},] npoints::Integer....)
+    marchingmesh([box::UniformScaling{T},] npoints::Integer....)
 
-Creates a D-dimensional marching-tetrahedra `Mesh`. The mesh is confined to the box defined
-by the columns of `box`, and contains `npoints[i]` vertices of type `T` along column i.
+Creates a L-dimensional marching-tetrahedra `Mesh`. The mesh is confined to the box defined
+by the columns of `box`, and contains `npoints[i]` vertices of type `T::AbstractFloat` along
+column `i`. By default `box` is a unit box `I` along each axes. The size of `box` should
+match the number `L` of elements in `npoints`.
+
+    marchingmesh(h::Hamiltonian{<:Lattice}, npoints = 12)
+
+Equivalent to `marchingmesh(2π*I, ntuple(_ -> npoints, Val(L))...)` where `L` is `h`'s
+dimension.
 
 # External links
 
 - Marching tetrahedra (https://en.wikipedia.org/wiki/Marching_tetrahedra) in Wikipedia
 """
-marchingmesh(::Type{T}, npoints::NTuple{D,Integer}, box = SMatrix{D,D,T}(I)) where {D,T} =
-    marchingmesh(npoints, convert(SMatrix{D,D,T}, box))
-function marchingmesh(npoints::NTuple{D,Integer},
-                      box::SMatrix{D,D,T} = SMatrix{D,D,Float64}(I)) where {D,T<:AbstractFloat}
+marchingmesh(npoints::Integer...) = marchingmesh(1.0 * I, npoints...)
+marchingmesh(box::UniformScaling{T}, npoints::Vararg{Integer,L}) where {L,T} =
+    _marchingmesh(SMatrix{L,L}(box), npoints)
+marchingmesh(box::AbstractMatrix{T}, npoints::Vararg{Integer,L}) where {L,T} =
+    _marchingmesh(convert(SMatrix{L,L,T}, box), npoints)
+marchingmesh(h::Hamiltonian{<:Lattice,L,M}, n::Integer) where {L,M} =
+    _marchingmesh(SMatrix{L,L}(one(real(eltype(M))) * 2π * I), ntuple(_ -> n, Val(L)))
+
+function _marchingmesh(box::SMatrix{D,D,T}, npoints::NTuple{D,Integer}) where {D,T<:AbstractFloat}
     projection = box ./ (SVector(npoints) - 1)' # Projects binary vector to m box with npoints
     cs = CartesianIndices(ntuple(n -> 1:npoints[n], Val(D)))
     ls = LinearIndices(cs)
@@ -66,15 +84,32 @@ function marchingmesh(npoints::NTuple{D,Integer},
     verts = [projection * (SVector(Tuple(c)) - origin) for c in cs]
     simps = [ntuple(i -> ls[c + us[i]], Val(D + 1)) for us in utets, c in csinner]
 
+    alignnormals!(simps, verts)
+
     s = SparseMatrixBuilder{Bool}(length(cs), length(cs))
     for c in cs
         for u in uedges
             dest = c + u    # only dest > src
             dest in cs && pushtocolumn!(s, ls[dest], true)
         end
-        finalisecolumn!(s)
+        finalizecolumn!(s)
     end
     adjmat = sparse(s)
 
     return Mesh(verts, adjmat, simps)
 end
+
+function alignnormals!(simplices, vertices)
+    for (i, s) in enumerate(simplices)
+        volume = elementvolume(vertices, s)
+        volume < 0 && (simplices[i] = switchlast(s))
+    end
+    return simplices
+end
+
+elementvolume(verts, s::NTuple{N,Int}) where {N} =
+    elementvolume(hcat(ntuple(i -> SVector(verts[s[i+1]] - verts[s[1]]), Val(N-1))...))
+elementvolume(mat::SMatrix{N,N}) where {N} = det(qr(mat).R)
+elementvolume(mat::SMatrix{M,N}) where {M,N} = det(mat)
+
+switchlast(s::NTuple{N,T}) where {N,T} = ntuple(i -> i < N - 1 ? s[i] : s[2N - i - 1] , Val(N))

@@ -202,7 +202,7 @@ function boundaryoperator(op::Operator{Tv}) where {Tv}
                 break
             end
         end
-        finalisecolumn!(sb)
+        finalizecolumn!(sb)
     end
     matrix = sparse(sb)
     intra = zero(op.intra)

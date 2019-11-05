@@ -509,7 +509,7 @@ function unitcell(ham::Hamiltonian{LA,L,Tv}) where {E,L,T,L´,Tv,LA<:Superlattic
                 iszero(newrow) || pushtocolumn!(newh.h, newrow, val)
             end
         end
-        foreach(h -> finalisecolumn!(h.h), harmonic_builders)
+        foreach(h -> finalizecolumn!(h.h), harmonic_builders)
     end
     harmonics = [HamiltonianHarmonic(h.dn, sparse(h.h)) for h in harmonic_builders]
     unitlat = unitcell(lat)
@@ -832,7 +832,7 @@ function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {LA,L,M,A<:SparseMat
                 pushtocolumn!(builder, row, v, false) # skips repeated rows
             end
         end
-        finalisecolumn!(builder)
+        finalizecolumn!(builder)
     end
     ho = sparse(builder)
     copy!(h0.h, ho) # Inject new structural zeros into zero harmonics
@@ -930,7 +930,7 @@ end
 #                     pushtocolumn!(builder, flatrow, val[si, sj])
 #                 end
 #             end
-#             finalisecolumn!(builder)
+#             finalizecolumn!(builder)
 #         end
 #     end
 #     matrix = sparse(builder)
