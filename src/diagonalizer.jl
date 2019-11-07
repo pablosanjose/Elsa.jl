@@ -118,7 +118,9 @@ function resolve_degeneracies!(ϵ, ψ, d::Diagonalizer{<:Any,<:Any,<:AbstractCod
     success = d.codiag.success
     resize!(success, length(d.codiag.degranges))
     fill!(success, false)
-    for v in codiag_matrices(d, ϕs)
+    @show d.codiag.degranges, ϕs ./ (2π)
+    for n in 1:num_codiag_matrices(d)
+        v = codiag_matrix(n, d, ϕs)
         all(success) && break
         for (i, r) in enumerate(d.codiag.degranges)
             success[i] || (success[i] = codiagonalize!(ϵ, ψ, v, r))
@@ -137,8 +139,9 @@ end
 
 finddegeneracies!(degranges, sorted_ϵ) = approxruns!(degranges, sorted_ϵ)
 
-codiag_matrices(d::Diagonalizer, ϕs::SVector{L}) where {L} =
-    (bloch!(d.matrix, d.codiag.h, ϕs, i) for i in 1:L)
+num_codiag_matrices(d::Diagonalizer{<:Any,<:Any,<:VelocityCodiagonalizer})  = dim(d.codiag.h) + 1
+codiag_matrix(n::Integer, d::Diagonalizer{<:Any,<:Any,<:VelocityCodiagonalizer}, ϕs::SVector{L}) where {L} =
+    n <= L ? bloch!(d.matrix, d.codiag.h, ϕs, n) : bloch!(d.matrix, d.codiag.h, ϕs, dn -> dn' * dn)
 
 function codiagonalize!(ϵ, ψ, v, r)
     subspace = view(ψ, :, r)
@@ -146,6 +149,7 @@ function codiagonalize!(ϵ, ψ, v, r)
     veigen = eigen!(vsubspace)
     success = !hasdegeneracies(veigen.values)
     success && (subspace .= subspace * veigen.vectors)
+    @show success, veigen.values
     return success
 end
 
