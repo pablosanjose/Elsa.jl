@@ -83,9 +83,10 @@ function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh
     for (n, ϕs) in enumerate(vertices(mesh))
         bloch!(d.matrix, h, ϕs)
         (ϵk, ψk) = diagonalize(d)
-        @show round.(abs.(ψk), digits=3)
+        # @show round.(ϕs, digits=3)
+        # @show round.(abs.(ψk), digits=3)
         resolve_degeneracies!(ϵk, ψk, d, ϕs)
-        @show round.(abs.(ψk), digits=3)
+        # @show round.(abs.(ψk), digits=3)
         copyslice!(ϵks, CartesianIndices((1:nϵ, n:n)),
                    ϵk,  CartesianIndices((1:nϵ,)))
         copyslice!(ψks, CartesianIndices((1:dimh, 1:nϵ, n:n)),
@@ -113,14 +114,20 @@ function findbandindices!(bandindices, nb, ψks, mesh, minprojection)
     for srck in 1:nk, edgek in edges(mesh, srck)
         destk = edgedest(mesh, edgek)
         srcb = bandindices[srck]
-        # @show round.(ψks[:, srcb, srck], digits=3)
+        # @show round.(abs.(ψks[:, srcb, srck]), digits=3)
         proj, destb = findmostparallel(ψks, destk, srcb, srck)
         if proj > minprojection
             # if iszero(bandindices[destk])
             #     bandindices[destk] = destb
             # elseif bandindices[destk] != destb
-            #     # @show round.(ψks[:, destb, destk], digits=3)
+            #     # @show round.(abs.(ψks[:, destb, destk]), digits=3)
             #     throw(error("Non-trivial band degeneracy detected. Resolution not yet implemented."))
+            # end
+            # if !iszero(bandindices[destk]) && bandindices[destk] != destb
+            #     @show round.(abs.(ψks[:, srcb, srck]), digits=3)
+            #     @show round.(abs.(ψks[:, destb, destk]), digits=3)
+            #     ϕ = round.(vertices(mesh)[destk]/(2π), digits = 4)
+            #     @warn("Non-trivial band degeneracy detected at 2π * $ϕ. Resolution not yet implemented.")
             # end
             bandindices[destk] = destb
         end

@@ -139,6 +139,7 @@ function approxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T},
     return runs
 end
 
+
 # pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')
 
 # padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)

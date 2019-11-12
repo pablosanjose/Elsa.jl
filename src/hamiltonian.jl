@@ -45,12 +45,13 @@ $i  Coordination     : $(nhoppings(ham) / nsites(ham))")
 end
 
 Base.summary(h::Hamiltonian{LA}) where {E,L,LA<:Lattice{E,L}} =
-    "Hamiltonian{<:Lattice} : $(dim(h))D Hamiltonian on a $(L)D Lattice in $(E)D space"
+    "Hamiltonian{<:Lattice} : $(latdim(h))D Hamiltonian on a $(L)D Lattice in $(E)D space"
 
 Base.summary(::Hamiltonian{LA}) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}} =
     "Hamiltonian{<:Superlattice} : $(L)D Hamiltonian on a $(L´)D Superlattice in $(E)D space"
 
 matrixtype(::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = A
+realtype(::Hamiltonian{<:Any,<:Any,M}) where {M} = real(eltype(M))
 displaymatrixtype(h::Hamiltonian) = displaymatrixtype(matrixtype(h))
 displaymatrixtype(::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC, sparse"
 displaymatrixtype(::Type{<:Array}) = "Matrix, dense"
@@ -63,7 +64,7 @@ displayorbitals(h::Hamiltonian) =
 
 # Internal API #
 
-dim(h::Hamiltonian{LA}) where {E,L,LA<:AbstractLattice{E,L}} = L
+latdim(h::Hamiltonian{LA}) where {E,L,LA<:AbstractLattice{E,L}} = L
 
 # find SVector type that can hold all orbital amplitudes in any lattice sites
 orbitaltype(orbs, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =

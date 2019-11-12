@@ -27,7 +27,8 @@ diagonalizer(h::Hamiltonian{<:Lattice,<:Any,<:Any,<:Matrix}; kw...) =
     diagonalizer(LinearAlgebraPackage(values(kw)), similarmatrix(h))
 
 function diagonalizer(h::Hamiltonian{<:Lattice,<:Any,M,<:SparseMatrixCSC};
-                      levels = missing, origin = 0.0, codiag = VelocityCodiagonalizer(h), kw...) where {M}
+                      levels = missing, origin = 0.0,
+                      codiag = defaultcodiagonalizer(h), kw...) where {M}
     if size(h, 1) < 50 || levels === missing || levels / size(h, 1) > 0.1
         # @warn "Requesting significant number of sparse matrix eigenvalues. Converting to dense."
         matrix = Matrix(similarmatrix(h))
@@ -93,18 +94,9 @@ struct ArnoldiPackagePackage{O,L,E} <: AbstractDiagonalizePackage
     engine::E       # Optional support for lmap (e.g. Pardiso solver or factorization)
 end
 
-
 #######################################################################
 # Codiagonalization
 #######################################################################
-struct VelocityCodiagonalizer{M,H<:Hamiltonian{<:Any,<:Any,M}} <: AbstractCodiagonalizer
-    h::H
-    degranges::Vector{UnitRange{Int}}
-    success::Vector{Bool}
-end
-VelocityCodiagonalizer(h::Hamiltonian{<:Any,<:Any,M}) where {M} =
-    VelocityCodiagonalizer(h, UnitRange{Int}[], Bool[])
-
 # ϵ is assumed sorted
 resolve_degeneracies!(ϵ, ψ, d::Diagonalizer{<:Any,<:Any,Missing}, ϕs) = (ϵ, ψ)
 
@@ -118,14 +110,16 @@ function resolve_degeneracies!(ϵ, ψ, d::Diagonalizer{<:Any,<:Any,<:AbstractCod
     success = d.codiag.success
     resize!(success, length(d.codiag.degranges))
     fill!(success, false)
-    @show d.codiag.degranges, ϕs ./ (2π)
+    @show d.codiag.degranges, round.(ϕs/2π, digits=3)
     for n in 1:num_codiag_matrices(d)
         v = codiag_matrix(n, d, ϕs)
-        all(success) && break
         for (i, r) in enumerate(d.codiag.degranges)
             success[i] || (success[i] = codiagonalize!(ϵ, ψ, v, r))
+            @show success[i], n, length(r)
         end
+        all(success) && break
     end
+    all(success) || @show "---------------------------FAILED---------------------------"
     return ϵ, ψ
 end
 
@@ -139,109 +133,43 @@ end
 
 finddegeneracies!(degranges, sorted_ϵ) = approxruns!(degranges, sorted_ϵ)
 
-num_codiag_matrices(d::Diagonalizer{<:Any,<:Any,<:VelocityCodiagonalizer})  = dim(d.codiag.h) + 1
-codiag_matrix(n::Integer, d::Diagonalizer{<:Any,<:Any,<:VelocityCodiagonalizer}, ϕs::SVector{L}) where {L} =
-    n <= L ? bloch!(d.matrix, d.codiag.h, ϕs, n) : bloch!(d.matrix, d.codiag.h, ϕs, dn -> dn' * dn)
-
 function codiagonalize!(ϵ, ψ, v, r)
     subspace = view(ψ, :, r)
     vsubspace = subspace' * v * subspace
     veigen = eigen!(vsubspace)
     success = !hasdegeneracies(veigen.values)
     success && (subspace .= subspace * veigen.vectors)
-    @show success, veigen.values
+    # if !success
+        @show round.(real.(veigen.values), digits = 3)
+        # @show round.(Matrix(v), digits = 3)
+    # end
     return success
 end
 
-# resolve_degeneracies!(energies, states, vfunc::Missing, kn, degtol) = nothing
+#######################################################################
+# Codiagonalizers
+#######################################################################
+defaultcodiagonalizer(h) = VelocityCodiagonalizer(h)
 
-# function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}, degtol) where {L}
-#     degsubspaces = degeneracies(energies, degtol)
-#     if !(degsubspaces === nothing)
-#         for subspaceinds in degsubspaces
-#             for axis = 1:L
-#                 v = vfunc(kn, axis)  # Need to do it in-place for each subspace
-#                 subspace = view(states, :, subspaceinds)
-#                 vsubspace = subspace' * v * subspace
-#                 veigen = eigen!(vsubspace)
-#                 subspace .= subspace * veigen.vectors
-#                 success = !hasdegeneracies(veigen.values, degtol)
-#                 success && break
-#             end
-#         end
-#     end
-#     return nothing
-# end
+## VelocityCodiagonalizer
+## Uses velocity operators along different directions
+struct VelocityCodiagonalizer{S,H<:Hamiltonian} <: AbstractCodiagonalizer
+    h::H
+    degranges::Vector{UnitRange{Int}}
+    success::Vector{Bool}
+    directions::Vector{S}
+end
 
-# function degeneracies(energies, degtol)
-#     if hasdegeneracies(energies, degtol)
-#         deglist = Vector{Int}[]
-#         isclassified = BitArray(false for _ in eachindex(energies))
-#         for i in eachindex(energies)
-#             isclassified[i] && continue
-#             degeneracyfound = false
-#             for j in (i + 1):length(energies)
-#                 if !isclassified[j] && abs(energies[i] - energies[j]) < degtol
-#                     !degeneracyfound && push!(deglist, [i])
-#                     degeneracyfound = true
-#                     push!(deglist[end], j)
-#                     isclassified[j] = true
-#                 end
-#             end
-#         end
-#         return deglist
-#     else
-#         return nothing
-#     end
-# end
+function VelocityCodiagonalizer(h::Hamiltonian{<:Any,L};
+                                direlements = -3:3, onlypositive = true, kw...) where {L}
+    directions = vec(SVector{L,Int}.(Iterators.product(ntuple(_ -> direlements, Val(L))...)))
+    onlypositive && filter!(ispositive, directions)
+    unique!(normalize, directions)
+    sort!(directions, by = norm, rev = true) # to try diagonal directions first
+    VelocityCodiagonalizer(h, UnitRange{Int}[], Bool[], directions)
+end
 
-# function resolve_degeneracies!(energies, states, vfunc::Function, kn::SVector{L}, degtol) where {L}
-#     degsubspaces = degeneracies(energies, degtol)
-#     if !(degsubspaces === nothing)
-#         for subspaceinds in degsubspaces
-#             for axis = 1:L
-#                 v = vfunc(kn, axis)  # Need to do it in-place for each subspace
-#                 subspace = view(states, :, subspaceinds)
-#                 vsubspace = subspace' * v * subspace
-#                 veigen = eigen!(vsubspace)
-#                 subspace .= subspace * veigen.vectors
-#                 success = !hasdegeneracies(veigen.values, degtol)
-#                 success && break
-#             end
-#         end
-#     end
-#     return nothing
-# end
-
-# function hasdegeneracies(energies, degtol)
-#     has = false
-#     for i in eachindex(energies), j in (i+1):length(energies)
-#         if abs(energies[i] - energies[j]) < degtol
-#             has = true
-#             break
-#         end
-#     end
-#     return has
-# end
-
-# function degeneracies(energies, degtol)
-#     if hasdegeneracies(energies, degtol)
-#         deglist = Vector{Int}[]
-#         isclassified = BitArray(false for _ in eachindex(energies))
-#         for i in eachindex(energies)
-#             isclassified[i] && continue
-#             degeneracyfound = false
-#             for j in (i + 1):length(energies)
-#                 if !isclassified[j] && abs(energies[i] - energies[j]) < degtol
-#                     !degeneracyfound && push!(deglist, [i])
-#                     degeneracyfound = true
-#                     push!(deglist[end], j)
-#                     isclassified[j] = true
-#                 end
-#             end
-#         end
-#         return deglist
-#     else
-#         return nothing
-#     end
-# end
+num_codiag_matrices(d::Diagonalizer{<:Any,<:Any,<:VelocityCodiagonalizer}) =
+    length(d.codiag.directions)
+codiag_matrix(n, d::Diagonalizer{<:Any,<:Any,<:VelocityCodiagonalizer}, ϕs::SVector{L}) where {L} =
+    bloch!(d.matrix, d.codiag.h, ϕs, dn -> im * d.codiag.directions[n]' * dn)

@@ -40,37 +40,41 @@ edgedest(m::Mesh, edge) = rowvals(m.adjmat)[edge]
 # Special meshes
 #######################################################################
 """
-    marchingmesh(npoints::Integer...)
-    marchingmesh([box::AbstractMatrix{T},] npoints::Integer....)
-    marchingmesh([box::UniformScaling{T},] npoints::Integer....)
+    marchingmesh(npoints::Integer...; axes = 1.0 * I)
 
 Creates a L-dimensional marching-tetrahedra `Mesh`. The mesh is confined to the box defined
-by the columns of `box`, and contains `npoints[i]` vertices of type `T::AbstractFloat` along
-column `i`. By default `box` is a unit box `I` along each axes. The size of `box` should
-match the number `L` of elements in `npoints`.
+by the rows of `axes`, and contains `npoints[i]` along each axis `i`.
 
-    marchingmesh(h::Hamiltonian{<:Lattice}, npoints = 12)
+    marchingmesh(ranges::AbstractRange...; axes = 1.0 * I)
 
-Equivalent to `marchingmesh(2π*I, ntuple(_ -> npoints, Val(L))...)` where `L` is `h`'s
-dimension.
+The same as above, but allows to specify the points in axis `i` by a range `ranges[i]`, such
+as e.g. `0.0:0.1:1.0`.
+
+Note that the size of `axes` should match the number `L` of elements in `npoints` or
+`ranges`. The `eltype` of points is given by that of `ranges` or `axes`.
+
+    marchingmesh(h::Hamiltonian{<:Lattice}, npoints = 13)
+
+Equivalent to `marchingmesh(ntuple(_ -> range(-π, π; length = npoints), Val(L))...)` where
+`L` is the dimension of the Hamiltonian's lattice.
 
 # External links
 
 - Marching tetrahedra (https://en.wikipedia.org/wiki/Marching_tetrahedra) in Wikipedia
 """
-marchingmesh(npoints::Integer...) = marchingmesh(1.0 * I, npoints...)
-marchingmesh(box::UniformScaling{T}, npoints::Vararg{Integer,L}) where {L,T} =
-    _marchingmesh(SMatrix{L,L}(box), npoints)
-marchingmesh(box::AbstractMatrix{T}, npoints::Vararg{Integer,L}) where {L,T} =
-    _marchingmesh(convert(SMatrix{L,L,T}, box), npoints)
-marchingmesh(h::Hamiltonian{<:Lattice,L,M}, n::Integer) where {L,M} =
-    _marchingmesh(SMatrix{L,L}(one(real(eltype(M))) * 2π * I), ntuple(_ -> n, Val(L)))
+marchingmesh(npoints::Vararg{Integer,L}; axes = 1.0 * I) where {L} =
+    _marchingmesh((p -> range(0, 1; length = p)).(npoints), SMatrix{L,L}(axes))
+marchingmesh(ranges::Vararg{AbstractRange,L}; axes = 1.0 * I) where {L} =
+    _marchingmesh(ranges, SMatrix{L,L}(axes))
+marchingmesh(h::Hamiltonian{<:Lattice,L}, n::Integer = 13) where {L} =
+    _marchingmesh(ntuple(_ -> range(-π, π; length = n), Val(L)), SMatrix{L,L}(I))
+    # _marchingmesh(ntuple(_ -> range(-.9999π, .99999π; length = n), Val(L)), SMatrix{L,L}(I))
 
-function _marchingmesh(box::SMatrix{D,D,T}, npoints::NTuple{D,Integer}) where {D,T<:AbstractFloat}
-    projection = box ./ (SVector(npoints) - 1)' # Projects binary vector to m box with npoints
+function _marchingmesh(ranges::NTuple{D,AbstractRange}, axes::SMatrix{D,D}) where {D,T<:AbstractFloat}
+    npoints = length.(ranges)
+    projection = axes' # ./ (SVector(npoints) - 1)' # Projects binary vector to m box with npoints
     cs = CartesianIndices(ntuple(n -> 1:npoints[n], Val(D)))
     ls = LinearIndices(cs)
-    origin = SVector(Tuple(first(cs)))
     csinner = CartesianIndices(ntuple(n -> 1:npoints[n]-1, Val(D)))
 
     # edge vectors for marching tetrahedra in D-dimensions
@@ -81,7 +85,7 @@ function _marchingmesh(box::SMatrix{D,D,T}, npoints::NTuple{D,Integer}) where {D
     utets = [cumsum(pushfirst!(perm, zero(CartesianIndex{D}))) for perm in perms]
 
     # We don't use generators because their non-inferreble eltype causes problems later
-    verts = [projection * (SVector(Tuple(c)) - origin) for c in cs]
+    verts = [projection * SVector(getindex.(ranges, Tuple(c))) for c in cs]
     simps = [ntuple(i -> ls[c + us[i]], Val(D + 1)) for us in utets, c in csinner]
 
     alignnormals!(simps, verts)
@@ -102,7 +106,7 @@ end
 function alignnormals!(simplices, vertices)
     for (i, s) in enumerate(simplices)
         volume = elementvolume(vertices, s)
-        volume < 0 && (simplices[i] = switchlast(s))
+        volume > 0 && (simplices[i] = switchlast(s))
     end
     return simplices
 end
