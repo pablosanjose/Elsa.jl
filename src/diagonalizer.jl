@@ -104,26 +104,31 @@ function resolve_degeneracies!(ϵ, ψ, d::Diagonalizer{<:Any,<:Any,<:AbstractCod
     issorted(ϵ) || throw(ArgumentError("Unsorted eigenvalues"))
     if hasdegeneracies(ϵ)
         finddegeneracies!(d.codiag.degranges, ϵ)
+        # if ϕs ./ 2π ≈ [0.5,0.5]
+        #     @show d.codiag.degranges
+        #     @show ϵ[41:60]
+        # end
     else
         return ϵ, ψ
     end
     success = d.codiag.success
     resize!(success, length(d.codiag.degranges))
     fill!(success, false)
-    @show d.codiag.degranges, round.(ϕs/2π, digits=3)
+    # @show d.codiag.degranges, round.(ϕs/2π, digits=3)
     for n in 1:num_codiag_matrices(d)
         v = codiag_matrix(n, d, ϕs)
         for (i, r) in enumerate(d.codiag.degranges)
             success[i] || (success[i] = codiagonalize!(ϵ, ψ, v, r))
             @show success[i], n, length(r)
         end
+        # all(isempty, d.codiag.degranges) && break
         all(success) && break
     end
     all(success) || @show "---------------------------FAILED---------------------------"
     return ϵ, ψ
 end
 
-function hasdegeneracies(sorted_ϵ::AbstractVector{T}, degtol = 10*sqrt(eps(real(T)))) where {T}
+function hasdegeneracies(sorted_ϵ::AbstractVector{T}, degtol = sqrt(eps(real(T)))) where {T}
     for i in 2:length(sorted_ϵ)
         # sorted_ϵ[i] ≈ sorted_ϵ[i-1] && return true
         abs(sorted_ϵ[i] - sorted_ϵ[i-1]) < degtol && return true
@@ -140,7 +145,7 @@ function codiagonalize!(ϵ, ψ, v, r)
     success = !hasdegeneracies(veigen.values)
     success && (subspace .= subspace * veigen.vectors)
     # if !success
-        @show round.(real.(veigen.values), digits = 3)
+        @show success, r, round.(real.(veigen.values), digits = 3)
         # @show round.(Matrix(v), digits = 3)
     # end
     return success
@@ -149,7 +154,7 @@ end
 #######################################################################
 # Codiagonalizers
 #######################################################################
-defaultcodiagonalizer(h) = VelocityCodiagonalizer(h)
+defaultcodiagonalizer(h) = RandomCodiagonalizer(h)
 
 ## VelocityCodiagonalizer
 ## Uses velocity operators along different directions
@@ -161,15 +166,40 @@ struct VelocityCodiagonalizer{S,H<:Hamiltonian} <: AbstractCodiagonalizer
 end
 
 function VelocityCodiagonalizer(h::Hamiltonian{<:Any,L};
-                                direlements = -3:3, onlypositive = true, kw...) where {L}
+                                direlements = -5:5, onlypositive = true, kw...) where {L}
     directions = vec(SVector{L,Int}.(Iterators.product(ntuple(_ -> direlements, Val(L))...)))
     onlypositive && filter!(ispositive, directions)
     unique!(normalize, directions)
-    sort!(directions, by = norm, rev = true) # to try diagonal directions first
+    sort!(directions, by = norm, rev = false) # to try diagonal directions first
     VelocityCodiagonalizer(h, UnitRange{Int}[], Bool[], directions)
 end
 
 num_codiag_matrices(d::Diagonalizer{<:Any,<:Any,<:VelocityCodiagonalizer}) =
     length(d.codiag.directions)
-codiag_matrix(n, d::Diagonalizer{<:Any,<:Any,<:VelocityCodiagonalizer}, ϕs::SVector{L}) where {L} =
+codiag_matrix(n, d::Diagonalizer{<:Any,<:Any,<:VelocityCodiagonalizer}, ϕs) =
     bloch!(d.matrix, d.codiag.h, ϕs, dn -> im * d.codiag.directions[n]' * dn)
+
+## RandomCodiagonalizer
+## Uses velocity operators along different directions
+struct RandomCodiagonalizer{H<:Hamiltonian} <: AbstractCodiagonalizer
+    h::H
+    degranges::Vector{UnitRange{Int}}
+    success::Vector{Bool}
+    seed::Int
+end
+
+RandomCodiagonalizer(h::Hamiltonian) = RandomCodiagonalizer(h, UnitRange{Int}[], Bool[], 1)
+
+num_codiag_matrices(d::Diagonalizer{<:Any,<:Any,<:RandomCodiagonalizer}) = 1
+function codiag_matrix(n, d::Diagonalizer{<:Any,<:Any,<:RandomCodiagonalizer}, ϕs)
+    bloch!(d.matrix, d.codiag.h, ϕs)
+    data = _getdata(d.matrix)
+    δ = sqrt(eps(realtype(d.codiag.h)))
+    rng = MersenneTwister(d.codiag.seed) # To get reproducible perturbations for all ϕs
+    for i in eachindex(data)
+        @inbounds data[i] += δ * rand(rng)
+    end
+    return d.matrix
+end
+_getdata(m::AbstractSparseMatrix) = nonzeros(parent(m))
+_getdata(m::AbstractMatrix) = parent(m)

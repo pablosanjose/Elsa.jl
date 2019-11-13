@@ -10,7 +10,7 @@ function __init__()
     @require IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153" include("diagonalizers/iterativesolvers.jl")
 end
 
-using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
+using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays, Random,
       ProgressMeter
       #FFTW
 
