@@ -660,32 +660,19 @@ function Base.show(io::IO, sb::SupercellBloch)
 end
 
 """
-    bloch!(matrix, h::Hamiltonian{<:Lattice}, ϕs::Real...)
+    bloch!(matrix, h::Hamiltonian, ...)
 
-Overwrite `matrix` with the Bloch Hamiltonian matrix of `h`, for the specified Bloch
-phases `ϕs`. In terms of Bloch wavevector `k`, `ϕs = k * bravais(h)`. If all `ϕs` are
-omitted, the intracell Hamiltonian is returned instead. If the Hamiltonian is defined on a
-`Superlattice`, the evaluation of the Bloch Hamiltonian is deferred until it is used (e.g.
-in a multiplication).
-
-A suitable, non-initialized `matrix` can be obtained with `similarmatrix(h)`.
-
-If `optimize!(h)` is called on a sparse Hamiltonian `h` before the first call to `bloch!`,
-performance will increase by avoiding memory reshuffling.
-
-    bloch!(matrix, h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}[, axis::Int = 0])
-
-Same as above with the added option of indicating a nonzero `axis`, in which case the
-derivative of the Bloch matrix respect to `ϕs[axis]` (i.e. the velocity operator along this
-axis) is returned.
-
-    bloch!(matrix, h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}, dnfunc::Function)
-
-Generalization that applies a phase `dnfunc(dn) * exp(im * ϕs' * dn)` to the `dn` harmonic.
+In-place version of `bloch`. Overwrite `matrix` with the Bloch Hamiltonian matrix of `h` for
+the specified Bloch phases `ϕs` (see `bloch` for definition and API).  A conventient way to
+obtain a `matrix` is to use `similarmatrix(h)`, which will return an `AbstractMatrix` of the
+same type as the Hamiltonian's. Note, however, that matrix need not be of the same type
+(e.g. it can be dense, while `h` is sparse).
 
 # Examples
 ```
-julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch!(.2,.3)
+julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2));
+
+julia> bloch!(similarmatrix(h), h, (.2,.3), 2)  # velocity operator along `bravais(h)[2]`
 2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
   [1, 1]  =  1.99001-0.199667im
   [2, 1]  =  1.96013-0.397339im
@@ -699,7 +686,8 @@ julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch
 bloch!(matrix, h, ϕs::Number...) = _bloch!(matrix, h, toSVector(ϕs), 0)
 bloch!(matrix, h, ϕs::Tuple, axis = 0) = _bloch!(matrix, h, toSVector(ϕs), axis)
 bloch!(matrix, h, ϕs::SVector, axis = 0) = _bloch!(matrix, h, ϕs, axis)
-
+bloch!(matrix, ϕs::Number...) = h -> bloch!(matrix, h, ϕs...)
+bloch!(matrix, ϕs::Tuple, axis = 0) = h -> bloch!(matrix, h, ϕs, axis)
 
 function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axis::Number) where {L,M}
     rawmatrix = parent(matrix)
@@ -753,32 +741,29 @@ end
     bloch(h::Hamiltonian{<:Lattice}, ϕs::Real...)
 
 Build the Bloch Hamiltonian matrix of `h`, for the specified Bloch phases `ϕs`. In terms of
-Bloch wavevector `k`, `ϕs = k * bravais(h)`. If all `ϕs` are omitted, the intracell
-Hamiltonian is returned instead. If the Hamiltonian is defined on a `Superlattice`, the
-evaluation of the Bloch Hamiltonian is deferred until it is used (e.g. in a multiplication).
-
-    bloch(h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}[, axis::Int = 0])
-
-Same as above with the added option of indicating a nonzero `axis`, in which case the
-derivative of the Bloch matrix respect to `ϕs[axis]` (i.e. the velocity operator along this
-axis) is returned.
-
-    bloch!(matrix, h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}, dnfunc::Function)
-
-Generalization that applies a phase `dnfunc(dn) * exp(im * ϕs' * dn)` to the `dn` harmonic.
+Bloch wavevector `k`, `ϕs = k * bravais(h)`, it is defined as Overwrite `matrix` with the
+Bloch Hamiltonian matrix of `h`, for the specified Bloch phases `ϕs`, defined as
+`H(ϕs) = ∑exp(-im * ϕs' * dn) h_dn` where `h_dn` are Bloch harmonics connecting unit cells
+at a distance `dR = bravais(h) * dn`.
 
     bloch(h::Hamiltonian{<:Lattice})
 
 Build the intra-cell Hamiltonian matrix of `h`, without adding any Bloch harmonics.
 
+    bloch(h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}[, axis::Int = 0])
+
+A nonzero `axis` produces the derivative of the Bloch matrix respect to `ϕs[axis]` (i.e. the
+velocity operator along this axis), `∂H(ϕs) = ∑ -im * dn[axis] * exp(-im * ϕs' * dn) h_dn`
+
+    bloch(matrix, h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}, dnfunc::Function)
+
+Generalization that applies a prefactor `dnfunc(dn) * exp(im * ϕs' * dn)` to the `dn`
+harmonic.
+
     h |> bloch(ϕs...)
     h(ϕs...)
 
 Functional forms of `bloch`, equivalent to `bloch(h, ϕs...)`
-
-This function allocates a new matrix on each call. For a non-allocating version of `bloch`,
-see `bloch!`. If `optimize!(h)` is called on a sparse Hamiltonian `h` before the first call
-to `bloch`, performance will increase by avoiding memory reshuffling.
 
     bloch(h::Hamiltonian{<:Superlattice}, ϕs::Number...)
     bloch(h::Hamiltonian{<:Superlattice}, ϕs::Tuple[, axis = 0])
@@ -786,9 +771,16 @@ to `bloch`, performance will increase by avoiding memory reshuffling.
 Build a `SupercellBloch` object that lazily implements the Bloch Hamiltonian in the
 `Superlattice` without actually building the matrix (e.g. for matrix-free diagonalization).
 
+# Notes
+
+`bloch` allocates a new matrix on each call. For a non-allocating version of `bloch`, see
+`bloch!`. If `optimize!(h)` is called on a sparse Hamiltonian `h` before the first call to
+`bloch`, performance will increase substantially (for sparse Hamiltonians) by avoiding
+memory reshuffling.
+
 # Examples
 ```
-julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch(.2,.3)
+julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch(.2,.3)
 2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
   [1, 1]  =  1.99001-0.199667im
   [2, 1]  =  1.96013-0.397339im
@@ -797,13 +789,11 @@ julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch
 ```
 
 # See also:
-    bloch!
+    bloch!, optimize!, similarmatrix
 """
 bloch(ϕs::Number...) = h -> bloch(h, ϕs...)
 bloch(ϕs::Tuple, axis = 0) = h -> bloch(h, ϕs, axis)
-
 bloch(h::Hamiltonian{<:Lattice}, args...) = bloch!(similarmatrix(h), h, args...)
-
 bloch(h::Hamiltonian{<:Superlattice}, ϕs::Number...) =
     SupercellBloch(h, toSVector(ϕs))
 bloch(h::Hamiltonian{<:Superlattice}, ϕs::Tuple, axis = 0) =
