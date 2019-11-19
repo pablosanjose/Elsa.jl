@@ -118,9 +118,8 @@ function _copy!(dst::Matrix{T}, src::SparseMatrixCSC) where {T}
     return dst
 end
 
-approxruns(list::AbstractVector{T}, degtol = sqrt(eps(real(T)))) where {T} = approxruns!(UnitRange{Int}[], list)
-function approxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T}, degtol = sqrt(eps(real(T)))) where {T}
-    resize!(runs, 0)
+function pushapproxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T},
+                         offset = 0, degtol = sqrt(eps(real(T)))) where {T}
     len = length(list)
     len < 2 && return runs
     rmin = rmax = 1
@@ -130,13 +129,20 @@ function approxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T},
         if abs(next - prev) < degtol
             rmax = i
         else
-            rmin < rmax && push!(runs, rmin:rmax)
+            rmin < rmax && push!(runs, (offset + rmin):(offset + rmax))
             rmin = rmax = i
         end
         prev = next
     end
-    rmin < rmax && push!(runs, rmin:rmax)
+    rmin < rmax && push!(runs, (offset + rmin):(offset + rmax))
     return runs
+end
+
+function hasapproxruns(list::AbstractVector{T}, degtol = sqrt(eps(real(T)))) where {T}
+    for i in 2:length(list)
+        abs(list[i] - list[i-1]) < degtol && return true
+    end
+    return false
 end
 
 

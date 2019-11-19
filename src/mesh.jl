@@ -35,6 +35,20 @@ edges(m::Mesh, src) = nzrange(m.adjmat, src)
 
 edgedest(m::Mesh, edge) = rowvals(m.adjmat)[edge]
 
+function minmax_edge_length(m::Mesh{D,T}) where {D,T<:Real}
+    minlen2 = typemax(T)
+    maxlen2 = zero(T)
+    verts = vertices(m)
+    for src in eachindex(verts), edge in edges(m, src)
+        dest = edgedest(m, edge)
+        vec = verts[dest] - verts[src]
+        norm2 = vec' * vec
+        norm2 < minlen2 && (minlen2 = norm2)
+        norm2 > maxlen2 && (maxlen2 = norm2)
+    end
+    return sqrt(minlen2), sqrt(maxlen2)
+end
+
 
 ######################################################################
 # Special meshes

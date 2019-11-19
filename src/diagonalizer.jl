@@ -23,12 +23,12 @@ function Diagonalizer(method, matrix::AbstractMatrix{M};
 end
 
 # This is in general type unstable. A function barrier when using it is needed
-diagonalizer(h::Hamiltonian{<:Lattice,<:Any,<:Any,<:Matrix}; kw...) =
+diagonalizer(h::Hamiltonian{<:Lattice,<:Any,<:Any,<:Matrix}, mesh = missing; kw...) =
     diagonalizer(LinearAlgebraPackage(values(kw)), similarmatrix(h))
 
-function diagonalizer(h::Hamiltonian{<:Lattice,<:Any,M,<:SparseMatrixCSC};
+function diagonalizer(h::Hamiltonian{<:Lattice,<:Any,M,<:SparseMatrixCSC}, mesh = missing;
                       levels = missing, origin = 0.0,
-                      codiag = defaultcodiagonalizer(h), kw...) where {M}
+                      codiag = defaultcodiagonalizer(h, mesh), kw...) where {M}
     if size(h, 1) < 50 || levels === missing || levels / size(h, 1) > 0.1
         # @warn "Requesting significant number of sparse matrix eigenvalues. Converting to dense."
         matrix = Matrix(similarmatrix(h))
@@ -63,10 +63,9 @@ LinearAlgebraPackage(; kw...) = LinearAlgebraPackage(values(kw))
 diagonalizer(method::LinearAlgebraPackage, matrix; kw...) = Diagonalizer(method, matrix; kw...)
 
 function diagonalize(d::Diagonalizer{<:LinearAlgebraPackage})
-    # ϵ, ψ = eigen!(d.matrix; sortby = λ -> abs(λ - d.origin), d.method.options...)
     ϵ, ψ = eigen!(d.matrix; d.method.options...)
-    # ϵ´, ψ´ = view(ϵ, 1:d.levels), view(ψ, :, 1:d.levels)
-    # return ϵ´, ψ´
+    ϵ´, ψ´ = view(ϵ, 1:d.levels), view(ψ, :, 1:d.levels)
+    return ϵ´, ψ´
 end
 
 # Fallback for unloaded packages
@@ -95,111 +94,74 @@ struct ArnoldiPackagePackage{O,L,E} <: AbstractDiagonalizePackage
 end
 
 #######################################################################
-# Codiagonalization
+# resolve_degeneracies
 #######################################################################
-# ϵ is assumed sorted
+# Tries to make states continuous at crossings. Here, ϵ needs to be sorted
 resolve_degeneracies!(ϵ, ψ, d::Diagonalizer{<:Any,<:Any,Missing}, ϕs) = (ϵ, ψ)
 
 function resolve_degeneracies!(ϵ, ψ, d::Diagonalizer{<:Any,<:Any,<:AbstractCodiagonalizer}, ϕs)
     issorted(ϵ) || throw(ArgumentError("Unsorted eigenvalues"))
-    if hasdegeneracies(ϵ)
-        finddegeneracies!(d.codiag.degranges, ϵ)
-        # if ϕs ./ 2π ≈ [0.5,0.5]
-        #     @show d.codiag.degranges
-        #     @show ϵ[41:60]
-        # end
-    else
-        return ϵ, ψ
-    end
-    success = d.codiag.success
-    resize!(success, length(d.codiag.degranges))
-    fill!(success, false)
-    # @show d.codiag.degranges, round.(ϕs/2π, digits=3)
+    hasapproxruns(ϵ, d.codiag.degtol) || return ϵ, ψ
+    ranges, ranges´ = d.codiag.rangesA, d.codiag.rangesB
+    resize!(ranges, 0)
+    pushapproxruns!(ranges, ϵ, 0, d.codiag.degtol) # 0 is an offset
     for n in 1:num_codiag_matrices(d)
         v = codiag_matrix(n, d, ϕs)
-        for (i, r) in enumerate(d.codiag.degranges)
-            success[i] || (success[i] = codiagonalize!(ϵ, ψ, v, r))
-            @show success[i], n, length(r)
+        resize!(ranges´, 0)
+        for (i, r) in enumerate(ranges)
+            subspace = view(ψ, :, r)
+            vsubspace = subspace' * v * subspace
+            veigen = eigen!(Hermitian(vsubspace))
+            if hasapproxruns(veigen.values, d.codiag.degtol)
+                roffset = minimum(r) - 1 # Range offset within the ϵ vector
+                pushapproxruns!(ranges´, veigen.values, roffset, d.codiag.degtol)
+            end
+            subspace .= subspace * veigen.vectors
         end
-        # all(isempty, d.codiag.degranges) && break
-        all(success) && break
+        ranges, ranges´ = ranges´, ranges
+        isempty(ranges) && break
     end
-    all(success) || @show "---------------------------FAILED---------------------------"
-    return ϵ, ψ
-end
-
-function hasdegeneracies(sorted_ϵ::AbstractVector{T}, degtol = sqrt(eps(real(T)))) where {T}
-    for i in 2:length(sorted_ϵ)
-        # sorted_ϵ[i] ≈ sorted_ϵ[i-1] && return true
-        abs(sorted_ϵ[i] - sorted_ϵ[i-1]) < degtol && return true
-    end
-    return false
-end
-
-finddegeneracies!(degranges, sorted_ϵ) = approxruns!(degranges, sorted_ϵ)
-
-function codiagonalize!(ϵ, ψ, v, r)
-    subspace = view(ψ, :, r)
-    vsubspace = subspace' * v * subspace
-    veigen = eigen!(vsubspace)
-    success = !hasdegeneracies(veigen.values)
-    success && (subspace .= subspace * veigen.vectors)
-    # if !success
-        @show success, r, round.(real.(veigen.values), digits = 3)
-        # @show round.(Matrix(v), digits = 3)
-    # end
-    return success
+    return ψ
 end
 
 #######################################################################
 # Codiagonalizers
 #######################################################################
-defaultcodiagonalizer(h) = RandomCodiagonalizer(h)
+defaultcodiagonalizer(h, mesh) = VelocityCodiagonalizer(h, meshshift(mesh))
+
+meshshift(::Missing) = missing
+meshshift(mesh::Mesh{<:Any,T}) where {T} = T(0.1) * first(minmax_edge_length(mesh))
 
 ## VelocityCodiagonalizer
-## Uses velocity operators along different directions
-struct VelocityCodiagonalizer{S,H<:Hamiltonian} <: AbstractCodiagonalizer
+## Uses velocity operators along different directions. If not enough, use finite differences
+struct VelocityCodiagonalizer{S,T,H<:Hamiltonian} <: AbstractCodiagonalizer
     h::H
-    degranges::Vector{UnitRange{Int}}
-    success::Vector{Bool}
     directions::Vector{S}
+    degtol::T
+    shift::T
+    rangesA::Vector{UnitRange{Int}} # Prealloc buffer for degeneray ranges
+    rangesB::Vector{UnitRange{Int}} # Prealloc buffer for degeneray ranges
 end
 
-function VelocityCodiagonalizer(h::Hamiltonian{<:Any,L};
-                                direlements = -5:5, onlypositive = true, kw...) where {L}
+function VelocityCodiagonalizer(h::Hamiltonian{<:Any,L}, shift;
+                                direlements = -0:1, onlypositive = true, kw...) where {L}
     directions = vec(SVector{L,Int}.(Iterators.product(ntuple(_ -> direlements, Val(L))...)))
     onlypositive && filter!(ispositive, directions)
     unique!(normalize, directions)
-    sort!(directions, by = norm, rev = false) # to try diagonal directions first
-    VelocityCodiagonalizer(h, UnitRange{Int}[], Bool[], directions)
+    sort!(directions, by = norm, rev = false)
+    degtol = sqrt(eps(realtype(h)))
+    shift´ = shift === missing ? degtol : shift
+    VelocityCodiagonalizer(h, directions, degtol, shift´, UnitRange{Int}[], UnitRange{Int}[])
 end
 
 num_codiag_matrices(d::Diagonalizer{<:Any,<:Any,<:VelocityCodiagonalizer}) =
-    length(d.codiag.directions)
-codiag_matrix(n, d::Diagonalizer{<:Any,<:Any,<:VelocityCodiagonalizer}, ϕs) =
-    bloch!(d.matrix, d.codiag.h, ϕs, dn -> im * d.codiag.directions[n]' * dn)
-
-## RandomCodiagonalizer
-## Uses velocity operators along different directions
-struct RandomCodiagonalizer{H<:Hamiltonian} <: AbstractCodiagonalizer
-    h::H
-    degranges::Vector{UnitRange{Int}}
-    success::Vector{Bool}
-    seed::Int
-end
-
-RandomCodiagonalizer(h::Hamiltonian) = RandomCodiagonalizer(h, UnitRange{Int}[], Bool[], 1)
-
-num_codiag_matrices(d::Diagonalizer{<:Any,<:Any,<:RandomCodiagonalizer}) = 1
-function codiag_matrix(n, d::Diagonalizer{<:Any,<:Any,<:RandomCodiagonalizer}, ϕs)
-    bloch!(d.matrix, d.codiag.h, ϕs)
-    data = _getdata(d.matrix)
-    δ = sqrt(eps(realtype(d.codiag.h)))
-    rng = MersenneTwister(d.codiag.seed) # To get reproducible perturbations for all ϕs
-    for i in eachindex(data)
-        @inbounds data[i] += δ * rand(rng)
+    2 * length(d.codiag.directions)
+function codiag_matrix(n, d::Diagonalizer{<:Any,<:Any,<:VelocityCodiagonalizer}, ϕs)
+    ndirs = length(d.codiag.directions)
+    if n <= ndirs
+        bloch!(d.matrix, d.codiag.h, ϕs, dn -> im * d.codiag.directions[n]' * dn)
+    else # resort to finite differences
+        bloch!(d.matrix, d.codiag.h, ϕs + d.codiag.shift * d.codiag.directions[n - ndirs])
     end
     return d.matrix
 end
-_getdata(m::AbstractSparseMatrix) = nonzeros(parent(m))
-_getdata(m::AbstractMatrix) = parent(m)
