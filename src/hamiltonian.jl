@@ -543,7 +543,7 @@ end
 Base.show(io::IO, pham::ParametricHamiltonian) = print(io, "Parametric ", pham.hamiltonian)
 
 function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, orbs, model, f::F;
-                                field = missing) where {M,E,L,T,F}
+                                field = missing) where {M,E,L,T,F<:Function}
     builder = IJVBuilder(M, lat, orbs)
     applyterms!(builder, terms(model)...)
     nels = length.(builder.ijvs) # element counters for each harmonic

@@ -31,8 +31,8 @@ end
 # bandstructure
 #######################################################################
  # barrier for type-unstable diagonalizer
-function bandstructure(h::Hamiltonian{<:Any,L,M}, resolution::Integer = 13; kw...) where {L,M}
-    mesh = marchingmesh(h, resolution)
+function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, shift = missing, kw...) where {L,M}
+    mesh = marchingmesh(h; npoints = resolution, shift = shift)
     return bandstructure!(diagonalizer(h, mesh; kw...), h,  mesh)
 end
 
@@ -70,18 +70,19 @@ function findbandindices!(bandindices, nb, ψks, mesh, minprojection)
     dimh, nϵ, nk = size(ψks)
     fill!(bandindices, 0)
     bandindices[1] = nb
+    defectfound = false
     for srck in 1:nk, edgek in edges(mesh, srck)
         destk = edgedest(mesh, edgek)
         srcb = bandindices[srck]
         proj, destb = findmostparallel(ψks, destk, srcb, srck)
         if proj > minprojection
             if !iszero(bandindices[destk]) && bandindices[destk] != destb
-                ϕ = round.(vertices(mesh)[destk]/(2π), digits = 4)
-                @warn("Non-trivial band degeneracy detected at 2π * $ϕ. Resolution not yet implemented.")
+                defectfound = true
             end
             bandindices[destk] = destb
         end
     end
+    defectfound && @warn "Non-trivial band degeneracy detected. Resolution not yet implemented."
     return bandindices
 end
 

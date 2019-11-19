@@ -14,35 +14,31 @@ struct Diagonalizer{M<:AbstractDiagonalizePackage,A<:AbstractArray,C<:Union{Miss
 end
 
 function Diagonalizer(method, matrix::AbstractMatrix{M};
-             levels = missing,
-             origin = 0.0,
-             minprojection = 0.1,
-             codiag = missing) where {M}
+                      levels, origin, minprojection, codiag) where {M}
     _levels = levels === missing ? size(matrix, 1) : levels
     Diagonalizer(method, matrix, _levels, origin, minprojection, codiag)
 end
 
 # This is in general type unstable. A function barrier when using it is needed
 diagonalizer(h::Hamiltonian{<:Lattice,<:Any,<:Any,<:Matrix}, mesh = missing; kw...) =
-    diagonalizer(LinearAlgebraPackage(values(kw)), similarmatrix(h))
+    diagonalizer(LinearAlgebraPackage(values(kw)), similarmatrix(h); kw...)
 
 function diagonalizer(h::Hamiltonian{<:Lattice,<:Any,M,<:SparseMatrixCSC}, mesh = missing;
-                      levels = missing, origin = 0.0,
-                      codiag = defaultcodiagonalizer(h, mesh), kw...) where {M}
+                      levels = missing, origin = 0.0, 
+                      codiag = defaultcodiagonalizer(h, mesh), minprojection = 0.7,
+                      methodkw...) where {M}
+    diagkw = (levels = levels, origin = origin, codiag = codiag, minprojection = minprojection)
     if size(h, 1) < 50 || levels === missing || levels / size(h, 1) > 0.1
         # @warn "Requesting significant number of sparse matrix eigenvalues. Converting to dense."
         matrix = Matrix(similarmatrix(h))
         _matrix = ishermitian(h) ? Hermitian(matrix) : matrix
-        d = diagonalizer(LinearAlgebraPackage(; kw...), _matrix;
-            levels = levels, origin = origin, codiag = codiag)
+        d = diagonalizer(LinearAlgebraPackage(; methodkw...), _matrix; diagkw...)
     elseif M isa Number
         matrix = similarmatrix(h)
-        d = diagonalizer(ArpackPackage(; kw...), matrix;
-            levels = levels, origin = origin, codiag = codiag)
+        d = diagonalizer(ArpackPackage(; methodkw...), matrix; diagkw...)
     elseif M isa SMatrix
         matrix = similarmatrix(h)
-        d = diagonalizer(ArnoldiPackagePackage(; kw...), matrix;
-            levels = levels, origin = origin, codiag = codiag)
+        d = diagonalizer(ArnoldiPackagePackage(; methodkw...), matrix; diagkw...)
     else
         throw(ArgumentError("Could not establish diagonalizer method"))
     end
