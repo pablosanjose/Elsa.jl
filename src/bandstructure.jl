@@ -94,7 +94,7 @@ function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
     srcb == 0 && return maxproj, destb
     @inbounds for nb in 1:nϵ
         proj = zero(M)
-        @simd for i in 1:dimh
+        for i in 1:dimh
             proj += ψks[i, nb, destk]' * ψks[i, srcb, srck]
         end
         absproj = T(abs(tr(proj)))
@@ -103,6 +103,16 @@ function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
             maxproj = absproj
         end
     end
+
+    # if destb != srcb
+    #     @show destk, srck, destb, srcb, maxproj
+    #     proj = zero(M)
+    #     for i in 1:dimh
+    #         proj += tr(ψks[i, srcb, destk]' * ψks[i, srcb, srck])
+    #     end
+    #     @show T(abs(tr(proj)))
+    # end
+
     return maxproj, destb
 end
 
