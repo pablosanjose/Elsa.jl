@@ -156,9 +156,9 @@ end
 # end
 
 
-# tuplesort((a,b)::Tuple{<:Number,<:Number}) = a > b ? (b, a) : (a, b)
-# tuplesort(t::Tuple) = t
-# tuplesort(::Missing) = missing
+tuplesort((a,b)::Tuple{<:Number,<:Number}) = a > b ? (b, a) : (a, b)
+tuplesort(t::Tuple) = t
+tuplesort(::Missing) = missing
 
 # collectfirst(s::T, ss...) where {T} = _collectfirst((s,), ss...)
 # _collectfirst(ts::NTuple{N,T}, s::T, ss...) where {N,T} = _collectfirst((ts..., s), ss...)

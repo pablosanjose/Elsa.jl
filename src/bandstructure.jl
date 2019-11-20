@@ -36,6 +36,9 @@ function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, shift = missi
     return bandstructure!(diagonalizer(h, mesh; kw...), h,  mesh)
 end
 
+bandstructure(h::Hamiltonian, mesh::Mesh; kw...) where {L,M} =
+    bandstructure!(diagonalizer(h, mesh; kw...), h,  mesh)
+
 function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD) where {M,D,T,MD<:Mesh{D,T}}
     nϵ = d.levels
     dimh = size(h, 1)
@@ -55,35 +58,50 @@ function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh
     end
 
     bands = Band{M,Vector{M},Mesh{D+1,T,Vector{SVector{D+1,T}},Vector{NTuple{D+1,Int}}}}[]
-    bandindices = Vector{Int}(undef, nk) # the 1:nϵ index for each k point. 0 == missing
+    allbandindices = zeros(Int, nk, nϵ) # the 1:nϵ index for each k point on each band, 0 == missing
+                                        # We need to store all bands to resolve conflicts
     p = Progress(nϵ, "Step 2/2 - Connecting bands: ")
     for nb in 1:nϵ
-        findbandindices!(bandindices, nb, ψks, mesh, d.minprojection)
-        band = extractband(bandindices, ϵks, ψks, mesh)
-        push!(bands, band)
+        findbandindices!(allbandindices, nb, ψks, mesh, d.minprojection)
         ProgressMeter.next!(p; showvalues = ())
+    end
+    vertexindices = Vector{Int}(undef, nk) # Preallocated temporary to map nk to nonmissing band vertices
+    for nb in 1:nϵ
+        bandindices = view(allbandindices, :, nb)
+        band = extractband!(vertexindices, bandindices, nb, ϵks, ψks, mesh)
+        push!(bands, band)
     end
     return Bandstructure(bands, mesh)
 end
 
-function findbandindices!(bandindices, nb, ψks, mesh, minprojection)
+function findbandindices!(allbandindices, nb, ψks, mesh, minprojection)
     dimh, nϵ, nk = size(ψks)
-    fill!(bandindices, 0)
-    bandindices[1] = nb
-    defectfound = false
+    allbandindices[1, nb] = nb
     for srck in 1:nk, edgek in edges(mesh, srck)
         destk = edgedest(mesh, edgek)
-        srcb = bandindices[srck]
+        srcb = allbandindices[srck, nb]
         proj, destb = findmostparallel(ψks, destk, srcb, srck)
         if proj > minprojection
-            if !iszero(bandindices[destk]) && bandindices[destk] != destb
-                defectfound = true
+            if !iszero(allbandindices[destk, nb]) && allbandindices[destk, nb] != destb
+                # Conflict resolution in band connectivity: choose smallest unused band
+                # If both have been already used, warn and set to zero
+                b, b´ = tuplesort((destb, allbandindices[destk, nb]))
+                used = used´ = false
+                for nb´ in 1:(nb-1)
+                    # @show destb, destb´, allbandindices[destk, nb´]
+                    used  || (used  = allbandindices[destk, nb´] == b)
+                    used´ || (used´ = allbandindices[destk, nb´] == b´)
+                    used && used´ && break
+                end
+                chosenb = ifelse(used, ifelse(used´, zero(destb), b´), b)
+                allbandindices[destk, nb] = chosenb
+                iszero(chosenb) && @warn "Several bands share same eigenvalue"
+            else
+                allbandindices[destk, nb] = destb
             end
-            bandindices[destk] = destb
         end
     end
-    defectfound && @warn "Non-trivial band degeneracy detected. Resolution not yet implemented."
-    return bandindices
+    return allbandindices
 end
 
 function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
@@ -103,37 +121,28 @@ function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
             maxproj = absproj
         end
     end
-
-    # if destb != srcb
-    #     @show destk, srck, destb, srcb, maxproj
-    #     proj = zero(M)
-    #     for i in 1:dimh
-    #         proj += tr(ψks[i, srcb, destk]' * ψks[i, srcb, srck])
-    #     end
-    #     @show T(abs(tr(proj)))
-    # end
-
     return maxproj, destb
 end
 
-function extractband(bandindices, ϵks, ψks, mesh::Mesh{D,T}) where {D,T}
+function extractband!(vertexindices, bandindices, nb, ϵks, ψks, mesh::Mesh{D,T}) where {D,T}
     dimh, nϵ, nk = size(ψks)
     states = similar(ψks, dimh * nk)
     vertices = Vector{SVector{D+1,T}}(undef, nk)
+    fill!(vertexindices, 0)
     k´ = 0
     for (k, ind) in enumerate(bandindices)
         if !iszero(ind)
             k´ += 1
             vertices[k´] = SVector(Tuple(mesh.vertices[k])..., ϵks[ind, k])
             copyto!(states, 1 + dimh * (k´ - 1), ψks, 1 + dimh * (k - 1), dimh)
-            bandindices[k] = k´ # Reuse to store new vertex indices
+            vertexindices[k] = k´ # Reuse to store new vertex indices
         end
     end
     if k´ < nk
         resize!(vertices, k´)
         resize!(states, k´ * dimh)
-        simplices = extractsimplices(mesh.simplices, bandindices)
-        adjmat = extractsadjacencies(mesh.adjmat, bandindices)
+        simplices = extractsimplices(mesh.simplices, vertexindices)
+        adjmat = extractsadjacencies(mesh.adjmat, vertexindices)
     else
         simplices = copy(vec(mesh.simplices))
         adjmat = copy(mesh.adjmat)
@@ -143,11 +152,11 @@ function extractband(bandindices, ϵks, ψks, mesh::Mesh{D,T}) where {D,T}
     return band
 end
 
-function extractsimplices(simplices::AbstractVector{NTuple{N,Int}}, indices) where {N}
-    simplices´ = similar(simplices)
+function extractsimplices(simplices::AbstractArray{NTuple{N,Int}}, vertexindices) where {N}
+    simplices´ = similar(vec(simplices))
     n = 0
     for simp in simplices
-        simp´ = ntuple(i -> indices[simp[i]], Val(N))
+        simp´ = ntuple(i -> vertexindices[simp[i]], Val(N))
         if all(!iszero, simp´)
             n += 1
             simplices´[n] = simp´
@@ -161,14 +170,14 @@ end
 # extractsadjacencies(adjmat, bandindices) =
 #     adjmat[(!iszero).(bandindices), (!iszero).(bandindices)]
 
-function extractsadjacencies(adjmat::AbstractSparseMatrix{Tv}, bandindices) where {Tv}
-    n = count(!iszero, bandindices)
+function extractsadjacencies(adjmat::AbstractSparseMatrix{Tv}, vertexindices) where {Tv}
+    n = count(!iszero, vertexindices)
     b = SparseMatrixBuilder{Tv}(n, n)
     for col in 1:size(adjmat, 2)
-        iszero(bandindices[col]) && continue
+        iszero(vertexindices[col]) && continue
         for ptr in nzrange(adjmat, col)
             row = rowvals(adjmat)[ptr]
-            iszero(bandindices[row]) || pushtocolumn!(b, row, nonzeros(adjmat)[ptr])
+            iszero(vertexindices[row]) || pushtocolumn!(b, row, nonzeros(adjmat)[ptr])
         end
         finalizecolumn!(b)
     end
