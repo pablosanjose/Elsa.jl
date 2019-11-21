@@ -4,10 +4,9 @@
 
 abstract type AbstractMesh{D} end
 
-struct Mesh{D,T,V<:AbstractArray{SVector{D,T}},S} <: AbstractMesh{D}   # D is dimension of parameter space
+struct Mesh{D,T,V<:AbstractArray{SVector{D,T}}} <: AbstractMesh{D}   # D is dimension of parameter space
     vertices::V                         # Iterable vertex container with SVector{D,T} eltype
     adjmat::SparseMatrixCSC{Bool,Int}   # Directed graph: only dest > src
-    simplices::S                        # Iterable simplex container with NTuple{D+1,Int} eltype
 end
 
 # const Mesh{D,T} = Mesh{D,T,Vector{SVector{D,T}},Vector{Tuple{Int,Vararg{Int,D}}}}
@@ -19,13 +18,10 @@ function Base.show(io::IO, mesh::Mesh{D}) where {D}
     print(io,
 "$(i)Mesh{$D}: mesh of a $D-dimensional manifold
 $i  Vertices   : $(nvertices(mesh))
-$i  Edges      : $(nedges(mesh))
-$i  Simplices  : $(nsimplices(mesh))")
+$i  Edges      : $(nedges(mesh))")
 end
 
 nvertices(m::Mesh) = length(m.vertices)
-
-nsimplices(m::Mesh) = length(m.simplices)
 
 nedges(m::Mesh) = nnz(m.adjmat)
 
@@ -49,10 +45,71 @@ function minmax_edge_length(m::Mesh{D,T}) where {D,T<:Real}
     return sqrt(minlen2), sqrt(maxlen2)
 end
 
+######################################################################
+# Compute simplices
+######################################################################
+struct Buffer3{A,B,C}
+    a::A
+    b::B
+    c::C
+end
+
+function simplices(mesh::Mesh{D}, ::Val{N} = Val(D+1)) where {D,N}
+    N > 0 || throw(ArgumentError("Need a positive number of vertices for simplices"))
+    N == 1 && return Tuple.(range(1:nvertices(mesh)))
+    simps = NTuple{N,Int}[]
+    buffer = Buffer3(NTuple{N,Int}[], NTuple{N,Int}[], Int[])
+    for src in eachindex(vertices(mesh))
+        append!(simps, _simplices(buffer, mesh, src))
+    end
+    N > 2 && alignnormals!(simps, vertices(mesh))
+    return simps
+end
+
+# Add (greater) neighbors to last vertex of partials that are also neighbors of scr, till N
+function _simplices(buffer::Buffer3{P,P}, mesh, src) where {N,P<:AbstractArray{<:NTuple{N}}}
+    partials, partials´, srcneighs = buffer.a, buffer.b, buffer.c
+    resize!(srcneighs, 0)
+    resize!(partials, 0)
+    for edge in edges(mesh, src)
+        srcneigh = edgedest(mesh, edge)
+        push!(srcneighs, srcneigh)
+        push!(partials, padright((src, srcneigh), 0, Val(N)))
+    end
+    for pass in 3:N
+        resize!(partials´, 0)
+        for partial in partials
+            nextsrc = partial[pass - 1]
+            for edge in edges(mesh, nextsrc)
+                dest = edgedest(mesh, edge)
+                dest in srcneighs && push!(partials´, modifyat(partial, pass, dest))
+            end
+        end
+        partials, partials´ = partials´, partials
+    end
+    return partials
+end
+
+modifyat(s::NTuple{N,T}, ind, el) where {N,T} = ntuple(i -> i === ind ? el : s[i], Val(N))
+
+function alignnormals!(simplices, vertices)
+    for (i, s) in enumerate(simplices)
+        volume = elementvolume(vertices, s)
+        volume > 0 && (simplices[i] = switchlast(s))
+    end
+    return simplices
+end
+
+elementvolume(verts, s::NTuple{N,Int}) where {N} =
+    elementvolume(hcat(ntuple(i -> SVector(verts[s[i+1]] - verts[s[1]]), Val(N-1))...))
+elementvolume(mat::SMatrix{N,N}) where {N} = det(qr(mat).R)
+elementvolume(mat::SMatrix{M,N}) where {M,N} = det(mat)
+
+switchlast(s::NTuple{N,T}) where {N,T} = ntuple(i -> i < N - 1 ? s[i] : s[2N - i - 1] , Val(N))
 
 ######################################################################
 # Special meshes
-#######################################################################
+######################################################################
 """
     marchingmesh(npoints::Integer...; axes = 1.0 * I, shift = missing)
 
@@ -111,9 +168,6 @@ function _marchingmesh(ranges::NTuple{D,AbstractRange}, axes::SMatrix{D,D}) wher
 
     # We don't use generators because their non-inferreble eltype causes problems later
     verts = [projection * SVector(getindex.(ranges, Tuple(c))) for c in cs]
-    simps = [ntuple(i -> ls[c + us[i]], Val(D + 1)) for us in utets, c in csinner]
-
-    alignnormals!(simps, verts)
 
     s = SparseMatrixBuilder{Bool}(length(cs), length(cs))
     for c in cs
@@ -124,21 +178,6 @@ function _marchingmesh(ranges::NTuple{D,AbstractRange}, axes::SMatrix{D,D}) wher
         finalizecolumn!(s)
     end
     adjmat = sparse(s)
-
-    return Mesh(verts, adjmat, simps)
+    
+    return Mesh(verts, adjmat)
 end
-
-function alignnormals!(simplices, vertices)
-    for (i, s) in enumerate(simplices)
-        volume = elementvolume(vertices, s)
-        volume > 0 && (simplices[i] = switchlast(s))
-    end
-    return simplices
-end
-
-elementvolume(verts, s::NTuple{N,Int}) where {N} =
-    elementvolume(hcat(ntuple(i -> SVector(verts[s[i+1]] - verts[s[1]]), Val(N-1))...))
-elementvolume(mat::SMatrix{N,N}) where {N} = det(qr(mat).R)
-elementvolume(mat::SMatrix{M,N}) where {M,N} = det(mat)
-
-switchlast(s::NTuple{N,T}) where {N,T} = ntuple(i -> i < N - 1 ? s[i] : s[2N - i - 1] , Val(N))

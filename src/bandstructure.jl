@@ -1,10 +1,11 @@
 #######################################################################
 # Bandstructure
 #######################################################################
-struct Band{M,A<:AbstractVector{M},MD<:Mesh}
-    mesh::MD    # Mesh with missing vertices removed
-    states::A   # Must be resizeable container to build & refine band
-    dimstates::Int
+struct Band{M,A<:AbstractVector{M},MD<:Mesh,S<:AbstractArray}
+    mesh::MD        # Mesh with missing vertices removed
+    simplices::S    # Tuples of indices of mesh vertices that define mesh simplices
+    states::A       # Must be resizeable container to build & refine band
+    dimstates::Int  # Needed to extract the state at a given vertex from vector `states`
 end
 
 function Band{M}(mesh::Mesh, dimstates::Int) where {M}
@@ -60,17 +61,18 @@ function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh
     bands = Band{M,Vector{M},Mesh{D+1,T,Vector{SVector{D+1,T}},Vector{NTuple{D+1,Int}}}}[]
     allbandindices = zeros(Int, nk, nϵ) # the 1:nϵ index for each k point on each band, 0 == missing
                                         # We need to store all bands to resolve conflicts
+    vertexindices = Vector{Int}(undef, nk) # Preallocated temporary to map nk to nonmissing band vertices
     p = Progress(nϵ, "Step 2/2 - Connecting bands: ")
     for nb in 1:nϵ
         findbandindices!(allbandindices, nb, ψks, mesh, d.minprojection)
-        ProgressMeter.next!(p; showvalues = ())
-    end
-    vertexindices = Vector{Int}(undef, nk) # Preallocated temporary to map nk to nonmissing band vertices
-    for nb in 1:nϵ
         bandindices = view(allbandindices, :, nb)
         band = extractband!(vertexindices, bandindices, nb, ϵks, ψks, mesh)
         push!(bands, band)
+        ProgressMeter.next!(p; showvalues = ())
     end
+    # for k in 1:nk
+    #     allunique(view(allbandindices, k, :)) || @show view(allbandindices, k, :)
+    # end
     return Bandstructure(bands, mesh)
 end
 
@@ -82,20 +84,31 @@ function findbandindices!(allbandindices, nb, ψks, mesh, minprojection)
         srcb = allbandindices[srck, nb]
         proj, destb = findmostparallel(ψks, destk, srcb, srck)
         if proj > minprojection
-            if !iszero(allbandindices[destk, nb]) && allbandindices[destk, nb] != destb
-                # Conflict resolution in band connectivity: choose smallest unused band
-                # If both have been already used, warn and set to zero
-                b, b´ = tuplesort((destb, allbandindices[destk, nb]))
-                used = used´ = false
-                for nb´ in 1:(nb-1)
-                    # @show destb, destb´, allbandindices[destk, nb´]
-                    used  || (used  = allbandindices[destk, nb´] == b)
-                    used´ || (used´ = allbandindices[destk, nb´] == b´)
-                    used && used´ && break
-                end
-                chosenb = ifelse(used, ifelse(used´, zero(destb), b´), b)
-                allbandindices[destk, nb] = chosenb
-                iszero(chosenb) && @warn "Several bands share same eigenvalue"
+            isused = false
+            for nb´ in 1:(nb-1)
+                isused = allbandindices[destk, nb´] == destb
+                isused && break
+            end
+            isused && break
+            # if !iszero(allbandindices[destk, nb]) && allbandindices[destk, nb] != destb
+            #     # Conflict resolution in band connectivity: choose smallest unused band
+            #     # If both have been already used, warn and set to zero
+            #     b, b´ = tuplesort((destb, allbandindices[destk, nb]))
+            #     used = used´ = false
+            #     for nb´ in 1:(nb-1)
+            #         used  = used  || allbandindices[destk, nb´] == b
+            #         used´ = used´ || allbandindices[destk, nb´] == b´
+            #         used && used´ && break
+            #     end
+            #     chosenb = ifelse(used, ifelse(used´, zero(destb), b´), b)
+            #     allbandindices[destk, nb] = chosenb
+            #     if iszero(chosenb) # delete conflicting nodes from other
+            # else
+            #     allbandindices[destk, nb] = destb
+            # end
+            destb´ = allbandindices[destk, nb]
+            if !iszero(destb´) && destb´ != destb
+                allbandindices[destk, nb] = min(destb, destb´)
             else
                 allbandindices[destk, nb] = destb
             end

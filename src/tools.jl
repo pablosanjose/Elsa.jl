@@ -27,8 +27,6 @@ _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
 # zerotuple(::Type{T}, ::Val{L}) where {T,L} = ntuple(_ -> zero(T), Val(L))
 
-filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
-
 function padright!(v::Vector, x, n::Integer)
     n0 = length(v)
     resize!(v, max(n, n0))
@@ -43,7 +41,10 @@ padright(sv::StaticVector{E1,T1}, x::T2, ::Val{E2}) where {E1,T1,E2,T2} =
     (T = promote_type(T1,T2); SVector{E2, T}(ntuple(i -> i > E1 ? x : convert(T, sv[i]), Val(E2))))
 padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
 padright(sv::StaticVector{E,T}, ::Val{E}) where {E,T} = sv
-padright(t::Tuple, x...) = Tuple(padright(SVector(t), x...))
+padright(t::NTuple{N´,<:Any}, x, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? x : t[i], Val(N))
+padright(t::NTuple{N´,<:Any}, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? 0 : t[i], Val(N))
+
+filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
 
 @inline padtotype(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,S<:SMatrix{E2,L2}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
