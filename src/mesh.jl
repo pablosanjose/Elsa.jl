@@ -6,7 +6,7 @@ abstract type AbstractMesh{D} end
 
 struct Mesh{D,T,V<:AbstractArray{SVector{D,T}}} <: AbstractMesh{D}   # D is dimension of parameter space
     vertices::V                         # Iterable vertex container with SVector{D,T} eltype
-    adjmat::SparseMatrixCSC{Bool,Int}   # Directed graph: only dest > src
+    adjmat::SparseMatrixCSC{Bool,Int}   # Undirected graph: both dest > src and dest < src
 end
 
 # const Mesh{D,T} = Mesh{D,T,Vector{SVector{D,T}},Vector{Tuple{Int,Vararg{Int,D}}}}
@@ -37,6 +37,7 @@ function minmax_edge_length(m::Mesh{D,T}) where {D,T<:Real}
     verts = vertices(m)
     for src in eachindex(verts), edge in edges(m, src)
         dest = edgedest(m, edge)
+        dest > src || continue # Need only directed graph
         vec = verts[dest] - verts[src]
         norm2 = vec' * vec
         norm2 < minlen2 && (minlen2 = norm2)
@@ -67,6 +68,7 @@ function _simplices(buffer::Tuple{P,P,V}, mesh, src) where {N,P<:AbstractArray{<
     resize!(partials, 0)
     for edge in edges(mesh, src)
         srcneigh = edgedest(mesh, edge)
+        srcneigh > src || continue # Directed graph, to avoid simplex duplicates
         push!(srcneighs, srcneigh)
         push!(partials, padright((src, srcneigh), 0, Val(N)))
     end
@@ -76,6 +78,7 @@ function _simplices(buffer::Tuple{P,P,V}, mesh, src) where {N,P<:AbstractArray{<
             nextsrc = partial[pass - 1]
             for edge in edges(mesh, nextsrc)
                 dest = edgedest(mesh, edge)
+                dest > src || continue # If not directed, no need to check
                 dest in srcneighs && push!(partials´, modifyat(partial, pass, dest))
             end
         end
@@ -89,7 +92,7 @@ modifyat(s::NTuple{N,T}, ind, el) where {N,T} = ntuple(i -> i === ind ? el : s[i
 function alignnormals!(simplices, vertices)
     for (i, s) in enumerate(simplices)
         volume = elementvolume(vertices, s)
-        volume > 0 && (simplices[i] = switchlast(s))
+        volume < 0 && (simplices[i] = switchlast(s))
     end
     return simplices
 end
@@ -153,7 +156,7 @@ function _marchingmesh(ranges::NTuple{D,AbstractRange}, axes::SMatrix{D,D}) wher
     ls = LinearIndices(cs)
     csinner = CartesianIndices(ntuple(n -> 1:npoints[n]-1, Val(D)))
 
-    # edge vectors for marching tetrahedra in D-dimensions
+    # edge vectors for marching tetrahedra in D-dimensions (skip zero vector [first])
     uedges = [c for c in CartesianIndices(ntuple(_ -> 0:1, Val(D)))][2:end]
     # tetrahedra built from the D unit-length uvecs added in any permutation
     perms = permutations(
@@ -166,12 +169,14 @@ function _marchingmesh(ranges::NTuple{D,AbstractRange}, axes::SMatrix{D,D}) wher
     s = SparseMatrixBuilder{Bool}(length(cs), length(cs))
     for c in cs
         for u in uedges
-            dest = c + u    # only dest > src
+            dest = c + u    # dest > src
+            dest in cs && pushtocolumn!(s, ls[dest], true)
+            dest = c - u    # dest < src
             dest in cs && pushtocolumn!(s, ls[dest], true)
         end
         finalizecolumn!(s)
     end
     adjmat = sparse(s)
-    
+
     return Mesh(verts, adjmat)
 end

@@ -189,6 +189,18 @@ function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
     return dest
 end
 
+function appendslice!(dest::AbstractArray, src::AbstractArray{T,N}, Rsrc::CartesianIndices{N}) where {T,N}
+    checkbounds(src, first(Rsrc))
+    checkbounds(src, last(Rsrc))
+    Rdest = (length(dest) + 1):(length(dest) + length(Rsrc))
+    resize!(dest, last(Rdest))
+    src′ = Base.unalias(dest, src)
+    @inbounds for (Is, Id) in zip(Rsrc, Rdest)
+        @inbounds dest[Id] = src′[Is]
+    end
+    return dest
+end
+
 ######################################################################
 # Permutations (taken from Combinatorics.jl)
 #######################################################################

@@ -8,10 +8,11 @@ struct Band{M,A<:AbstractVector{M},MD<:Mesh,S<:AbstractArray}
     dimstates::Int  # Needed to extract the state at a given vertex from vector `states`
 end
 
-function Band{M}(mesh::Mesh, dimstates::Int) where {M}
+function Band{M}(mesh::Mesh{D}, dimstates::Int) where {M,D}
     nk = nvertices(mesh)
     states = M[]
-    return Band(mesh, states, dimstates)
+    simps = simplices(mesh, Val(D))
+    return Band(mesh, simps, states, dimstates)
 end
 
 struct Bandstructure{D,M,B<:Band{M},MD<:Mesh{D}}   # D is dimension of parameter space
@@ -58,63 +59,58 @@ function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh
         ProgressMeter.next!(p; showvalues = ())
     end
 
-    bands = Band{M,Vector{M},Mesh{D+1,T,Vector{SVector{D+1,T}},Vector{NTuple{D+1,Int}}}}[]
-    allbandindices = zeros(Int, nk, nϵ) # the 1:nϵ index for each k point on each band, 0 == missing
-                                        # We need to store all bands to resolve conflicts
-    vertexindices = Vector{Int}(undef, nk) # Preallocated temporary to map nk to nonmissing band vertices
-    p = Progress(nϵ, "Step 2/2 - Connecting bands: ")
-    for nb in 1:nϵ
-        findbandindices!(allbandindices, nb, ψks, mesh, d.minprojection)
-        bandindices = view(allbandindices, :, nb)
-        band = extractband!(vertexindices, bandindices, nb, ϵks, ψks, mesh)
+    p = Progress(nϵ * nk, "Step 2/2 - Connecting bands: ")
+    pcounter = 0
+    bands = Band{M,Vector{M},Mesh{D+1,T,Vector{SVector{D+1,T}}},Vector{NTuple{D+1,Int}}}[]
+    vertindices = zeros(Int, nϵ, nk) # 0 == unclassified, -1 == different band, > 0 vertex index
+    pending = CartesianIndex{2}[]
+    sizehint!(pending, nk)
+    while true
+        src = findfirst(iszero, vertindices)
+        src === nothing && break
+        resize!(pending, 1)
+        pending[1] = src # source for band search
+        band = extractband(mesh, pending, ϵks, ψks, vertindices, d.minprojection)
         push!(bands, band)
-        ProgressMeter.next!(p; showvalues = ())
+        pcounter += nvertices(band.mesh)
+        ProgressMeter.update!(p, pcounter; showvalues = ())
     end
-    # for k in 1:nk
-    #     allunique(view(allbandindices, k, :)) || @show view(allbandindices, k, :)
-    # end
     return Bandstructure(bands, mesh)
 end
 
-function findbandindices!(allbandindices, nb, ψks, mesh, minprojection)
+function extractband(kmesh::Mesh{D,T}, pending, ϵks::AbstractArray{T}, ψks::AbstractArray{M}, vertindices, minprojection) where {D,T,M}
     dimh, nϵ, nk = size(ψks)
-    allbandindices[1, nb] = nb
-    for srck in 1:nk, edgek in edges(mesh, srck)
-        destk = edgedest(mesh, edgek)
-        srcb = allbandindices[srck, nb]
-        proj, destb = findmostparallel(ψks, destk, srcb, srck)
-        if proj > minprojection
-            isused = false
-            for nb´ in 1:(nb-1)
-                isused = allbandindices[destk, nb´] == destb
-                isused && break
-            end
-            isused && break
-            # if !iszero(allbandindices[destk, nb]) && allbandindices[destk, nb] != destb
-            #     # Conflict resolution in band connectivity: choose smallest unused band
-            #     # If both have been already used, warn and set to zero
-            #     b, b´ = tuplesort((destb, allbandindices[destk, nb]))
-            #     used = used´ = false
-            #     for nb´ in 1:(nb-1)
-            #         used  = used  || allbandindices[destk, nb´] == b
-            #         used´ = used´ || allbandindices[destk, nb´] == b´
-            #         used && used´ && break
-            #     end
-            #     chosenb = ifelse(used, ifelse(used´, zero(destb), b´), b)
-            #     allbandindices[destk, nb] = chosenb
-            #     if iszero(chosenb) # delete conflicting nodes from other
-            # else
-            #     allbandindices[destk, nb] = destb
-            # end
-            destb´ = allbandindices[destk, nb]
-            if !iszero(destb´) && destb´ != destb
-                allbandindices[destk, nb] = min(destb, destb´)
-            else
-                allbandindices[destk, nb] = destb
+    kverts = vertices(kmesh)
+    states = eltype(ψks)[]
+    sizehint!(states, nk * dimh)
+    verts = SVector{D+1,T}[]
+    sizehint!(verts, nk)
+    adjmat = SparseMatrixBuilder{Bool}()
+    vertindices[first(pending)] = 1
+    for c in pending
+        ϵ, k = Tuple(c) # c == CartesianIndex(ϵ, k)
+        vertex = vcat(kverts[k], SVector(ϵks[c]))
+        push!(verts, vertex)
+        appendslice!(states, ψks, CartesianIndices((1:dimh, ϵ:ϵ, k:k)))
+        for edgek in edges(kmesh, k)
+            k´ = edgedest(kmesh, edgek)
+            proj, ϵ´ = findmostparallel(ψks, k´, ϵ, k)
+            if proj >= minprojection
+                if iszero(vertindices[ϵ´, k´]) # unclassified
+                    push!(pending, CartesianIndex(ϵ´, k´))
+                    vertindices[ϵ´, k´] = length(pending)
+                end
+                indexk´ = vertindices[ϵ´, k´]
+                indexk´ > 0 && pushtocolumn!(adjmat, indexk´, true)
             end
         end
+        finalizecolumn!(adjmat)
     end
-    return allbandindices
+    for (i, vi) in enumerate(vertindices)
+        @inbounds vi > 0 && (vertindices[i] = -1) # mark as classified in a different band
+    end
+    mesh = Mesh(verts, sparse(adjmat))
+    return Band{M}(mesh, dimh)
 end
 
 function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
@@ -122,7 +118,6 @@ function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
     dimh, nϵ, nk = size(ψks)
     maxproj = zero(T)
     destb = 0
-    srcb == 0 && return maxproj, destb
     @inbounds for nb in 1:nϵ
         proj = zero(M)
         for i in 1:dimh
