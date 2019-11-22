@@ -48,17 +48,11 @@ end
 ######################################################################
 # Compute simplices
 ######################################################################
-struct Buffer3{A,B,C}
-    a::A
-    b::B
-    c::C
-end
-
 function simplices(mesh::Mesh{D}, ::Val{N} = Val(D+1)) where {D,N}
     N > 0 || throw(ArgumentError("Need a positive number of vertices for simplices"))
-    N == 1 && return Tuple.(range(1:nvertices(mesh)))
+    N == 1 && return Tuple.(1:nvertices(mesh))
     simps = NTuple{N,Int}[]
-    buffer = Buffer3(NTuple{N,Int}[], NTuple{N,Int}[], Int[])
+    buffer = (NTuple{N,Int}[], NTuple{N,Int}[], Int[])
     for src in eachindex(vertices(mesh))
         append!(simps, _simplices(buffer, mesh, src))
     end
@@ -67,8 +61,8 @@ function simplices(mesh::Mesh{D}, ::Val{N} = Val(D+1)) where {D,N}
 end
 
 # Add (greater) neighbors to last vertex of partials that are also neighbors of scr, till N
-function _simplices(buffer::Buffer3{P,P}, mesh, src) where {N,P<:AbstractArray{<:NTuple{N}}}
-    partials, partials´, srcneighs = buffer.a, buffer.b, buffer.c
+function _simplices(buffer::Tuple{P,P,V}, mesh, src) where {N,P<:AbstractArray{<:NTuple{N}},V}
+    partials, partials´, srcneighs = buffer
     resize!(srcneighs, 0)
     resize!(partials, 0)
     for edge in edges(mesh, src)
