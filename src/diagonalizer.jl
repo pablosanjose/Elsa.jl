@@ -24,7 +24,7 @@ diagonalizer(h::Hamiltonian{<:Lattice,<:Any,<:Any,<:Matrix}, mesh = missing; kw.
     diagonalizer(LinearAlgebraPackage(values(kw)), similarmatrix(h); kw...)
 
 function diagonalizer(h::Hamiltonian{<:Lattice,<:Any,M,<:SparseMatrixCSC}, mesh = missing;
-                      levels = missing, origin = 0.0, 
+                      levels = missing, origin = 0.0,
                       codiag = defaultcodiagonalizer(h, mesh), minprojection = 0.7,
                       methodkw...) where {M}
     diagkw = (levels = levels, origin = origin, codiag = codiag, minprojection = minprojection)
@@ -32,13 +32,15 @@ function diagonalizer(h::Hamiltonian{<:Lattice,<:Any,M,<:SparseMatrixCSC}, mesh 
         # @warn "Requesting significant number of sparse matrix eigenvalues. Converting to dense."
         matrix = Matrix(similarmatrix(h))
         _matrix = ishermitian(h) ? Hermitian(matrix) : matrix
-        d = diagonalizer(LinearAlgebraPackage(; methodkw...), _matrix; diagkw...)
-    elseif M isa Number
+        d = Diagonalizer(LinearAlgebraPackage(; methodkw...), _matrix; diagkw...)
+    elseif M <: Number
         matrix = similarmatrix(h)
-        d = diagonalizer(ArpackPackage(; methodkw...), matrix; diagkw...)
-    elseif M isa SMatrix
+        _matrix = ishermitian(h) ? Hermitian(matrix) : matrix
+        d = Diagonalizer(ArpackPackage(; nev = levels, methodkw...), _matrix; diagkw...)
+    elseif M <: SMatrix
         matrix = similarmatrix(h)
-        d = diagonalizer(ArnoldiPackagePackage(; methodkw...), matrix; diagkw...)
+        _matrix = ishermitian(h) ? Hermitian(matrix) : matrix
+        d = Diagonalizer(ArnoldiPackagePackage(; methodkw...), _matrix; diagkw...)
     else
         throw(ArgumentError("Could not establish diagonalizer method"))
     end
@@ -55,9 +57,6 @@ end
 
 LinearAlgebraPackage(; kw...) = LinearAlgebraPackage(values(kw))
 
-# Registers method as available
-diagonalizer(method::LinearAlgebraPackage, matrix; kw...) = Diagonalizer(method, matrix; kw...)
-
 function diagonalize(d::Diagonalizer{<:LinearAlgebraPackage})
     ϵ, ψ = eigen!(d.matrix; d.method.options...)
     ϵ´, ψ´ = view(ϵ, 1:d.levels), view(ψ, :, 1:d.levels)
@@ -71,23 +70,32 @@ end
 
 # Optionally loaded methods
 
+## Arpack ##
 struct ArpackPackage{O} <: AbstractDiagonalizePackage
     options::O
+    perm::Vector{Int}
 end
 
-struct IterativeSolversPackage{O,L,E} <: AbstractDiagonalizePackage
-    options::O
-    point::Float64  # Shift point for shift and invert
-    lmap::L         # LinearMap for shift and invert
-    engine::E       # Optional support for lmap (e.g. Pardiso solver or factorization)
+function diagonalize(d::Diagonalizer{<:ArpackPackage})
+    ϵ, ψ = Arpack.eigs(d.matrix; d.method.options...)
+    ϵ´ = real.(ϵ)
+    ϵ´, ψ´ = sorteigs!(d.method.perm, ϵ´, ψ)
+    return ϵ´, ψ´
 end
 
-struct ArnoldiPackagePackage{O,L,E} <: AbstractDiagonalizePackage
-    options::O
-    point::Float64  # Shift point for shift and invert
-    lmap::L         # LinearMap for shift and invert
-    engine::E       # Optional support for lmap (e.g. Pardiso solver or factorization)
-end
+# struct IterativeSolversPackage{O,L,E} <: AbstractDiagonalizePackage
+#     options::O
+#     point::Float64  # Shift point for shift and invert
+#     lmap::L         # LinearMap for shift and invert
+#     engine::E       # Optional support for lmap (e.g. Pardiso solver or factorization)
+# end
+
+# struct ArnoldiPackagePackage{O,L,E} <: AbstractDiagonalizePackage
+#     options::O
+#     point::Float64  # Shift point for shift and invert
+#     lmap::L         # LinearMap for shift and invert
+#     engine::E       # Optional support for lmap (e.g. Pardiso solver or factorization)
+# end
 
 #######################################################################
 # resolve_degeneracies
@@ -118,6 +126,14 @@ function resolve_degeneracies!(ϵ, ψ, d::Diagonalizer{<:Any,<:Any,<:AbstractCod
         isempty(ranges) && break
     end
     return ψ
+end
+
+function sorteigs!(perm, ϵ::Vector{<:Real}, ψ::Matrix)
+    p = sortperm!(perm, ϵ)
+    # permute!(ϵ, p)
+    sort!(ϵ)
+    Base.permutecols!!(ψ, p)
+    return ϵ, ψ
 end
 
 #######################################################################
