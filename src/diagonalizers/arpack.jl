@@ -25,5 +25,4 @@
 #     return Eigen(real(λs), ϕs)
 # end
 
-ArpackPackage(; nev = 6, sigma = 1im, kw...) =
-    ArpackPackage((nev = nev, sigma = sigma, values(kw)...), Vector{Int}(undef, nev))
+ArpackPackage(; sigma = 1im, kw...) = ArpackPackage((sigma = sigma, values(kw)...))

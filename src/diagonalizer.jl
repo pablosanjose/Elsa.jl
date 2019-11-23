@@ -10,13 +10,14 @@ struct Diagonalizer{M<:AbstractDiagonalizePackage,A<:AbstractArray,C<:Union{Miss
     levels::Int
     origin::Float64
     minprojection::Float64
-    codiag::C       # Matrices to resolve degeneracies, or missing
+    codiag::C         # Matrices to resolve degeneracies, or missing
+    perm::Vector{Int} # Prealloc to sort eigenvalues/vectors
 end
 
 function Diagonalizer(method, matrix::AbstractMatrix{M};
                       levels, origin, minprojection, codiag) where {M}
     _levels = levels === missing ? size(matrix, 1) : levels
-    Diagonalizer(method, matrix, _levels, origin, minprojection, codiag)
+    Diagonalizer(method, matrix, _levels, origin, minprojection, codiag, Vector{Int}(undef, _levels))
 end
 
 # This is in general type unstable. A function barrier when using it is needed
@@ -37,10 +38,10 @@ function diagonalizer(h::Hamiltonian{<:Lattice,<:Any,M,<:SparseMatrixCSC}, mesh 
         matrix = similarmatrix(h)
         _matrix = ishermitian(h) ? Hermitian(matrix) : matrix
         d = Diagonalizer(ArpackPackage(; nev = levels, methodkw...), _matrix; diagkw...)
-    elseif M <: SMatrix
-        matrix = similarmatrix(h)
-        _matrix = ishermitian(h) ? Hermitian(matrix) : matrix
-        d = Diagonalizer(ArnoldiPackagePackage(; methodkw...), _matrix; diagkw...)
+    # elseif M <: SMatrix
+    #     matrix = similarmatrix(h)
+    #     _matrix = ishermitian(h) ? Hermitian(matrix) : matrix
+    #     d = Diagonalizer(ArnoldiPackagePackage(; methodkw...), _matrix; diagkw...)
     else
         throw(ArgumentError("Could not establish diagonalizer method"))
     end
@@ -73,14 +74,12 @@ end
 ## Arpack ##
 struct ArpackPackage{O} <: AbstractDiagonalizePackage
     options::O
-    perm::Vector{Int}
 end
 
 function diagonalize(d::Diagonalizer{<:ArpackPackage})
     ϵ, ψ = Arpack.eigs(d.matrix; d.method.options...)
     ϵ´ = real.(ϵ)
-    ϵ´, ψ´ = sorteigs!(d.method.perm, ϵ´, ψ)
-    return ϵ´, ψ´
+    return ϵ´, ψ
 end
 
 # struct IterativeSolversPackage{O,L,E} <: AbstractDiagonalizePackage
@@ -104,7 +103,7 @@ end
 resolve_degeneracies!(ϵ, ψ, d::Diagonalizer{<:Any,<:Any,Missing}, ϕs) = (ϵ, ψ)
 
 function resolve_degeneracies!(ϵ, ψ, d::Diagonalizer{<:Any,<:Any,<:AbstractCodiagonalizer}, ϕs)
-    issorted(ϵ) || throw(ArgumentError("Unsorted eigenvalues"))
+    issorted(ϵ) || sorteigs!(d.perm, ϵ, ψ)
     hasapproxruns(ϵ, d.codiag.degtol) || return ϵ, ψ
     ranges, ranges´ = d.codiag.rangesA, d.codiag.rangesB
     resize!(ranges, 0)
