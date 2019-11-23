@@ -98,9 +98,11 @@ function alignnormals!(simplices, vertices)
 end
 
 elementvolume(verts, s::NTuple{N,Int}) where {N} =
-    elementvolume(hcat(ntuple(i -> SVector(verts[s[i+1]] - verts[s[1]]), Val(N-1))...))
+    elementvolume(hcat(ntuple(i -> SVector(most(verts[s[i+1]] - verts[s[1]])), Val(N-1))...))
 elementvolume(mat::SMatrix{N,N}) where {N} = det(mat)
 elementvolume(mat::SMatrix{M,N}) where {M,N} = det(qr(mat).R)
+
+most(s::SVector{N}) where {N} = ntuple(i -> s[i], Val(N-1))
 
 switchlast(s::NTuple{N,T}) where {N,T} = ntuple(i -> i < N - 1 ? s[i] : s[2N - i - 1] , Val(N))
 
