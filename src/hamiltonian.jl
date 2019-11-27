@@ -62,6 +62,9 @@ displayelements(::Type{T}) where {T} = "scalar ($T)"
 displayorbitals(h::Hamiltonian) =
     replace(replace(string(h.orbitals), "Symbol(\"" => ":"), "\")" => "")
 
+SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A<:AbstractSparseMatrix} = true
+SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = false
+
 # Internal API #
 
 latdim(h::Hamiltonian{LA}) where {E,L,LA<:AbstractLattice{E,L}} = L

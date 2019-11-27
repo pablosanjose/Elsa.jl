@@ -32,15 +32,68 @@ end
 #######################################################################
 # bandstructure
 #######################################################################
- # barrier for type-unstable diagonalizer
+"""
+    bandstructure(h::Hamiltonian, mesh::Mesh; kw...)
+
+Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs...)` with `ϕs` evaluated on the
+vertices of `mesh`. The diagonalization method is chosen automatically by calling
+`diagonalizer(h, mesh; kw...)` (see `diagonalizer` for details on `kw` options)
+
+    bandstructure(h::Hamiltonian; resolution = 13, shift = missing, kw...)
+
+Same as above with a  uniform `mesh = marchingmesh(h; npoints = resolution, shift = shift)`
+of marching tetrahedra (generalized to the lattice dimensions of the Hamiltonian). Note that
+`resolution` denotes the number of points along each Bloch axis, including endpoints (can be
+a tuple for axis-dependent points).
+
+# Example
+```
+julia> h = LatticePresets.honeycomb() |> unitcell(3) |> hamiltonian(hopping(-1, range = 1/√3));
+
+julia> bandstructure(h; resolution = 25, levels = 2)
+Bandstructure: bands for a 2D hamiltonian
+  Bands        : 2
+  Element type : scalar (Complex{Float64})
+  Mesh{2}: mesh of a 2-dimensional manifold
+    Vertices   : 625
+    Edges      : 3552
+```
+
+# See also
+    marchingmesh, diagonalizer, bandstructure!
+"""
 function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, shift = missing, kw...) where {L,M}
     mesh = marchingmesh(h; npoints = resolution, shift = shift)
+    # top-level barrier for type-unstable diagonalizer
     return bandstructure!(diagonalizer(h, mesh; kw...), h,  mesh)
 end
 
 bandstructure(h::Hamiltonian, mesh::Mesh; kw...) where {L,M} =
     bandstructure!(diagonalizer(h, mesh; kw...), h,  mesh)
 
+"""
+    bandstructure!(d::Diagonalizer, h::Hamiltonian, mesh::Mesh)
+
+Driver method for `bandstructure` that takes method options and preallocated buffers as a
+`Diagonalizer` method (see `diagonalizer`).
+
+```
+julia> h = LatticePresets.square() |> unitcell(5) |> hamiltonian(hopping(-1, range = 1/√3));
+
+julia> d = diagonalizer(h; levels = 2)
+
+julia> bandstructure!(h; resolution = 25)
+Bandstructure: bands for a 2D hamiltonian
+  Bands        : 1
+  Element type : scalar (Complex{Float64})
+  Mesh{2}: mesh of a 2-dimensional manifold
+    Vertices   : 625
+    Edges      : 3552
+```
+
+# See also
+    bandstructure, diagonalizer
+"""
 function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD) where {M,D,T,MD<:Mesh{D,T}}
     nϵ = d.levels
     dimh = size(h, 1)

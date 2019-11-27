@@ -113,8 +113,8 @@ switchlast(s::NTuple{N,T}) where {N,T} = ntuple(i -> i < N - 1 ? s[i] : s[2N - i
     marchingmesh(npoints::Integer...; axes = 1.0 * I, shift = missing)
 
 Creates a L-dimensional marching-tetrahedra `Mesh`. The mesh is confined to the box defined
-by the rows of `axes`, shifted by `shift::NTuple` if not `missing`, and contains
-`npoints[i]` along each axis `i`.
+by the rows of `axes`, shifted by `shift` (an `NTuple` or `Number`) if not `missing`, and
+contains `npoints[i]` along each axis `i`.
 
     marchingmesh(ranges::AbstractRange...; axes = 1.0 * I, shift = missing)
 
@@ -137,19 +137,23 @@ marchingmesh(ranges::Vararg{AbstractRange,L}; axes = 1.0 * I, shift = missing) w
     _marchingmesh(shiftranges(ranges, shift), SMatrix{L,L}(axes))
 
 function marchingmesh(npoints::Vararg{Integer,L}; axes = 1.0 * I, shift = missing) where {L}
-    ranges = (p -> range(0, 1; length = p)).(npoints)
+    ranges = meshranges(npoints, Val(L))
     ranges´ = shiftranges(ranges, shift)
     return _marchingmesh(ranges´, SMatrix{L,L}(axes))
 end
 
 function marchingmesh(h::Hamiltonian{<:Lattice,L}; npoints = 13, shift = missing) where {L}
-    ranges = ntuple(_ -> range(-π, π; length = npoints), Val(L))
+    ranges = meshranges(npoints, Val(L))
     ranges´ = shiftranges(ranges, shift)
     return _marchingmesh(ranges´, SMatrix{L,L}(I))
 end
 
-shiftranges(ranges, shift::Missing) = ranges
-shiftranges(ranges::NTuple{L}, shift::NTuple{L}) where {L} = ((r, s) -> r .+ s).(ranges, shift)
+meshranges(n::Int, ::Val{L}) where {L} = meshranges(filltuple(n, Val(L)), Val(L))
+meshranges(ns::NTuple{L,Int}, ::Val{L}) where {L} = (n -> range(-π, π; length = n)).(ns)
+
+shiftranges(rs, shift::Missing) = rs
+shiftranges(rs::NTuple{L}, shift::Number) where {L} = shiftranges(rs, filltuple(shift, Val(L)))
+shiftranges(rs::NTuple{L}, shifts::NTuple{L}) where {L} = ((r, s) -> r .+ s).(rs, shifts)
 
 function _marchingmesh(ranges::NTuple{D,AbstractRange}, axes::SMatrix{D,D}) where {D,T<:AbstractFloat}
     npoints = length.(ranges)
