@@ -44,13 +44,14 @@ $i  Coordination     : $(nhoppings(ham) / nsites(ham))")
     issuperlattice(ham.lattice) && print(ioindent, "\n", ham.lattice.supercell)
 end
 
-Base.summary(::Hamiltonian{LA}) where {E,L,LA<:Lattice{E,L}} =
-    "Hamiltonian{<:Lattice} : $(L)D Hamiltonian on a $(L)D Lattice in $(E)D space"
+Base.summary(h::Hamiltonian{LA}) where {E,L,LA<:Lattice{E,L}} =
+    "Hamiltonian{<:Lattice} : $(latdim(h))D Hamiltonian on a $(L)D Lattice in $(E)D space"
 
 Base.summary(::Hamiltonian{LA}) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}} =
     "Hamiltonian{<:Superlattice} : $(L)D Hamiltonian on a $(L´)D Superlattice in $(E)D space"
 
 matrixtype(::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = A
+realtype(::Hamiltonian{<:Any,<:Any,M}) where {M} = real(eltype(M))
 displaymatrixtype(h::Hamiltonian) = displaymatrixtype(matrixtype(h))
 displaymatrixtype(::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC, sparse"
 displaymatrixtype(::Type{<:Array}) = "Matrix, dense"
@@ -61,7 +62,12 @@ displayelements(::Type{T}) where {T} = "scalar ($T)"
 displayorbitals(h::Hamiltonian) =
     replace(replace(string(h.orbitals), "Symbol(\"" => ":"), "\")" => "")
 
+SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A<:AbstractSparseMatrix} = true
+SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = false
+
 # Internal API #
+
+latdim(h::Hamiltonian{LA}) where {E,L,LA<:AbstractLattice{E,L}} = L
 
 # find SVector type that can hold all orbital amplitudes in any lattice sites
 orbitaltype(orbs, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
@@ -509,7 +515,7 @@ function unitcell(ham::Hamiltonian{LA,L,Tv}) where {E,L,T,L´,Tv,LA<:Superlattic
                 iszero(newrow) || pushtocolumn!(newh.h, newrow, val)
             end
         end
-        foreach(h -> finalisecolumn!(h.h), harmonic_builders)
+        foreach(h -> finalizecolumn!(h.h), harmonic_builders)
     end
     harmonics = [HamiltonianHarmonic(h.dn, sparse(h.h)) for h in harmonic_builders]
     unitlat = unitcell(lat)
@@ -540,7 +546,7 @@ end
 Base.show(io::IO, pham::ParametricHamiltonian) = print(io, "Parametric ", pham.hamiltonian)
 
 function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, orbs, model, f::F;
-                                field = missing) where {M,E,L,T,F}
+                                field = missing) where {M,E,L,T,F<:Function}
     builder = IJVBuilder(M, lat, orbs)
     applyterms!(builder, terms(model)...)
     nels = length.(builder.ijvs) # element counters for each harmonic
@@ -657,28 +663,19 @@ function Base.show(io::IO, sb::SupercellBloch)
 end
 
 """
-    bloch!(matrix, h::Hamiltonian{<:Lattice}, ϕs::Real...)
+    bloch!(matrix, h::Hamiltonian, ...)
 
-Overwrite `matrix` with the Bloch Hamiltonian matrix of `h`, for the specified Bloch
-phases `ϕs`. In terms of Bloch wavevector `k`, `ϕs = k * bravais(h)`. If all `ϕs` are
-omitted, the intracell Hamiltonian is returned instead. If the Hamiltonian is defined on a
-`Superlattice`, the evaluation of the Bloch Hamiltonian is deferred until it is used (e.g.
-in a multiplication).
-
-A suitable, non-initialized `matrix` can be obtained with `similarmatrix(h)`.
-
-If `optimize!(h)` is called on a sparse Hamiltonian `h` before the first call to `bloch!`,
-performance will increase by avoiding memory reshuffling.
-
-    bloch!(matrix, h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}[, axis::Int = 0])
-
-Same as above with the added option of indicating a nonzero `axis`, in which case the
-derivative of the Bloch matrix respect to `ϕs[axis]` (i.e. the velocity operator along this
-axis) is returned.
+In-place version of `bloch`. Overwrite `matrix` with the Bloch Hamiltonian matrix of `h` for
+the specified Bloch phases `ϕs` (see `bloch` for definition and API).  A conventient way to
+obtain a `matrix` is to use `similarmatrix(h)`, which will return an `AbstractMatrix` of the
+same type as the Hamiltonian's. Note, however, that matrix need not be of the same type
+(e.g. it can be dense, while `h` is sparse).
 
 # Examples
 ```
-julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch!(.2,.3)
+julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2));
+
+julia> bloch!(similarmatrix(h), h, (.2,.3), 2)  # velocity operator along `bravais(h)[2]`
 2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
   [1, 1]  =  1.99001-0.199667im
   [2, 1]  =  1.96013-0.397339im
@@ -692,35 +689,46 @@ julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch
 bloch!(matrix, h, ϕs::Number...) = _bloch!(matrix, h, toSVector(ϕs), 0)
 bloch!(matrix, h, ϕs::Tuple, axis = 0) = _bloch!(matrix, h, toSVector(ϕs), axis)
 bloch!(matrix, h, ϕs::SVector, axis = 0) = _bloch!(matrix, h, ϕs, axis)
+bloch!(matrix, ϕs::Number...) = h -> bloch!(matrix, h, ϕs...)
+bloch!(matrix, ϕs::Tuple, axis = 0) = h -> bloch!(matrix, h, ϕs, axis)
 
-_bloch!(matrix::Hermitian, h::Hamiltonian{<:Lattice,L,M}, ϕs, axis) where {L,M} =
-    (_bloch!(matrix.data, h, ϕs, axis); matrix)
-
-function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axis) where {L,M}
+function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axis::Number) where {L,M}
+    rawmatrix = parent(matrix)
     if iszero(axis)
-        _copy!(matrix, first(h.harmonics).h) # faster copy!(dense, sparse) specialization
+        _copy!(rawmatrix, first(h.harmonics).h) # faster copy!(dense, sparse) specialization
+        add_harmonics!(rawmatrix, h, ϕs, dn -> 1)
     else
-        fill!(matrix, zero(M))
+        fill!(rawmatrix, zero(M))
+        add_harmonics!(rawmatrix, h, ϕs, dn -> -im * dn[axis])
     end
-    add_harmonics!(matrix, h, ϕs, axis)
     return matrix
 end
 
-add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{0}, axis) where {L,M,A<:SparseMatrixCSC} =
+function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, dnfunc::Function) where {L,M}
+    prefactor0 = dnfunc(zero(ϕs))
+    rawmatrix = parent(matrix)
+    if iszero(prefactor0)
+        fill!(rawmatrix, zero(M))
+    else
+        _copy!(rawmatrix, first(h.harmonics).h)
+        rmul!(rawmatrix, prefactor0)
+    end
+    add_harmonics!(rawmatrix, h, ϕs, dnfunc)
+    return matrix
+end
+
+add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{0}, _) where {L,M,A<:SparseMatrixCSC} =
     zerobloch
+
 function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L,M,A},
-                        ϕs::SVector{L}, axis) where {L,M,A<:SparseMatrixCSC}
+                        ϕs::SVector{L}, dnfunc) where {L,M,A<:SparseMatrixCSC}
     ϕs´ = ϕs'
     for ns in 2:length(h.harmonics)
         hh = h.harmonics[ns]
         hhmatrix = hh.h
-        if iszero(axis)
-            ephi = cis(ϕs´ * hh.dn)
-        elseif iszero(hh.dn[axis])
-            continue
-        else
-            ephi = im * hh.dn[axis] * cis(ϕs´ * hh.dn)
-        end
+        prefactor = dnfunc(hh.dn)
+        iszero(prefactor) && continue
+        ephi = prefactor * cis(-ϕs´ * hh.dn)
         for col in 1:size(hhmatrix, 2)
             range = nzrange(hhmatrix, col)
             for ptr in range
@@ -732,41 +740,33 @@ function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L,M,A},
     return zerobloch
 end
 
-function add_harmonics!(zerobloch::AbstractArray, h::Hamiltonian{<:Lattice,L,M,A}, phases::SVector{L}) where {L,M,A<:Matrix}
-    for ns in 2:length(h.harmonics)
-        hh = h.harmonics[ns]
-        ephi = cis(phases' * hh.dn)
-        zerobloch .+= ephi .* hh.h
-    end
-    return zerobloch
-end
-
 """
     bloch(h::Hamiltonian{<:Lattice}, ϕs::Real...)
 
 Build the Bloch Hamiltonian matrix of `h`, for the specified Bloch phases `ϕs`. In terms of
-Bloch wavevector `k`, `ϕs = k * bravais(h)`. If all `ϕs` are omitted, the intracell
-Hamiltonian is returned instead. If the Hamiltonian is defined on a `Superlattice`, the
-evaluation of the Bloch Hamiltonian is deferred until it is used (e.g. in a multiplication).
-
-    bloch(h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}[, axis::Int = 0])
-
-Same as above with the added option of indicating a nonzero `axis`, in which case the
-derivative of the Bloch matrix respect to `ϕs[axis]` (i.e. the velocity operator along this
-axis) is returned.
+Bloch wavevector `k`, `ϕs = k * bravais(h)`, it is defined as Overwrite `matrix` with the
+Bloch Hamiltonian matrix of `h`, for the specified Bloch phases `ϕs`, defined as
+`H(ϕs) = ∑exp(-im * ϕs' * dn) h_dn` where `h_dn` are Bloch harmonics connecting unit cells
+at a distance `dR = bravais(h) * dn`.
 
     bloch(h::Hamiltonian{<:Lattice})
 
 Build the intra-cell Hamiltonian matrix of `h`, without adding any Bloch harmonics.
 
+    bloch(h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}[, axis::Int = 0])
+
+A nonzero `axis` produces the derivative of the Bloch matrix respect to `ϕs[axis]` (i.e. the
+velocity operator along this axis), `∂H(ϕs) = ∑ -im * dn[axis] * exp(-im * ϕs' * dn) h_dn`
+
+    bloch(matrix, h::Hamiltonian{<:Lattice}, ϕs::NTuple{L,Real}, dnfunc::Function)
+
+Generalization that applies a prefactor `dnfunc(dn) * exp(im * ϕs' * dn)` to the `dn`
+harmonic.
+
     h |> bloch(ϕs...)
     h(ϕs...)
 
 Functional forms of `bloch`, equivalent to `bloch(h, ϕs...)`
-
-This function allocates a new matrix on each call. For a non-allocating version of `bloch`,
-see `bloch!`. If `optimize!(h)` is called on a sparse Hamiltonian `h` before the first call
-to `bloch`, performance will increase by avoiding memory reshuffling.
 
     bloch(h::Hamiltonian{<:Superlattice}, ϕs::Number...)
     bloch(h::Hamiltonian{<:Superlattice}, ϕs::Tuple[, axis = 0])
@@ -774,9 +774,16 @@ to `bloch`, performance will increase by avoiding memory reshuffling.
 Build a `SupercellBloch` object that lazily implements the Bloch Hamiltonian in the
 `Superlattice` without actually building the matrix (e.g. for matrix-free diagonalization).
 
+# Notes
+
+`bloch` allocates a new matrix on each call. For a non-allocating version of `bloch`, see
+`bloch!`. If `optimize!(h)` is called on a sparse Hamiltonian `h` before the first call to
+`bloch`, performance will increase substantially (for sparse Hamiltonians) by avoiding
+memory reshuffling.
+
 # Examples
 ```
-julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch(.2,.3)
+julia> h = LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch(.2,.3)
 2×2 SparseArrays.SparseMatrixCSC{Complex{Float64},Int64} with 4 stored entries:
   [1, 1]  =  1.99001-0.199667im
   [2, 1]  =  1.96013-0.397339im
@@ -785,13 +792,11 @@ julia> LatticePresets.honeycomb() |> hamiltonian(onsite(1), hopping(2)) |> bloch
 ```
 
 # See also:
-    bloch!
+    bloch!, optimize!, similarmatrix
 """
 bloch(ϕs::Number...) = h -> bloch(h, ϕs...)
 bloch(ϕs::Tuple, axis = 0) = h -> bloch(h, ϕs, axis)
-
 bloch(h::Hamiltonian{<:Lattice}, args...) = bloch!(similarmatrix(h), h, args...)
-
 bloch(h::Hamiltonian{<:Superlattice}, ϕs::Number...) =
     SupercellBloch(h, toSVector(ϕs))
 bloch(h::Hamiltonian{<:Superlattice}, ϕs::Tuple, axis = 0) =
@@ -832,7 +837,7 @@ function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {LA,L,M,A<:SparseMat
                 pushtocolumn!(builder, row, v, false) # skips repeated rows
             end
         end
-        finalisecolumn!(builder)
+        finalizecolumn!(builder)
     end
     ho = sparse(builder)
     copy!(h0.h, ho) # Inject new structural zeros into zero harmonics
@@ -848,96 +853,3 @@ function optimize!(ham::Hamiltonian{<:Superlattice})
     @warn "Hamiltonian is defined on a Superlattice. Nothing changed."
     return ham
 end
-
-#######################################################################
-# Flattened bloch
-#######################################################################
-# # More specific method for zerobloch with different eltype
-# function optimized_zerobloch!(matrix::SparseMatrixCSC{<:Number}, h::Hamiltonian{<:Lattice,<:Any,<:SMatrix})
-#     # h0 = first(h.harmonics).h
-#     # if length(h0.nzval) != length(h.matrix.nzval) # first call, align first harmonic h0 with
-#     #     copy!(h0.colptr, h.matrix.colptr)         # optimized h.matrix
-#     #     copy!(h0.rowval, h.matrix.rowval)
-#     #     copy!(h0.nzval,  h.matrix.nzval)
-#     #     matrix === h.matrix || copy!(matrix, h.matrix)  # Also copy optimized h.matrix to matrix
-#     # else  # if h.matrix, assume it's dirty and overwrite. Otherwise copy first harmonic, already optimized
-#     #     matrix === h.matrix ? copy!(h.matrix.nzval, h0.nzval) : copy!(matrix, h0)
-#     # end
-#     # return matrix
-# end
-
-# function add_harmonics!(zerobloch::SparseMatrixCSC{<:Number}, h::Hamiltonian{<:Lattice,L,<:SMatrix}, ϕs::SVector{L}) where {L}
-
-# end
-
-# function blochflat!(matrix, h::Hamiltonian{<:Lattice,L,M,<:Matrix}, phases...) where {L,M<:SMatrix}
-#     bloch!(h, phases...)
-#     lat = h.lattice
-#     offsets = flatoffsets(lat)
-#     numorbs = numorbitals(lat)
-#     for s2 in 1:nsublats(lat), s1 in 1:nsublats(lat)
-#         offset1, offset2 = offsets[s1], offsets[s2]
-#         norb1, norb2 = numorbs[s1], numorbs[s2]
-#         for (m, j) in enumerate(siterange(lat, s2)), (n, i) in enumerate(siterange(lat, s1))
-#             ioffset, joffset = offset1 + (n-1)*norb1, offset2 + (m-1)*norb2
-#             el = h.matrix[i, j]
-#             for sj in 1:norb2, si in 1:norb1
-#                 matrix[ioffset + si, joffset + sj] = el[si, sj]
-#             end
-#         end
-#     end
-#     return matrix
-# end
-
-# function blochflat!(matrix, h::Hamiltonian{<:Lattice,L,<:Number}, phases...) where {L}
-#     bloch!(h, phases...)
-#     copy!(matrix, h.matrix)
-#     return matrix
-# end
-
-# function blochflat!(h::Hamiltonian{<:Lattice,L,<:Number}, phases...) where {L}
-#     bloch!(h, phases...)
-#     return h.matrix
-# end
-
-# function blochflat(h::Hamiltonian{<:Lattice,L,M,<:Matrix}, phases...) where {L,M<:SMatrix}
-#     dim = flatdim(h.lattice)
-#     return blochflat!(similar(h.matrix, eltype(M), (dim, dim)), h, phases...)
-# end
-
-# function blochflat(h::Hamiltonian{<:Lattice,L,<:Number}, phases...) where {L}
-#     bloch!(h, phases...)
-#     return copy(h.matrix)
-# end
-
-# function blochflat(h::Hamiltonian{<:Lattice,L,M,<:SparseMatrixCSC}, phases...) where {L,M<:SMatrix}
-#     bloch!(h, phases...)
-#     lat = h.lattice
-#     offsets = flatoffsets(lat)
-#     numorbs = numorbitals(lat)
-#     dim = flatdim(h.lattice)
-#     builder = SparseMatrixBuilder{eltype(M)}(dim, dim)
-#     for s2 in 1:nsublats(lat)
-#         norb2 = numorbs[s2]
-#         for col in siterange(lat, s2), sj in 1:norb2
-#             for ptr in nzrange(h.matrix, col)
-#                 row = rowvals(h.matrix)[ptr]
-#                 val = nonzeros(h.matrix)[ptr]
-#                 fo, s1 = flatoffset_sublat(lat, row, numorbs, offsets)
-#                 norb1 = numorbs[s1]
-#                 for si in 1:norb1
-#                     flatrow = fo + si
-#                     pushtocolumn!(builder, flatrow, val[si, sj])
-#                 end
-#             end
-#             finalisecolumn!(builder)
-#         end
-#     end
-#     matrix = sparse(builder)
-#     return matrix
-# end
-
-# function flatoffset_sublat(lat, i, no = numorbitals(lat), fo = flatoffsets(lat), o = offsets(lat))
-#     s = sublat(lat, i)
-#     return (fo[s] + (i - o[s] - 1) * no[s]), s
-# end

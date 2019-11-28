@@ -27,8 +27,6 @@ _rdr(r1, r2) = (0.5 * (r1 + r2), r2 - r1)
 
 # zerotuple(::Type{T}, ::Val{L}) where {T,L} = ntuple(_ -> zero(T), Val(L))
 
-filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
-
 function padright!(v::Vector, x, n::Integer)
     n0 = length(v)
     resize!(v, max(n, n0))
@@ -43,7 +41,10 @@ padright(sv::StaticVector{E1,T1}, x::T2, ::Val{E2}) where {E1,T1,E2,T2} =
     (T = promote_type(T1,T2); SVector{E2, T}(ntuple(i -> i > E1 ? x : convert(T, sv[i]), Val(E2))))
 padright(sv::StaticVector{E,T}, ::Val{E2}) where {E,T,E2} = padright(sv, zero(T), Val(E2))
 padright(sv::StaticVector{E,T}, ::Val{E}) where {E,T} = sv
-padright(t::Tuple, x...) = Tuple(padright(SVector(t), x...))
+padright(t::NTuple{N´,<:Any}, x, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? x : t[i], Val(N))
+padright(t::NTuple{N´,<:Any}, ::Val{N}) where {N´,N} = ntuple(i -> i > N´ ? 0 : t[i], Val(N))
+
+filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
 
 @inline padtotype(s::SMatrix{E,L}, st::Type{S}) where {E,L,E2,L2,S<:SMatrix{E2,L2}} =
     S(SMatrix{E2,E}(I) * s * SMatrix{L,L2}(I))
@@ -59,7 +60,7 @@ negative(s::SVector{0,<:Number}) where {L} = s
 
 empty_sparse(::Type{M}, n, m) where {M} = sparse(Int[], Int[], M[], n, m)
 
-display_as_tuple(v, prefix = "") = isempty(v) ? "()" : 
+display_as_tuple(v, prefix = "") = isempty(v) ? "()" :
     string("(", prefix, join(v, string(", ", prefix)), ")")
 
 displayvectors(mat::SMatrix{E,L,<:AbstractFloat}; kw...) where {E,L} =
@@ -118,6 +119,34 @@ function _copy!(dst::Matrix{T}, src::SparseMatrixCSC) where {T}
     return dst
 end
 
+function pushapproxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T},
+                         offset = 0, degtol = sqrt(eps(real(T)))) where {T}
+    len = length(list)
+    len < 2 && return runs
+    rmin = rmax = 1
+    prev = list[1]
+    @inbounds for i in 2:len
+        next = list[i]
+        if abs(next - prev) < degtol
+            rmax = i
+        else
+            rmin < rmax && push!(runs, (offset + rmin):(offset + rmax))
+            rmin = rmax = i
+        end
+        prev = next
+    end
+    rmin < rmax && push!(runs, (offset + rmin):(offset + rmax))
+    return runs
+end
+
+function hasapproxruns(list::AbstractVector{T}, degtol = sqrt(eps(real(T)))) where {T}
+    for i in 2:length(list)
+        abs(list[i] - list[i-1]) < degtol && return true
+    end
+    return false
+end
+
+
 # pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')
 
 # padrightbottom(m::Matrix{T}, im, jm) where {T} = padrightbottom(m, zero(T), im, jm)
@@ -128,9 +157,9 @@ end
 # end
 
 
-# tuplesort((a,b)::Tuple{<:Number,<:Number}) = a > b ? (b, a) : (a, b)
-# tuplesort(t::Tuple) = t
-# tuplesort(::Missing) = missing
+tuplesort((a,b)::Tuple{<:Number,<:Number}) = a > b ? (b, a) : (a, b)
+tuplesort(t::Tuple) = t
+tuplesort(::Missing) = missing
 
 # collectfirst(s::T, ss...) where {T} = _collectfirst((s,), ss...)
 # _collectfirst(ts::NTuple{N,T}, s::T, ss...) where {N,T} = _collectfirst((ts..., s), ss...)
@@ -142,7 +171,7 @@ end
 
 # allorderedpairs(v) = [(i, j) for i in v, j in v if i >= j]
 
-# Like copyto! but with potentially different tensor orders (taken from Base.copyto!)
+# Like copyto! but with potentially different tensor orders (adapted from Base.copyto!)
 function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
                     src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
     isempty(Rdest) && return dest
@@ -153,6 +182,18 @@ function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
     checkbounds(dest, last(Rdest))
     checkbounds(src, first(Rsrc))
     checkbounds(src, last(Rsrc))
+    src′ = Base.unalias(dest, src)
+    @inbounds for (Is, Id) in zip(Rsrc, Rdest)
+        @inbounds dest[Id] = src′[Is]
+    end
+    return dest
+end
+
+function appendslice!(dest::AbstractArray, src::AbstractArray{T,N}, Rsrc::CartesianIndices{N}) where {T,N}
+    checkbounds(src, first(Rsrc))
+    checkbounds(src, last(Rsrc))
+    Rdest = (length(dest) + 1):(length(dest) + length(Rsrc))
+    resize!(dest, last(Rdest))
     src′ = Base.unalias(dest, src)
     @inbounds for (Is, Id) in zip(Rsrc, Rdest)
         @inbounds dest[Id] = src′[Is]

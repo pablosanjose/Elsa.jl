@@ -16,7 +16,7 @@
 #         which = :SR
 #         sigma = nothing
 #     end
-#     λs, ϕs, _ = Arpack.eigs(d.matrix; nev = nev, sigma = sigma, which = which, 
+#     λs, ϕs, _ = Arpack.eigs(d.matrix; nev = nev, sigma = sigma, which = which,
 #                              v0 = d.method.precond, kw...)
 #     if precond
 #         d.method.precond .= zero(Tv)
@@ -25,11 +25,4 @@
 #     return Eigen(real(λs), ϕs)
 # end
 
-ArpackMethod(; levels = 6, kw...) = ArpackMethod((nev = levels, values(kw)...))
-
-# Registers method as available
-diagonalizer(method::ArpackMethod, matrix; kw...) = Diagonalizer(method, matrix; kw...)
-
-# function diagonalize(d::Diagonalizer{<:ArpackMethod})
-
-# end
+ArpackPackage(; sigma = 1im, kw...) = ArpackPackage((sigma = sigma, values(kw)...))

@@ -203,17 +203,16 @@ mutable struct SparseMatrixBuilder{T} <: AbstractMatrix{T}
     cosorter::CoSort{Int,T,Vector{Int},Vector{T}}
 end
 
-function SparseMatrixBuilder{Tv}(m, n, coordinationguess = 0) where Tv
-    colptr = Vector{Int}(undef, n + 1)
+function SparseMatrixBuilder{Tv}(m, n) where Tv
+    colptr = [1]
     colptr[1] = 1
     rowval = Int[]
     nzval = Tv[]
-    if !iszero(coordinationguess)
-        sizehint!(rowval, 2 * coordinationguess * m)
-        sizehint!(nzval, 2 * coordinationguess * m)
-    end
     return SparseMatrixBuilder(m, n, colptr, rowval, nzval, 1, 1, CoSort(rowval, nzval))
 end
+
+# Unspecified size constructor
+SparseMatrixBuilder{Tv}() where Tv = SparseMatrixBuilder{Tv}(-1, -1)
 
 SparseArrays.nzrange(S::SparseMatrixBuilder, col::Integer) = S.colptr[col]:(S.colptr[col+1]-1)
 
@@ -221,7 +220,7 @@ SparseArrays.rowvals(S::SparseMatrixBuilder) = S.rowval
 
 SparseArrays.nonzeros(S::SparseMatrixBuilder) = S.nzval
 
-Base.size(S::SparseMatrixBuilder) = (S.n, S.m)
+Base.size(S::SparseMatrixBuilder) = (S.m, S.n)
 Base.size(S::SparseMatrixBuilder, k) = size(S)[k]
 
 function pushtocolumn!(s::SparseMatrixBuilder, row::Int, x, skipdupcheck::Bool = true)
@@ -233,18 +232,6 @@ function pushtocolumn!(s::SparseMatrixBuilder, row::Int, x, skipdupcheck::Bool =
     return s
 end
 
-# pushtocolumn!(s::SparseMatrixBuilder, rows::AbstractArray, xs::AbstractArray) =
-#     pushtocolumn!(s, rows, xs, eachindex(rows))
-# function pushtocolumn!(s::SparseMatrixBuilder, rows::AbstractArray, xs::AbstractArray, range)
-#     n = length(range)
-#     Base._growend!(s.rowval, n)
-#     copyto!(s.rowval, length(s.rowval)-n+1, rows, first(range), n)
-#     Base._growend!(s.nzval, n)
-#     copyto!(s.nzval, length(s.nzval)-n+1, xs, first(range), n)
-#     s.rowvalcounter += n
-#     return s
-# end
-
 function isintail(element, container, start::Int)
     for i in start:length(container)
         container[i] == element && return true
@@ -252,32 +239,38 @@ function isintail(element, container, start::Int)
     return false
 end
 
-function finalisecolumn!(s::SparseMatrixBuilder, sortcol::Bool = true)
-    s.colcounter > s.n && throw(DimensionMismatch("Pushed too many columns to matrix"))
+function finalizecolumn!(s::SparseMatrixBuilder, sortcol::Bool = true)
+    s.n > 0 && s.colcounter > s.n && throw(DimensionMismatch("Pushed too many columns to matrix"))
     if sortcol
         s.cosorter.offset = s.colptr[s.colcounter] - 1
         sort!(s.cosorter)
         isgrowing(s.cosorter) || throw(error("Internal error: repeated rows"))
     end
     s.colcounter += 1
-    s.colptr[s.colcounter] = s.rowvalcounter
+    push!(s.colptr, s.rowvalcounter)
     return nothing
 end
 
-function finalisecolumn!(s::SparseMatrixBuilder, ncols::Int)
+function finalizecolumn!(s::SparseMatrixBuilder, ncols::Int)
     for _ in 1:ncols
-        finalisecolumn!(s)
+        finalizecolumn!(s)
     end
     return nothing
 end
 
 function SparseArrays.sparse(s::SparseMatrixBuilder)
-    if s.colcounter < s.n + 1
-        for col in (s.colcounter + 1):(s.n + 1)
+    if s.n > 0 && s.m > 0
+        m, n = s.m, s.n
+    else
+        m, n = s.colcounter - 1, isempty(s.rowval) ? 0 : maximum(s.rowval)
+    end
+    if s.colcounter < m + 1
+        for col in (s.colcounter + 1):(n + 1)
             s.colptr[col] = s.rowvalcounter
         end
     end
-    return SparseMatrixCSC(s.m, s.n, s.colptr, s.rowval, s.nzval)
+
+    return SparseMatrixCSC(m, n, s.colptr, s.rowval, s.nzval)
 end
 
 #######################################################################

@@ -61,7 +61,7 @@ function randomstate(h::Hamiltonian{LA}; type::Type{Tv} = Complex{T}) where {E,L
     if !all(x -> x == norbs[1], norbs)  # zero out missing orbitals
         @inbounds for c in CartesianIndices(masksize)
             site = first(Tuple(c))
-            insupercell = !masked || lat.supercell.mask.parent[c]
+            insupercell = !masked || parent(lat.supercell.mask)[c]
             norb = norbs[sublat(lat, site)] * insupercell
             for j in 1:N, i in 1:n
                 v[i + (j-1)*n, Tuple(c)...] =
