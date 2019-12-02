@@ -16,7 +16,6 @@ diagonalizer(h::Hamiltonian, mesh::Mesh, method, minprojection) =
 auxdiagonalizer(h, method) = NamedTuple()
 
 function defaultmethod(h::Hamiltonian)
-    @show  eltype(h) <: Number
     if eltype(h) <: Number
         method = issparse(h) ? ArpackPackage() : LinearAlgebraPackage()
     else
