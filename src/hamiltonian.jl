@@ -52,6 +52,9 @@ Base.summary(::Hamiltonian{LA}) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}} =
 
 matrixtype(::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = A
 realtype(::Hamiltonian{<:Any,<:Any,M}) where {M} = real(eltype(M))
+
+Base.eltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = M
+
 displaymatrixtype(h::Hamiltonian) = displaymatrixtype(matrixtype(h))
 displaymatrixtype(::Type{<:SparseMatrixCSC}) = "SparseMatrixCSC, sparse"
 displaymatrixtype(::Type{<:Array}) = "Matrix, dense"
@@ -777,9 +780,7 @@ Build a `SupercellBloch` object that lazily implements the Bloch Hamiltonian in 
 # Notes
 
 `bloch` allocates a new matrix on each call. For a non-allocating version of `bloch`, see
-`bloch!`. If `optimize!(h)` is called on a sparse Hamiltonian `h` before the first call to
-`bloch`, performance will increase substantially (for sparse Hamiltonians) by avoiding
-memory reshuffling.
+`bloch!`.
 
 # Examples
 ```
@@ -805,18 +806,30 @@ bloch(h::Hamiltonian{<:Superlattice}, ϕs::Tuple, axis = 0) =
 """
     similarmatrix(h::Hamiltonian)
 
-Create an uninitialized matrix of the same type of the Hamiltonian's matrix.
+Create an uninitialized matrix of the same type of the Hamiltonian's matrix, calling
+`optimize!(h)` first to produce an optimal work matrix in the sparse case.
+
+    similarmatrix(h::Hamiltonian, solver::AbstractDiagonalizeMethod)
+
+Construct the matrix with a type adapted to the specified diagonalization `solver`.
 """
-similarmatrix(h::Hamiltonian) = similar(h.harmonics[1].h)
+function similarmatrix(h::Hamiltonian)
+    optimize!(h)
+    return similar(h.harmonics[1].h)
+end
 
 """
     optimize!(h::Hamiltonian)
 
 Prepare a sparse Hamiltonian `h` to increase the performance of subsequent calls to
-`bloch(h, ϕs...)` and `bloch!(matrix, h, ϕs...)` by minimizing memory reshufflings.
+`bloch(h, ϕs...)` and `bloch!(matrix, h, ϕs...)` by minimizing memory reshufflings. It also
+adds missing structural zeros to the diagonal to enable shifts by `α*I` (for
+shift-and-invert methods).
 
 No optimization will be performed on non-sparse Hamiltonians, or those defined on
 `Superlattice`s, for which Bloch Hamiltonians are lazily evaluated.
+
+Note that when calling `similarmatrix(h)` on a sparse `h`, `optimize!` is called first.
 
 # See also:
     bloch, bloch!
@@ -837,6 +850,7 @@ function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {LA,L,M,A<:SparseMat
                 pushtocolumn!(builder, row, v, false) # skips repeated rows
             end
         end
+        pushtocolumn!(builder, col, zero(M), false) # if not present already, add structural zeros to diagonal
         finalizecolumn!(builder)
     end
     ho = sparse(builder)

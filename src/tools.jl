@@ -146,6 +146,8 @@ function hasapproxruns(list::AbstractVector{T}, degtol = sqrt(eps(real(T)))) whe
     return false
 end
 
+eltypevec(::AbstractMatrix{T}) where {T<:Number} = T
+eltypevec(::AbstractMatrix{S}) where {N,T<:Number,S<:SMatrix{N,N,T}} = SVector{N,T}
 
 # pinverse(s::SMatrix) = (qrfact = qr(s); return inv(qrfact.R) * qrfact.Q')
 
