@@ -505,7 +505,7 @@ function unitcell(ham::Hamiltonian{LA,L,Tv}) where {E,L,T,L´,Tv,LA<:Superlattic
             target_dn = source_dn + oldh.dn
             super_dn = new_dn(target_dn, pinvint)
             wrapped_dn = wrap_dn(target_dn, super_dn, sc.matrix)
-            newh = get_or_push!(harmonic_builders, super_dn, dim)
+            newh = get_or_push!(harmonic_builders, super_dn, dim, newcol)
             for p in nzrange(oldh.h, source_i)
                 target_i = rows[p]
                 # check: wrapped_dn could exit bounding box along non-periodic direction
@@ -517,6 +517,8 @@ function unitcell(ham::Hamiltonian{LA,L,Tv}) where {E,L,T,L´,Tv,LA<:Superlattic
         end
         foreach(h -> finalizecolumn!(h.h), harmonic_builders)
     end
+    # @show dump(harmonic_builders[4].h)
+    # @show length(harmonic_builders[4].h.colptr)
     harmonics = [HamiltonianHarmonic(h.dn, sparse(h.h)) for h in harmonic_builders]
     unitlat = unitcell(lat)
     field = ham.field
@@ -524,11 +526,12 @@ function unitcell(ham::Hamiltonian{LA,L,Tv}) where {E,L,T,L´,Tv,LA<:Superlattic
     return Hamiltonian(unitlat, harmonics, field, orbs)
 end
 
-function get_or_push!(hs::Vector{HamiltonianHarmonic{L,Tv,SparseMatrixBuilder{B}}}, dn, dim) where {L,Tv,B}
+function get_or_push!(hs::Vector{HamiltonianHarmonic{L,Tv,SparseMatrixBuilder{B}}}, dn, dim, currentcol) where {L,Tv,B}
     for h in hs
         h.dn == dn && return h
     end
     newh = HamiltonianHarmonic(dn, SparseMatrixBuilder{B}(dim, dim))
+    currentcol > 1 && finalizecolumn!(newh.h, currentcol - 1) # for columns that have been already processed
     push!(hs, newh)
     return newh
 end
