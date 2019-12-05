@@ -471,7 +471,6 @@ isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero(dn)
 # Avoid double-counting hoppings when adding adjoint
 redundancyfactor(dn, ss, term) =
     isnotredundant(dn, term) || isnotredundant(ss, term) ? 1.0 : 0.5
-# (i,j,dn) and (j,i,-dn) will not both be added if any of the following is true
 isnotredundant(dn::SVector, term) = term.dns !== missing && !iszero(dn)
 isnotredundant((s1, s2)::Tuple{Int,Int}, term) = term.sublats !== missing && s1 != s2
 
@@ -517,8 +516,6 @@ function unitcell(ham::Hamiltonian{LA,L,Tv}) where {E,L,T,L´,Tv,LA<:Superlattic
         end
         foreach(h -> finalizecolumn!(h.h), harmonic_builders)
     end
-    # @show dump(harmonic_builders[4].h)
-    # @show length(harmonic_builders[4].h.colptr)
     harmonics = [HamiltonianHarmonic(h.dn, sparse(h.h)) for h in harmonic_builders]
     unitlat = unitcell(lat)
     field = ham.field
