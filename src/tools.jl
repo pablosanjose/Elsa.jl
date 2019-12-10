@@ -106,18 +106,61 @@ end
 
 isnonnegative(ndist) = iszero(ndist) || ispositive(ndist)
 
-_copy!(dest, src) = copy!(dest, src)
-function _copy!(dst::Matrix{T}, src::SparseMatrixCSC) where {T}
-    axes(dst) == axes(src) || throw(ArgumentError(
-        "arrays must have the same axes for copy!"))
+_copy!(dest::T, src::T) where {T<:AbstractMatrix} = copy!(dest, src)
+
+function _copy!(dst::DenseMatrix{T}, src::SparseMatrixCSC{T}) where {T}
+    axes(dst) == axes(dst) || throw(ArgumentError( "arrays must have the same axes for copy!"))
     fill!(dst, zero(T))
-    for col in 1:size(src,1)
+    for col in 1:size(src, 1)
         for p in nzrange(src, col)
-            dst[rowvals(src)[p], col] = nonzeros(src)[p]
+            @inbounds dst[rowvals(src)[p], col] = nonzeros(src)[p]
         end
     end
     return dst
 end
+
+# flatten upon copy
+function _copy!(dst::DenseMatrix{T}, src::SparseMatrixCSC{S}) where {T,N,S<:SMatrix{N,N,T}}
+    axes(dst) == (1:(N * size(src, 1)), 1:(N * size(src, 2))) ||
+        throw(ArgumentError( "arrays must have the same axes (after flattening) for copy!"))
+    fill!(dst, zero(T))
+    for col in 1:size(src, 1)
+        for p in nzrange(src, col)
+            coffset = CartesianIndex(((rowvals(src)[p] - 1) * N, (col - 1) * N))
+            smatrix = nonzeros(src)[p]
+            for i in CartesianIndices((1:N, 1:N))
+                @inbounds dst[coffset + i] = smatrix[i]
+            end
+        end
+    end
+    return dst
+end
+
+# flatten upon copy
+function _copy!(dst::SparseMatrixCSC{T}, src::SparseMatrixCSC{S}) where {T,N,S<:SMatrix{N,N,T}}
+    axes(dst) == (1:(N * size(src, 1)), 1:(N * size(src, 2))) ||
+        throw(ArgumentError( "arrays must have the same axes (after flattening) for copy!"))
+    builder = SparseMatrixBuilder(dst)
+    for col in 1:size(src, 1), i in 1:N
+        for p in nzrange(src, col)
+            smatrix = nonzeros(src)[p]
+            rowoffset = N * (rowvals(src)[p] - 1)
+            for j in 1:N
+                pushtocolumn!(builder, rowoffset, smatrix[i, j])
+            end
+        end
+        finalizecolumn!(builder, false) # no need to sort column
+    end
+    return sparse(builder)
+end
+
+function flatten(s::SparseMatrixCSC{S}) where {T,N,S<:SMatrix{N,N,T}} 
+    dst = sparse(Int[], Int[], T[], N * size(s, 1), N * size(s, 2))
+    _copy!(dst, s)
+    return dst
+end
+
+flatten(s::Hermitian) = Hermitian(flatten(parent(s)))
 
 function pushapproxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T},
                          offset = 0, degtol = sqrt(eps(real(T)))) where {T}

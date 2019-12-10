@@ -192,41 +192,52 @@ isgrowing(c::CoSort) = isgrowing(c.sortvector, c.offset + 1)
 # SparseMatrixBuilder
 #######################################################################
 
-mutable struct SparseMatrixBuilder{T} <: AbstractMatrix{T}
-    m::Int
-    n::Int
-    colptr::Vector{Int}
-    rowval::Vector{Int}
-    nzval::Vector{T}
+mutable struct SparseMatrixBuilder{T,S<:AbstractSparseMatrix{T}} <: AbstractMatrix{T}
+    matrix::S
     colcounter::Int
     rowvalcounter::Int
     cosorter::CoSort{Int,T,Vector{Int},Vector{T}}
 end
 
-function SparseMatrixBuilder{Tv}(m, n) where Tv
+struct UnfinalizedSparseMatrixCSC{Tv,Ti} <: AbstractSparseMatrix{Tv,Ti}
+    m::Ti
+    n::Ti
+    colptr::Vector{Ti}
+    rowval::Vector{Ti}
+    nzval::Vector{Tv}
+end
+
+function SparseMatrixBuilder{Tv}(m, n) where {Tv}
     colptr = [1]
-    colptr[1] = 1
     rowval = Int[]
     nzval = Tv[]
-    return SparseMatrixBuilder(m, n, colptr, rowval, nzval, 1, 1, CoSort(rowval, nzval))
+    return SparseMatrixBuilder(UnfinalizedSparseMatrixCSC(m, n, colptr, rowval, nzval), 1, 1, CoSort(rowval, nzval))
 end
 
 # Unspecified size constructor
-SparseMatrixBuilder{Tv}() where Tv = SparseMatrixBuilder{Tv}(-1, -1)
+SparseMatrixBuilder{Tv}() where Tv = SparseMatrixBuilder{Tv}(0, 0)
 
-SparseArrays.nzrange(S::SparseMatrixBuilder, col::Integer) = S.colptr[col]:(S.colptr[col+1]-1)
+function SparseMatrixBuilder(s::SparseMatrixCSC{Tv,Int}) where {Tv}
+    colptr = getcolptr(s)
+    rowval = rowvals(s)
+    nzval = nonzeros(s)
+    resize!(rowval, 0)
+    resize!(nzval, 0)
+    resize!(colptr, 1)
+    colptr[1] = 1
+    return SparseMatrixBuilder(s, 1, 1, CoSort(rowval, nzval))
+end
 
-SparseArrays.rowvals(S::SparseMatrixBuilder) = S.rowval
-
-SparseArrays.nonzeros(S::SparseMatrixBuilder) = S.nzval
-
-Base.size(S::SparseMatrixBuilder) = (S.m, S.n)
-Base.size(S::SparseMatrixBuilder, k) = size(S)[k]
+SparseArrays.getcolptr(s::UnfinalizedSparseMatrixCSC) = s.colptr
+SparseArrays.nonzeros(s::UnfinalizedSparseMatrixCSC) = s.nzval
+SparseArrays.rowvals(s::UnfinalizedSparseMatrixCSC) = s.rowval
+Base.size(s::UnfinalizedSparseMatrixCSC) = (s.m, s.n)
+Base.size(s::UnfinalizedSparseMatrixCSC, k) = size(s)[k]
 
 function pushtocolumn!(s::SparseMatrixBuilder, row::Int, x, skipdupcheck::Bool = true)
-    if skipdupcheck || !isintail(row, s.rowval, s.colptr[s.colcounter])
-        push!(s.rowval, row)
-        push!(s.nzval, x)
+    if skipdupcheck || !isintail(row, rowvals(s.matrix), getcolptr(s.matrix)[s.colcounter])
+        push!(rowvals(s.matrix), row)
+        push!(nonzeros(s.matrix), x)
         s.rowvalcounter += 1
     end
     return s
@@ -240,14 +251,14 @@ function isintail(element, container, start::Int)
 end
 
 function finalizecolumn!(s::SparseMatrixBuilder, sortcol::Bool = true)
-    s.n > 0 && s.colcounter > s.n && throw(DimensionMismatch("Pushed too many columns to matrix"))
+    size(s.matrix, 2) > 0 && s.colcounter > size(s.matrix, 2) && throw(DimensionMismatch("Pushed too many columns to matrix"))
     if sortcol
-        s.cosorter.offset = s.colptr[s.colcounter] - 1
+        s.cosorter.offset = getcolptr(s.matrix)[s.colcounter] - 1
         sort!(s.cosorter)
         isgrowing(s.cosorter) || throw(error("Internal error: repeated rows"))
     end
     s.colcounter += 1
-    push!(s.colptr, s.rowvalcounter)
+    push!(getcolptr(s.matrix), s.rowvalcounter)
     return nothing
 end
 
@@ -258,19 +269,33 @@ function finalizecolumn!(s::SparseMatrixBuilder, ncols::Int)
     return nothing
 end
 
-function SparseArrays.sparse(s::SparseMatrixBuilder)
-    if s.n > 0 && s.m > 0
-        m, n = s.m, s.n
-    else
-        m, n = s.colcounter - 1, isempty(s.rowval) ? 0 : maximum(s.rowval)
-    end
-    if s.colcounter < m + 1
-        for col in (s.colcounter + 1):(n + 1)
-            s.colptr[col] = s.rowvalcounter
+function SparseArrays.sparse(s::SparseMatrixBuilder{<:Any,<:SparseMatrixCSC})
+    completecolptr!(getcolptr(s.matrix), size(s.matrix, 2), s.rowvalcounter)
+    return s.matrix
+end
+
+function completecolptr!(colptr, cols, lastrowptr)
+    colcounter = length(colptr)
+    if colcounter < cols + 1
+        resize!(colptr, cols + 1)
+        for col in (colcounter + 1):(cols + 1)
+            colptr[col] = lastrowptr
         end
     end
+    return colptr
+end
 
-    return SparseMatrixCSC(m, n, s.colptr, s.rowval, s.nzval)
+function SparseArrays.sparse(s::SparseMatrixBuilder{<:Any,<:UnfinalizedSparseMatrixCSC})
+    m, n = size(s.matrix)
+    rowval = rowvals(s.matrix)
+    colptr = getcolptr(s.matrix)
+    nzval = nonzeros(s.matrix)
+    if m != 0 && n != 0
+        completecolptr!(colptr, n, s.rowvalcounter)
+    else # determine size of matrix after the fact
+        m, n = isempty(rowval) ? 0 : maximum(rowval), s.colcounter - 1
+    end
+    return SparseMatrixCSC(m, n, colptr, rowval, nzval)
 end
 
 #######################################################################

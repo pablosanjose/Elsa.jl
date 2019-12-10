@@ -13,20 +13,21 @@ end
 diagonalizer(h::Hamiltonian, mesh::Mesh, method, minprojection) =
     Diagonalizer(method, codiagonalizer(h, mesh), minprojection)
 
-auxdiagonalizer(h, method) = NamedTuple()
-
 function defaultmethod(h::Hamiltonian)
     if eltype(h) <: Number
         method = issparse(h) ? ArpackPackage() : LinearAlgebraPackage()
     else
         # method = KrylovKitPackage()
-        throw(ArgumentError("Methods for generic eltypes not yet implemented"))
+        throw(ArgumentError("Methods for generic Hamiltonian eltypes not yet implemented"))
     end
     return method
 end
 
 checkloaded(package::Symbol) = isdefined(Main, package) ||
     throw(ArgumentError("Package $package not loaded, need to be `using $package`."))
+
+maybereal(ϵ::Vector{<:Complex}, matrix::Hermitian) = real.(ϵ)
+maybereal(ϵ, matrix) = ϵ
 
 ## LinearAlgebra ##
 struct LinearAlgebraPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
@@ -37,14 +38,11 @@ LinearAlgebraPackage(; kw...) = LinearAlgebraPackage(values(kw))
 
 function diagonalize(matrix, d::Diagonalizer{<:LinearAlgebraPackage})
     ϵ, ψ = eigen!(matrix; (d.method.kw)...)
-    return ϵ, ψ
+    ϵ´ = maybereal(ϵ, matrix)
+    return ϵ´, ψ
 end
 
-function similarmatrix(h::Hamiltonian, ::LinearAlgebraPackage)
-    matrix = Matrix(similarmatrix(h))
-    matrix´ = ishermitian(h) ? Hermitian(matrix) : matrix
-    return matrix´
-end
+similarmatrix(h::Hamiltonian, ::LinearAlgebraPackage) = Matrix(similarmatrix(h; flatten = true))
 
 ## Arpack ##
 struct ArpackPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
@@ -53,23 +51,13 @@ end
 
 ArpackPackage(; kw...) = (checkloaded(:Arpack); ArpackPackage(values(kw)))
 
-function diagonalize(matrix::AbstractSparseMatrix, d::Diagonalizer{<:ArpackPackage})
+function diagonalize(matrix, d::Diagonalizer{<:ArpackPackage})
     ϵ, ψ = Main.Arpack.eigs(matrix; (d.method.kw)...)
-    return ϵ, ψ
-end
-
-function diagonalize(matrix::Hermitian, d::Diagonalizer{<:ArpackPackage})
-    ishermitian(matrix) || throw(ArgumentError("Only Hermitian matrices supported with Arpack for the moment"))
-    ϵ, ψ = Main.Arpack.eigs(matrix; (d.method.kw)...)
-    ϵ´ = real.(ϵ)
+    ϵ´ = maybereal(ϵ, matrix)
     return ϵ´, ψ
 end
 
-function similarmatrix(h::Hamiltonian, ::ArpackPackage)
-    matrix = similarmatrix(h)
-    matrix´ = ishermitian(h) ? Hermitian(matrix) : matrix
-    return matrix´
-end
+similarmatrix(h::Hamiltonian, ::ArpackPackage) = similarmatrix(h; flatten = true)
 
 ## IterativeSolvers ##
 

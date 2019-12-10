@@ -14,6 +14,8 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
       ProgressMeter, LinearMaps
       #FFTW
 
+using SparseArrays: getcolptr
+
 export sublat, bravais, lattice, dims, hopping, onsite, hamiltonian, randomstate,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!, similarmatrix,
        sites, bandstructure, marchingmesh, defaultsolver

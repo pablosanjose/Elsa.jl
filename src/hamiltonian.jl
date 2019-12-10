@@ -672,7 +672,8 @@ In-place version of `bloch`. Overwrite `matrix` with the Bloch Hamiltonian matri
 the specified Bloch phases `ϕs` (see `bloch` for definition and API).  A conventient way to
 obtain a `matrix` is to use `similarmatrix(h)`, which will return an `AbstractMatrix` of the
 same type as the Hamiltonian's. Note, however, that matrix need not be of the same type
-(e.g. it can be dense, while `h` is sparse).
+(e.g. it can be dense, while `h` is sparse, or it could be flat, as from `similarmatrix(h;
+flatten = true)`).
 
 # Examples
 ```
@@ -706,6 +707,8 @@ function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axi
     end
     return matrix
 end
+
+## WIP!! : implement bloch! (add_harmonics) on flattened target matrix
 
 function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, dnfunc::Function) where {L,M}
     prefactor0 = dnfunc(zero(ϕs))
@@ -804,19 +807,30 @@ bloch(h::Hamiltonian{<:Superlattice}, ϕs::Tuple, axis = 0) =
     SupercellBloch(h, toSVector(ϕs), axis)
 
 """
-    similarmatrix(h::Hamiltonian)
+    similarmatrix(h::Hamiltonian; flatten = false)
 
 Create an uninitialized matrix of the same type of the Hamiltonian's matrix, calling
-`optimize!(h)` first to produce an optimal work matrix in the sparse case.
+`optimize!(h)` first to produce an optimal work matrix in the sparse case. If `flatten =
+true` and the `eltype` of the matrix is itself an `SMatrix{N,N,T}`, each element is
+flattened to `N^2` elements of type `T`.
 
     similarmatrix(h::Hamiltonian, solver::AbstractDiagonalizeMethod)
 
 Construct the matrix with a type adapted to the specified diagonalization `solver`.
 """
-function similarmatrix(h::Hamiltonian)
+function similarmatrix(h::Hamiltonian; flatten = false)
     optimize!(h)
-    return similar(h.harmonics[1].h)
+    sm = size(h)
+    T = eltype(h)
+    if flatten
+        T = eltype(T)
+        sm = sm .* size(eltype(h))
+    end
+    matrix = similar(h.harmonics[1].h, T, sm[1], sm[2])
+    matrix´ = ishermitian(h) ? Hermitian(matrix) : matrix
+    return matrix´
 end
+# NOTE: This is type-unstable, but as it is used at a top level, it should not matter
 
 """
     optimize!(h::Hamiltonian)
