@@ -106,61 +106,111 @@ end
 
 isnonnegative(ndist) = iszero(ndist) || ispositive(ndist)
 
-_copy!(dest::T, src::T) where {T<:AbstractMatrix} = copy!(dest, src)
+############################################################################################
+######## _copy! and _add! #  Revise after #33589 is merged #################################
+############################################################################################
 
-function _copy!(dst::DenseMatrix{T}, src::SparseMatrixCSC{T}) where {T}
-    axes(dst) == axes(dst) || throw(ArgumentError( "arrays must have the same axes for copy!"))
-    fill!(dst, zero(T))
+_copy!(dest, src) = copy!(dest, src)
+_copy!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}) = _fast_sparse_muladd!(dst, src)
+_copy!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}) where {N} = _fast_sparse_muladd!(dst, src)
+_copy!(dst::AbstractMatrix{<:Number}, src::AbstractMatrix{<:SMatrix}) = _flatten_muladd!(dst, src)
+
+_add!(dest, src, α) = dest .+= α .* src
+_add!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}) = _fast_sparse_muladd!(dst, src, 1)
+_add!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}) where {N} = _fast_sparse_muladd!(dst, src, I)
+_add!(dst::AbstractMatrix{<:Number}, src::AbstractMatrix{<:SMatrix}) = _flatten_muladd!(dst, src, I)
+
+# Only needed for dense <- sparse (#33589), copy!(sparse, sparse) is fine
+function _fast_sparse_muladd!(dst::DenseMatrix{T}, src::SparseMatrixCSC, α = zero(T)) where {T}
+    checkflattenaxes(dst, src)
+    iszero(α) ? fill!(dst, zero(eltype(src))) : (α != 1 && α != I && rmul!(dst, α))
     for col in 1:size(src, 1)
         for p in nzrange(src, col)
-            @inbounds dst[rowvals(src)[p], col] = nonzeros(src)[p]
+            @inbounds dst[rowvals(src)[p], col] += nonzeros(src)[p]
         end
     end
     return dst
 end
 
-# flatten upon copy
-function _copy!(dst::DenseMatrix{T}, src::SparseMatrixCSC{S}) where {T,N,S<:SMatrix{N,N,T}}
-    axes(dst) == (1:(N * size(src, 1)), 1:(N * size(src, 2))) ||
-        throw(ArgumentError( "arrays must have the same axes (after flattening) for copy!"))
-    fill!(dst, zero(T))
+function _flatten_muladd!(dst::DenseMatrix{T}, src::SparseMatrixCSC{S}, α = zero(T)) where {T<:Number,N,S<:SMatrix{N,N}}
+    checkflattenaxes(dst, src)
+    iszero(α) ? fill!(dst, zero(eltype(src))) : (α != 1 && α != I && rmul!(dst, α))
     for col in 1:size(src, 1)
         for p in nzrange(src, col)
             coffset = CartesianIndex(((rowvals(src)[p] - 1) * N, (col - 1) * N))
             smatrix = nonzeros(src)[p]
             for i in CartesianIndices((1:N, 1:N))
-                @inbounds dst[coffset + i] = smatrix[i]
+                @inbounds dst[coffset + i] += smatrix[i]
             end
         end
     end
     return dst
 end
 
-# flatten upon copy
-function _copy!(dst::SparseMatrixCSC{T}, src::SparseMatrixCSC{S}) where {T,N,S<:SMatrix{N,N,T}}
+function _flatten_muladd!(dst::SparseMatrixCSC{T}, src::SparseMatrixCSC{S}, α = zero(T)) where {T<:Number,N,S<:SMatrix{N,N}}
+    checkflattenaxes(dst, src)
+    l = length(nonzeros(src))
+    l´ = N * N * l
+    rdst = resize!(rowvals(dst), l´)
+    ndst = resize!(nonzeros(dst), l´)
+    cdst = resize!(getcolptr(dst), size(src, 2) * N + 1)
+    cdst[1] = 1
+
+    if !iszero(α)
+        length(ndst) == l´ || throw(ArgumentError("unsupported flatten-sum of two sparse matrix with different structure"))
+        α != 1 && α != I && rmul!(ndst, α)
+    else
+        fill!(ndst, zero(eltype(S)))
+    end
+
+    p´ = col´ = 0
+    for col in 1:size(src, 2), j in 1:N
+        col´ += 1
+        for p in nzrange(src, col)
+            row´ = (rowvals(src)[p] - 1) * N
+            nz = nonzeros(src)[p]
+            for i in 1:N
+                row´ += 1
+                p´ += 1
+                rdst[p´] = row´
+                ndst[p´] += nz[i, j]
+            end
+        end
+        cdst[col´ + 1] = p´ + 1
+    end
+    return dst
+end
+
+function _flatten_muladd!(dst::DenseMatrix{<:Number}, src::DenseMatrix{S}, α = zero(T)) where {T<:Number,N,S<:SMatrix{N,N}}
+    checkflattenaxes(dst, src)
+    iszero(α) ? fill!(dst, zero(eltype(S))) : (α != 1 && α != I && rmul!(dst, α))
+    c = CartesianIndices(src)
+    i0 = first(c)
+    for i in c
+        smatrix = src[i]
+        ioffset = (i - i0) * N
+        for j in 1:N, i in 1:N
+            @inbounds dst[ioffset + CartesianIndex(i, j)] += smatrix[i, j]
+        end
+    end
+    return dst
+end
+
+function checkflattenaxes(dst::AbstractMatrix{<:Number}, src::AbstractMatrix{S}) where {T,N,S<:SMatrix{N,N,T}}
+    Base.require_one_based_indexing(src)
     axes(dst) == (1:(N * size(src, 1)), 1:(N * size(src, 2))) ||
         throw(ArgumentError( "arrays must have the same axes (after flattening) for copy!"))
-    builder = SparseMatrixBuilder(dst)
-    for col in 1:size(src, 1), i in 1:N
-        for p in nzrange(src, col)
-            smatrix = nonzeros(src)[p]
-            rowoffset = N * (rowvals(src)[p] - 1)
-            for j in 1:N
-                pushtocolumn!(builder, rowoffset, smatrix[i, j])
-            end
-        end
-        finalizecolumn!(builder, false) # no need to sort column
-    end
-    return sparse(builder)
 end
 
-function flatten(s::SparseMatrixCSC{S}) where {T,N,S<:SMatrix{N,N,T}} 
-    dst = sparse(Int[], Int[], T[], N * size(s, 1), N * size(s, 2))
-    _copy!(dst, s)
-    return dst
+checkflattenaxes(dst::AbstractMatrix{<:SMatrix}, src::AbstractMatrix{<:Number}) =
+    throw(ArgumentError("unflattening not supported"))
+
+function checkflattenaxes(dst::AbstractMatrix, src::AbstractMatrix)
+    axes(dst) == axes(src) ||
+        throw(ArgumentError( "arrays must have the same axes for copy!"))
 end
 
-flatten(s::Hermitian) = Hermitian(flatten(parent(s)))
+############################################################################################
 
 function pushapproxruns!(runs::AbstractVector{<:UnitRange}, list::AbstractVector{T},
                          offset = 0, degtol = sqrt(eps(real(T)))) where {T}
@@ -248,7 +298,7 @@ end
 
 ######################################################################
 # Permutations (taken from Combinatorics.jl)
-#######################################################################
+######################################################################
 
 struct Permutations{T}
     a::T

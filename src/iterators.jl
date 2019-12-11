@@ -200,18 +200,21 @@ mutable struct SparseMatrixBuilder{T,S<:AbstractSparseMatrix{T}} <: AbstractMatr
 end
 
 struct UnfinalizedSparseMatrixCSC{Tv,Ti} <: AbstractSparseMatrix{Tv,Ti}
-    m::Ti
-    n::Ti
+    m::Int
+    n::Int
     colptr::Vector{Ti}
     rowval::Vector{Ti}
     nzval::Vector{Tv}
 end
 
-function SparseMatrixBuilder{Tv}(m, n) where {Tv}
+function SparseMatrixBuilder{Tv}(m, n, nnzguess = missing) where {Tv}
     colptr = [1]
     rowval = Int[]
     nzval = Tv[]
-    return SparseMatrixBuilder(UnfinalizedSparseMatrixCSC(m, n, colptr, rowval, nzval), 1, 1, CoSort(rowval, nzval))
+    matrix = UnfinalizedSparseMatrixCSC(m, n, colptr, rowval, nzval)
+    builder = SparseMatrixBuilder(matrix, 1, 1, CoSort(rowval, nzval))
+    nnzguess === missing || sizehint!(builder, nnzguess)
+    return builder
 end
 
 # Unspecified size constructor
@@ -221,11 +224,14 @@ function SparseMatrixBuilder(s::SparseMatrixCSC{Tv,Int}) where {Tv}
     colptr = getcolptr(s)
     rowval = rowvals(s)
     nzval = nonzeros(s)
+    nnzguess = length(nzval)
     resize!(rowval, 0)
     resize!(nzval, 0)
     resize!(colptr, 1)
     colptr[1] = 1
-    return SparseMatrixBuilder(s, 1, 1, CoSort(rowval, nzval))
+    builder = SparseMatrixBuilder(s, 1, 1, CoSort(rowval, nzval))
+    sizehint!(builder, nnzguess)
+    return builder
 end
 
 SparseArrays.getcolptr(s::UnfinalizedSparseMatrixCSC) = s.colptr
@@ -233,6 +239,13 @@ SparseArrays.nonzeros(s::UnfinalizedSparseMatrixCSC) = s.nzval
 SparseArrays.rowvals(s::UnfinalizedSparseMatrixCSC) = s.rowval
 Base.size(s::UnfinalizedSparseMatrixCSC) = (s.m, s.n)
 Base.size(s::UnfinalizedSparseMatrixCSC, k) = size(s)[k]
+
+function Base.sizehint!(s::SparseMatrixBuilder, n)
+    sizehint!(getcolptr(s.matrix), n + 1)
+    sizehint!(nonzeros(s.matrix), n)
+    sizehint!(rowvals(s.matrix), n)
+    return s
+end
 
 function pushtocolumn!(s::SparseMatrixBuilder, row::Int, x, skipdupcheck::Bool = true)
     if skipdupcheck || !isintail(row, rowvals(s.matrix), getcolptr(s.matrix)[s.colcounter])

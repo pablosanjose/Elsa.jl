@@ -491,7 +491,7 @@ function unitcell(ham::Hamiltonian{<:Lattice}, args...; kw...)
     return unitcell(sham)
 end
 
-function unitcell(ham::Hamiltonian{LA,L,Tv}) where {E,L,T,L´,Tv,LA<:Superlattice{E,L,T,L´}}
+function unitcell(ham::Hamiltonian{LA,L}) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
     lat = ham.lattice
     sc = lat.supercell
     mapping = OffsetArray{Int}(undef, sc.sites, sc.cells.indices...) # store supersite indices newi
@@ -499,7 +499,8 @@ function unitcell(ham::Hamiltonian{LA,L,Tv}) where {E,L,T,L´,Tv,LA<:Superlattic
     foreach_supersite((s, oldi, olddn, newi) -> mapping[oldi, Tuple(olddn)...] = newi, lat)
     dim = nsites(sc)
     B = blocktype(ham)
-    harmonic_builders = HamiltonianHarmonic{L´,Tv,SparseMatrixBuilder{B}}[]
+    S = typeof(SparseMatrixBuilder{B}(dim, dim))
+    harmonic_builders = HamiltonianHarmonic{L´,B,S}[]
     pinvint = pinvmultiple(sc.matrix)
     foreach_supersite(lat) do s, source_i, source_dn, newcol
         for oldh in ham.harmonics
@@ -527,7 +528,7 @@ function unitcell(ham::Hamiltonian{LA,L,Tv}) where {E,L,T,L´,Tv,LA<:Superlattic
     return Hamiltonian(unitlat, harmonics, field, orbs)
 end
 
-function get_or_push!(hs::Vector{HamiltonianHarmonic{L,Tv,SparseMatrixBuilder{B}}}, dn, dim) where {L,Tv,B}
+function get_or_push!(hs::Vector{<:HamiltonianHarmonic{L,B}}, dn, dim) where {L,B}
     for h in hs
         h.dn == dn && return h
     end
@@ -723,11 +724,9 @@ function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, dnf
     return matrix
 end
 
-add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L,M,A}, ϕs::SVector{0}, _) where {L,M,A<:SparseMatrixCSC} =
-    zerobloch
+add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice}, ϕs::SVector{0}, _) = zerobloch
 
-function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L,M,A},
-                        ϕs::SVector{L}, dnfunc) where {L,M,A<:SparseMatrixCSC}
+function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L,<:Number}, ϕs::SVector{L}, dnfunc) where {L}
     ϕs´ = ϕs'
     for ns in 2:length(h.harmonics)
         hh = h.harmonics[ns]
@@ -735,16 +734,11 @@ function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L,M,A},
         prefactor = dnfunc(hh.dn)
         iszero(prefactor) && continue
         ephi = prefactor * cis(-ϕs´ * hh.dn)
-        for col in 1:size(hhmatrix, 2)
-            range = nzrange(hhmatrix, col)
-            for ptr in range
-                row = hhmatrix.rowval[ptr]
-                zerobloch[row, col] += ephi * hhmatrix.nzval[ptr]
-            end
-        end
+        _add!(zerobloch, hhmatrix, ephi)
     end
     return zerobloch
 end
+
 
 """
     bloch(h::Hamiltonian{<:Lattice}, ϕs::Real...)
@@ -881,3 +875,16 @@ function optimize!(ham::Hamiltonian{<:Superlattice})
     @warn "Hamiltonian is defined on a Superlattice. Nothing changed."
     return ham
 end
+
+
+"""
+    flatten(h::Hamiltonian)
+"""
+
+function flatten(s::SparseMatrixCSC{S}) where {T,N,S<:SMatrix{N,N,T}}
+    dst = sparse(Int[], Int[], T[], N * size(s, 1), N * size(s, 2))
+    _copy!(dst, s)
+    return dst
+end
+
+flatten(s::Hermitian) = Hermitian(flatten(parent(s)))
