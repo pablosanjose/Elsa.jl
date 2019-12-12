@@ -701,9 +701,9 @@ function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axi
     rawmatrix = parent(matrix)
     if iszero(axis)
         _copy!(rawmatrix, first(h.harmonics).h) # faster copy!(dense, sparse) specialization
-        add_harmonics!(rawmatrix, h, ϕs, dn -> 1)
+        add_harmonics!(rawmatrix, h, ϕs, dn -> 1) 
     else
-        fill!(rawmatrix, zero(M))
+        fill!(rawmatrix, zero(M)) # There is no guarantee of same structure
         add_harmonics!(rawmatrix, h, ϕs, dn -> -im * dn[axis])
     end
     return matrix
@@ -726,7 +726,7 @@ end
 
 add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice}, ϕs::SVector{0}, _) = zerobloch
 
-function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L,<:Number}, ϕs::SVector{L}, dnfunc) where {L}
+function add_harmonics!(zerobloch, h::Hamiltonian{<:Lattice,L}, ϕs::SVector{L}, dnfunc) where {L}
     ϕs´ = ϕs'
     for ns in 2:length(h.harmonics)
         hh = h.harmonics[ns]
@@ -843,7 +843,6 @@ Note that when calling `similarmatrix(h)` on a sparse `h`, `optimize!` is called
     bloch, bloch!
 """
 function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {LA,L,M,A<:SparseMatrixCSC}
-    Tv = eltype(M)
     h0 = first(ham.harmonics)
     n, m = size(h0.h)
     iszero(h0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
@@ -865,6 +864,8 @@ function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {LA,L,M,A<:SparseMat
     copy!(h0.h, ho) # Inject new structural zeros into zero harmonics
     return ham
 end
+# IDEA: could sum and subtract all harmonics instead
+# Tested, it is slower
 
 function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {LA,L,M,A<:AbstractMatrix}
     @warn "Hamiltonian is not sparse. Nothing changed."

@@ -115,10 +115,19 @@ _copy!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}) = _fast_spars
 _copy!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}) where {N} = _fast_sparse_muladd!(dst, src)
 _copy!(dst::AbstractMatrix{<:Number}, src::AbstractMatrix{<:SMatrix}) = _flatten_muladd!(dst, src)
 
-_add!(dest, src, α) = dest .+= α .* src
-_add!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}) = _fast_sparse_muladd!(dst, src, 1)
-_add!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}) where {N} = _fast_sparse_muladd!(dst, src, I)
-_add!(dst::AbstractMatrix{<:Number}, src::AbstractMatrix{<:SMatrix}) = _flatten_muladd!(dst, src, I)
+_add!(dest, src, α) = _plain_muladd(dest, src, α)
+_add!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}, α = 1) = _fast_sparse_muladd!(dst, src, α)
+_add!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}, α = I) where {N} = _fast_sparse_muladd!(dst, src, α)
+_add!(dst::AbstractMatrix{<:Number}, src::AbstractMatrix{<:SMatrix}, α = I) = _flatten_muladd!(dst, src, α)
+
+# Broadcast .+= instead allocates unnecesarily
+function _plain_muladd(dest, src, α)
+    checkbounds(dest, axes(src)...)
+    for i in eachindex(src)
+        @inbounds dest[i] += α * src[i]
+    end
+    return dest
+end
 
 # Only needed for dense <- sparse (#33589), copy!(sparse, sparse) is fine
 function _fast_sparse_muladd!(dst::DenseMatrix{T}, src::SparseMatrixCSC, α = zero(T)) where {T}
@@ -148,6 +157,33 @@ function _flatten_muladd!(dst::DenseMatrix{T}, src::SparseMatrixCSC{S}, α = zer
 end
 
 function _flatten_muladd!(dst::SparseMatrixCSC{T}, src::SparseMatrixCSC{S}, α = zero(T)) where {T<:Number,N,S<:SMatrix{N,N}}
+    rdst = rowvals(dst)
+    ndst = nonzeros(dst)
+    cdst = getcolptr(dst)
+    cdst[1] = 1
+
+    iszero(α) ? fill!(ndst, zero(eltype(S))) : (α != 1 && α != I && rmul!(ndst, α))
+    copy_structure!(dst, src)
+
+    p´ = col´ = 0
+    for col in 1:size(src, 2), j in 1:N
+        col´ += 1
+        for p in nzrange(src, col)
+            nz = nonzeros(src)[p]
+            row´ = (rowvals(src)[p] - 1) * N
+            for i in 1:N
+                row´ += 1
+                p´ += 1
+                rdst[p´] = row´
+                ndst[p´] += nz[i, j]
+            end
+        end
+        cdst[col´ + 1] = p´ + 1
+    end
+    return dst
+end
+
+function _flatten_copy!(dst::SparseMatrixCSC{T}, src::SparseMatrixCSC{S}) where {T<:Number,N,S<:SMatrix{N,N}}
     checkflattenaxes(dst, src)
     l = length(nonzeros(src))
     l´ = N * N * l
@@ -156,12 +192,7 @@ function _flatten_muladd!(dst::SparseMatrixCSC{T}, src::SparseMatrixCSC{S}, α =
     cdst = resize!(getcolptr(dst), size(src, 2) * N + 1)
     cdst[1] = 1
 
-    if !iszero(α)
-        length(ndst) == l´ || throw(ArgumentError("unsupported flatten-sum of two sparse matrix with different structure"))
-        α != 1 && α != I && rmul!(ndst, α)
-    else
-        fill!(ndst, zero(eltype(S)))
-    end
+    fill!(ndst, zero(eltype(S)))
 
     p´ = col´ = 0
     for col in 1:size(src, 2), j in 1:N
@@ -173,7 +204,7 @@ function _flatten_muladd!(dst::SparseMatrixCSC{T}, src::SparseMatrixCSC{S}, α =
                 row´ += 1
                 p´ += 1
                 rdst[p´] = row´
-                ndst[p´] += nz[i, j]
+                ndst[p´] = nz[i, j]
             end
         end
         cdst[col´ + 1] = p´ + 1
@@ -209,6 +240,50 @@ function checkflattenaxes(dst::AbstractMatrix, src::AbstractMatrix)
     axes(dst) == axes(src) ||
         throw(ArgumentError( "arrays must have the same axes for copy!"))
 end
+
+function copy_structure!(dst::SparseMatrixCSC{T}, src::SparseMatrixCSC) where {T}
+    @boundscheck checkflattenaxes(dst, src)
+    if !samestructure(dst, src)
+        N = blocksize(eltype(src))
+        rdst = rowvals(dst)
+        ndst = nonzeros(dst)
+        for col in 1:size(src, 2), p in nzrange(src, col)
+            row´ = (rowvals(src)[p] - 1) * N + 1
+            col´ = (col - 1) * N + 1
+            isstored(dst, row´, col´) || _sparse_insert!(dst, row´, col´, N)
+        end
+    end
+    return dst
+end
+
+samestructure(a, b) =
+    blocksize(eltype(a)) == blocksize(eltype(b)) && rowvals(a) == rowvals(b) && getcolptr(a) == getcolptr(b)
+
+
+function _sparse_insert!(s::SparseMatrixCSC{T}, row, col, N) where {T}
+    if N != 1         # Block insert
+        v = view(s, (row):(row + N - 1), (col):(col + N - 1))
+        v .= one(T)   # necessary to create new stored entries
+        v .= zero(T)  # here they are not removed, see #17404
+    else
+        s[row, col] = one(T)
+        s[row, col] = zero(T)
+    end
+    return s
+end
+
+# Taken fron Julialang/#33821
+function isstored(A::SparseMatrixCSC, i::Integer, j::Integer)
+    @boundscheck checkbounds(A, i, j)
+    rows = rowvals(A)
+    for istored in nzrange(A, j) # could do binary search if the row indices are sorted?
+        i == rows[istored] && return true
+    end
+    return false
+end
+
+blocksize(s::Type{<:SMatrix{N,N}}) where {N} = N
+blocksize(s::Type{<:Number}) = 1
 
 ############################################################################################
 
