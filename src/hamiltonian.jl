@@ -871,8 +871,8 @@ end
 
 Flatten a multiorbital Hamiltonian `h` into one with a single orbital per site. The
 associated lattice is flattened also, so that there is one site per orbital for each initial
-site (all at the same position). Note that zeros in hopping/onsite matrices are preserved as
-structural zeros upon flattenin
+site (all at the same position). Note that in the case of sparse Hamiltonians, zeros in
+hopping/onsite matrices are preserved as structural zeros upon flattening.
 
 # Examples
 ```
@@ -931,6 +931,24 @@ function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}
         end
     end
     matrix = sparse(builder)
+    return matrix
+end
+
+function _flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}, lat) where {N,T,S}
+    offsets´ = flattenoffsets(lat.unitcell.offsets, norbs)
+    dim´ = last(offsets´)
+    matrix = similar(src, T, dim´, dim´)
+
+    for col in 1:size(src, 2), row in 1:size(src, 1)
+        srow, scol = sublat(lat, row), sublat(lat, col)
+        nrow, ncol = norbs[srow], norbs[scol]
+        val = src[row, col]
+        rowoffset´ = flattenind(row, lat, norbs, offsets´) - 1
+        coloffset´ = flattenind(col, lat, norbs, offsets´) - 1
+        for j in 1:ncol, i in 1:nrow
+            matrix[rowoffset´ + i, coloffset´ + j] = val[i, j]
+        end
+    end
     return matrix
 end
 
