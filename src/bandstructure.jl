@@ -81,7 +81,7 @@ end
 
 function bandstructure(h::Hamiltonian, mesh::Mesh; method = defaultmethod(h), minprojection = 0.5)
     d = diagonalizer(h, mesh, method, minprojection)
-    matrix = similarmatrix(h,  d.method)
+    matrix = similarmatrix(h)
     return bandstructure!(matrix, h, mesh, d)
 end
 

@@ -119,9 +119,6 @@ function _nnzdiag(s::SparseMatrixCSC)
 end
 _nnzdiag(s::Matrix) = count(!iszero, s[i,i] for i in 1:minimum(size(s)))
 
-nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : nsites(first(h.harmonics))
-nsites(h::HamiltonianHarmonic) = size(h.h, 1)
-
 sanitize_orbs(o::Union{Val,NameType,Integer}, names::NTuple{N}) where {N} =
     ntuple(n -> sanitize_orbs(o), Val(N))
 sanitize_orbs(o::NTuple{M,Union{NameType,Integer}}, names::NTuple{N}) where {M,N} =
@@ -272,7 +269,7 @@ hamiltonian(h::Hamiltonian) =
 Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.field, h.orbitals)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
-Base.copy(h::Hamiltonian) = Hamiltonian(h.lattice, copy.(h.harmonics), h.field)
+Base.copy(h::Hamiltonian) = Hamiltonian(h.lattice, copy.(h.harmonics), h.field, h.orbitals)
 Base.copy(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, copy(h.h))
 
 Base.size(h::Hamiltonian, n) = size(first(h.harmonics).h, n)
@@ -289,10 +286,14 @@ function LinearAlgebra.ishermitian(h::Hamiltonian)
     return true
 end
 
-
 bravais(h::Hamiltonian) = bravais(h.lattice)
 
 issemibounded(h::Hamiltonian) = issemibounded(h.lattice)
+
+nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : nsites(first(h.harmonics))
+nsites(h::HamiltonianHarmonic) = size(h.h, 1)
+
+norbitals(h::Hamiltonian) = length.(h.orbitals)
 
 # Indexing #
 
@@ -527,7 +528,7 @@ function unitcell(ham::Hamiltonian{LA,L}) where {E,L,T,L´,LA<:Superlattice{E,L,
     return Hamiltonian(unitlat, harmonics, field, orbs)
 end
 
-function get_or_push!(hs::Vector{HamiltonianHarmonic{L,Tv,SparseMatrixBuilder{B}}}, dn, dim, currentcol) where {L,Tv,B}
+function get_or_push!(hs::Vector{<:HamiltonianHarmonic{L,B,<:SparseMatrixBuilder}}, dn, dim, currentcol) where {L,B}
     for h in hs
         h.dn == dn && return h
     end
@@ -709,8 +710,6 @@ function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axi
     return matrix
 end
 
-## WIP!! : implement bloch! (add_harmonics) on flattened target matrix
-
 function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, dnfunc::Function) where {L,M}
     prefactor0 = dnfunc(zero(ϕs))
     rawmatrix = parent(matrix)
@@ -857,24 +856,142 @@ end
 # Tested, it is slower
 
 function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {LA,L,M,A<:AbstractMatrix}
-    @warn "Hamiltonian is not sparse. Nothing changed."
+    # @warn "Hamiltonian is not sparse. Nothing changed."
     return ham
 end
 
 function optimize!(ham::Hamiltonian{<:Superlattice})
-    @warn "Hamiltonian is defined on a Superlattice. Nothing changed."
+    # @warn "Hamiltonian is defined on a Superlattice. Nothing changed."
     return ham
 end
 
 
-# """
-#     flatten(h::Hamiltonian)
-# """
+"""
+    flatten(h::Hamiltonian)
 
-# function flatten(s::SparseMatrixCSC{S}) where {T,N,S<:SMatrix{N,N,T}}
-#     dst = sparse(Int[], Int[], T[], N * size(s, 1), N * size(s, 2))
-#     _copy!(dst, s)
-#     return dst
-# end
+Flatten a multiorbital Hamiltonian `h` into one with a single orbital per site. The
+associated lattice is flattened also, so that there is one site per orbital for each initial
+site (all at the same position). Note that in the case of sparse Hamiltonians, zeros in
+hopping/onsite matrices are preserved as structural zeros upon flattening.
 
-# flatten(s::Hermitian) = Hermitian(flatten(parent(s)))
+# Examples
+```
+julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(@SMatrix[1 2], range = 1/√3, sublats = (:A,:B)), orbitals = (Val(1), Val(2)))
+Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
+  Harmonic size    : 2 × 2
+  Orbitals         : ((:a,), (:a, :a))
+  Element type     : 2 × 2 blocks (Complex{Float64})
+  Onsites          : 0
+  Hoppings         : 6
+  Coordination     : 3.0
+
+julia> flatten(h)
+Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
+  Harmonic size    : 3 × 3
+  Orbitals         : ((:flat,), (:flat,))
+  Element type     : scalar (Complex{Float64})
+  Onsites          : 0
+  Hoppings         : 12
+  Coordination     : 4.0
+```
+"""
+function flatten(h::Hamiltonian)
+    all(isequal(1), norbitals(h)) && return copy(h)
+    harmonics´ = [flatten(har, h.orbitals, h.lattice) for har in h.harmonics]
+    lattice´ = flatten(h.lattice, h.orbitals)
+    field´ = h.field
+    orbitals´ = (_ -> (:flat, )).(h.orbitals)
+    return Hamiltonian(lattice´, harmonics´, field´, orbitals´)
+end
+
+flatten(h::HamiltonianHarmonic, orbs, lat) =
+    HamiltonianHarmonic(h.dn, _flatten(h.h, length.(orbs), lat))
+
+function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}, lat) where {N,T,S}
+    offsets´ = flattenoffsets(lat.unitcell.offsets, norbs)
+    dim´ = last(offsets´)
+
+    builder = SparseMatrixBuilder{T}(dim´, dim´, nnz(src) * N * N)
+
+    for col in 1:size(src, 2)
+        scol = sublat(lat, col)
+        for j in 1:norbs[scol]
+            for p in nzrange(src, col)
+                row = rowvals(src)[p]
+                srow = sublat(lat, row)
+                rowoffset´ = flattenind(row, lat, norbs, offsets´) - 1
+                val = nonzeros(src)[p]
+                for i in 1:norbs[srow]
+                    pushtocolumn!(builder, rowoffset´ + i, val[i, j])
+                end
+            end
+            finalizecolumn!(builder, false)
+        end
+    end
+    matrix = sparse(builder)
+    return matrix
+end
+
+function _flatten(src::DenseMatrix{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}, lat) where {N,T,S}
+    offsets´ = flattenoffsets(lat.unitcell.offsets, norbs)
+    dim´ = last(offsets´)
+    matrix = similar(src, T, dim´, dim´)
+
+    for col in 1:size(src, 2), row in 1:size(src, 1)
+        srow, scol = sublat(lat, row), sublat(lat, col)
+        nrow, ncol = norbs[srow], norbs[scol]
+        val = src[row, col]
+        rowoffset´ = flattenind(row, lat, norbs, offsets´) - 1
+        coloffset´ = flattenind(col, lat, norbs, offsets´) - 1
+        for j in 1:ncol, i in 1:nrow
+            matrix[rowoffset´ + i, coloffset´ + j] = val[i, j]
+        end
+    end
+    return matrix
+end
+
+# sublat offsets after flattening (without padding zeros)
+function flattenoffsets(offsets, norbs)
+    offsets´ = similar(offsets)
+    i = 0
+    for s in eachindex(norbs)
+        offsets´[s] = i
+        ns = offsets[s + 1] - offsets[s]
+        no = norbs[s]
+        i += ns * no
+    end
+    offsets´[end] = i
+    return offsets´
+end
+
+# index of first orbital of site i after flattening
+function flattenind(i, lat, norbs, offsets´) where {S}
+    s = sublat(lat, i)
+    offset = lat.unitcell.offsets[s]
+    Δi = i - offset
+    i´ = offsets´[s] + (Δi - 1) * norbs[s] + 1
+    return i´
+end
+
+function flatten(lat::Lattice, orbs)
+    length(orbs) == nsublats(lat) || throw(ArgumentError("Msmatch between sublattices and orbitals"))
+    unitcell´ = flatten(lat.unitcell, length.(orbs))
+    bravais´ = lat.bravais
+    lat´ = Lattice(bravais´, unitcell´)
+end
+
+function flatten(unitcell::Unitcell, norbs::NTuple{S,Int}) where {S}
+    offsets´ = flattenoffsets(unitcell.offsets, norbs)
+    ns´ = last(offsets´)
+    sites´ = similar(unitcell.sites, ns´)
+    i = 1
+    for sl in 1:S, site in sites(unitcell, sl), rep in 1:norbs[sl]
+        sites´[i] = site
+        i += 1
+    end
+    names´ = unitcell.names
+    unitcell´ = Unitcell(sites´, names´, offsets´)
+    return unitcell´
+end

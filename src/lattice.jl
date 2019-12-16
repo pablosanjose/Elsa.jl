@@ -133,8 +133,9 @@ issemibounded(b::Bravais) = !iszero(b.semibounded)
 struct Unitcell{E,T,N}
     sites::Vector{SVector{E,T}}
     names::NTuple{N,NameType}
-    offsets::Vector{Int}
-end
+    offsets::Vector{Int}        # Linear site number offsets for each sublat
+end                             # so that diff(offset) == sublatsites
+
 
 Unitcell(sublats::Sublat...; kw...) = Unitcell(promote(sublats...); kw...)
 Unitcell(sublats::NTuple{N,Sublat{E,T}};
@@ -173,7 +174,21 @@ function uniquename(allnames, name, i)
     return newname in allnames ? uniquename(allnames, name, i + 1) : newname
 end
 
+sites(u::Unitcell) = u.sites
+sites(u::Unitcell, s::Int) = view(u.sites, siterange(u, s))
+
+siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
+
 nsites(u::Unitcell) = length(u.sites)
+nsites(u::Unitcell, sublat) = sublatsites(u)[sublat]
+
+offsets(u::Unitcell) = u.offsets
+
+sublat(u::Unitcell, siteidx) = Int(findlast(o -> o < siteidx, u.offsets))
+
+sublatsites(u::Unitcell) = diff(u.offsets)
+
+nsublats(u::Unitcell) = length(u.names)
 
 #######################################################################
 # Lattice
@@ -342,26 +357,18 @@ issemibounded(lat::Superlattice) where {L} = issemibounded(lat.supercell)
 
 numbertype(::AbstractLattice{E,L,T}) where {E,L,T} = T
 
-sublat(lat::AbstractLattice, siteidx) = Int(findlast(o -> o < siteidx, lat.unitcell.offsets))
+sublat(lat::AbstractLattice, siteidx) = sublat(lat.unitcell, siteidx)
 
-siterange(lat::AbstractLattice, sublat) = (1+lat.unitcell.offsets[sublat]):lat.unitcell.offsets[sublat+1]
+siterange(lat::AbstractLattice, sublat) = siterange(lat.unitcell, sublat)
 
-offsets(lat) = lat.unitcell.offsets
+offsets(lat::AbstractLattice) = offsets(lat.unitcell)
 
-# flatdim(lat::AbstractLattice) = sum(flatdims(lat))
-# flatdims(lat::AbstractLattice) = sublatsites(lat) .* numorbitals(lat)
+sublatsites(lat::AbstractLattice) = sublatsites(lat.unitcell)
 
-# function flatoffsets(lat::AbstractLattice)
-#     v = append!([0], flatdims(lat))
-#     return cumsum!(v, v)
-# end
+nsites(lat::AbstractLattice) = nsites(lat.unitcell)
+nsites(lat::AbstractLattice, sublat) = nsites(lat.unitcell, sublat)
 
-sublatsites(lat::AbstractLattice) = diff(lat.unitcell.offsets)
-
-nsites(lat::AbstractLattice) = length(lat.unitcell.sites)
-nsites(lat::AbstractLattice, sublat) = sublatsites(lat)[sublat]
-
-nsublats(lat::AbstractLattice) = length(lat.unitcell.names)
+nsublats(lat::AbstractLattice) = nsublats(lat.unitcell)
 
 issuperlattice(lat::Lattice) = false
 issuperlattice(lat::Superlattice) = true
@@ -376,18 +383,11 @@ maskranges(lat::Lattice) = (1:nsites(lat),)
 
 """
     sites(lat[, sublat::Int])
-    lat |> sites
-    lat |> sites(s::Int)
 
 Extract the positions of all sites in a lattice, or in a specific sublattice
 """
-sites(lat::AbstractLattice) = lat.unitcell.sites
-sites(lat::AbstractLattice, s::Int) = view(lat.unitcell.sites, siterange(lat, s))
-sites() = lat -> sites(lat)
-sites(s::Int) = lat -> sites(lat, s)
-
-# sublatindex(lat::AbstractLattice, name::NameType) = findfirst(s -> (s.name == name), lat.sublats)
-# sublatindex(lat::AbstractLattice, i::Integer) = Int(i)
+sites(lat::AbstractLattice) = sites(lat.unitcell)
+sites(lat::AbstractLattice, s) = sites(lat.unitcell, s)
 
 #######################################################################
 # supercell

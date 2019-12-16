@@ -212,7 +212,7 @@ function SparseMatrixBuilder{Tv}(m, n, nnzguess = missing) where {Tv}
     rowval = Int[]
     nzval = Tv[]
     matrix = UnfinalizedSparseMatrixCSC(m, n, colptr, rowval, nzval)
-    builder = SparseMatrixBuilder(matrix, 1, 1, CoSort(rowval, nzval))
+    builder = SparseMatrixBuilder(matrix, 1, 0, CoSort(rowval, nzval))
     nnzguess === missing || sizehint!(builder, nnzguess)
     return builder
 end
@@ -229,7 +229,7 @@ function SparseMatrixBuilder(s::SparseMatrixCSC{Tv,Int}) where {Tv}
     resize!(nzval, 0)
     resize!(colptr, 1)
     colptr[1] = 1
-    builder = SparseMatrixBuilder(s, 1, 1, CoSort(rowval, nzval))
+    builder = SparseMatrixBuilder(s, 1, 0, CoSort(rowval, nzval))
     sizehint!(builder, nnzguess)
     return builder
 end
@@ -248,6 +248,7 @@ function Base.sizehint!(s::SparseMatrixBuilder, n)
 end
 
 function pushtocolumn!(s::SparseMatrixBuilder, row::Int, x, skipdupcheck::Bool = true)
+    1 <= row <= size(s.matrix, 1) || throw(ArgumentError("tried adding a row $row out of bounds ($(size(s.matrix, 1)))"))
     if skipdupcheck || !isintail(row, rowvals(s.matrix), getcolptr(s.matrix)[s.colcounter])
         push!(rowvals(s.matrix), row)
         push!(nonzeros(s.matrix), x)
@@ -271,7 +272,7 @@ function finalizecolumn!(s::SparseMatrixBuilder, sortcol::Bool = true)
         isgrowing(s.cosorter) || throw(error("Internal error: repeated rows"))
     end
     s.colcounter += 1
-    push!(getcolptr(s.matrix), s.rowvalcounter)
+    push!(getcolptr(s.matrix), s.rowvalcounter + 1)
     return nothing
 end
 
@@ -292,7 +293,7 @@ function completecolptr!(colptr, cols, lastrowptr)
     if colcounter < cols + 1
         resize!(colptr, cols + 1)
         for col in (colcounter + 1):(cols + 1)
-            colptr[col] = lastrowptr
+            colptr[col] = lastrowptr + 1
         end
     end
     return colptr
