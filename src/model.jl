@@ -248,3 +248,6 @@ function Base.show(io::IO, m::TightbindingModel{N}) where {N}
     print(io, "TightbindingModel{$N}: model with $N terms", "\n")
     foreach(t -> print(ioindent, t, "\n"), m.terms)
 end
+
+LinearAlgebra.ishermitian(m::TightbindingModel) = all(t -> ishermitian(t), m.terms)
+LinearAlgebra.ishermitian(t::TightbindingModelTerm) = t.forcehermitian
