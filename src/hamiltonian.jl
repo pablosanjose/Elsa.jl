@@ -50,9 +50,6 @@ Base.summary(h::Hamiltonian{LA}) where {E,L,LA<:Lattice{E,L}} =
 Base.summary(::Hamiltonian{LA}) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}} =
     "Hamiltonian{<:Superlattice} : $(L)D Hamiltonian on a $(L´)D Superlattice in $(E)D space"
 
-matrixtype(::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = A
-realtype(::Hamiltonian{<:Any,<:Any,M}) where {M} = real(eltype(M))
-
 Base.eltype(::Hamiltonian{<:Any,<:Any,M}) where {M} = M
 
 displaymatrixtype(h::Hamiltonian) = displaymatrixtype(matrixtype(h))
@@ -71,6 +68,9 @@ SparseArrays.issparse(h::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = false
 # Internal API #
 
 latdim(h::Hamiltonian{LA}) where {E,L,LA<:AbstractLattice{E,L}} = L
+
+matrixtype(::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = A
+realtype(::Hamiltonian{<:Any,<:Any,M}) where {M} = real(eltype(M))
 
 # find SVector type that can hold all orbital amplitudes in any lattice sites
 orbitaltype(orbs, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
@@ -137,7 +137,6 @@ sanitize_orbs(os::NTuple{M,Pair}, names::NTuple{N}) where {N,M} =
     end
 sanitize_orbs(os::NTuple{M,Any}, names::NTuple{N}) where {N,M} =
     ntuple(n -> n > M ? (:a,) : sanitize_orbs(os[n]), Val(N))
-
 
 sanitize_orbs(p::Pair) = sanitize_orbs(last(p))
 sanitize_orbs(o::Integer) = (nametype(o),)
@@ -806,12 +805,8 @@ bloch(h::Hamiltonian{<:Superlattice}, ϕs::Tuple, axis = 0) =
 
 Create an uninitialized matrix of the same type of the Hamiltonian's matrix, calling
 `optimize!(h)` first to produce an optimal work matrix in the sparse case.
-
-    similarmatrix(h::Hamiltonian, solver::AbstractDiagonalizeMethod)
-
-Construct the matrix with a type adapted to the specified diagonalization `solver`.
 """
-function similarmatrix(h::Hamiltonian; flatten = false)
+function similarmatrix(h::Hamiltonian)
     optimize!(h)
     sm = size(h)
     T = eltype(h)

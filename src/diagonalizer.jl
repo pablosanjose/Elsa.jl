@@ -42,8 +42,6 @@ function diagonalize(matrix, d::Diagonalizer{<:LinearAlgebraPackage})
     return ϵ´, ψ
 end
 
-similarmatrix(h::Hamiltonian, ::LinearAlgebraPackage) = Matrix(similarmatrix(h; flatten = true))
-
 ## Arpack ##
 struct ArpackPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
     kw::K
@@ -56,8 +54,6 @@ function diagonalize(matrix, d::Diagonalizer{<:ArpackPackage})
     ϵ´ = maybereal(ϵ, matrix)
     return ϵ´, ψ
 end
-
-similarmatrix(h::Hamiltonian, ::ArpackPackage) = similarmatrix(h; flatten = true)
 
 ## IterativeSolvers ##
 
@@ -88,12 +84,6 @@ function diagonalize(matrix::AbstractMatrix{M}, d::Diagonalizer{<:KrylovKitPacka
     end
 
     return ϵ´, ψ´
-end
-
-function similarmatrix(h::Hamiltonian, ::KrylovKitPackage)
-    matrix = similarmatrix(h)
-    matrix´ = ishermitian(h) ? Hermitian(matrix) : matrix
-    return matrix´
 end
 
 #######################################################################
