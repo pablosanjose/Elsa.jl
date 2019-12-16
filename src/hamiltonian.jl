@@ -801,13 +801,14 @@ bloch(h::Hamiltonian{<:Superlattice}, ϕs::Tuple, axis = 0) =
     SupercellBloch(h, toSVector(ϕs), axis)
 
 """
-    similarmatrix(h::Hamiltonian)
+    similarmatrix(h::Hamiltonian; optimize = true)
 
 Create an uninitialized matrix of the same type of the Hamiltonian's matrix, calling
-`optimize!(h)` first to produce an optimal work matrix in the sparse case.
+`optimize!(h)` first if `optimize = true` to produce an optimal work matrix in the sparse
+case.
 """
-function similarmatrix(h::Hamiltonian)
-    optimize!(h)
+function similarmatrix(h::Hamiltonian; optimize = true)
+    optimize && optimize!(h)
     sm = size(h)
     T = eltype(h)
     matrix = similar(h.harmonics[1].h, T, sm[1], sm[2])
