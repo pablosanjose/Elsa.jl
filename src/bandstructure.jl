@@ -36,7 +36,7 @@ end
     bandstructure(h::Hamiltonian, mesh::Mesh; minprojection = 0.5, method = defaultmethod(h))
 
 Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs...)` with `ϕs` evaluated on the
-vertices of `mesh`.
+vertices of `mesh`. It is assumed that `h` is hermitian.
 
 The option `minprojection` determines the minimum projection between eigenstates to connect
 them into a common subband. The option `method` is chosen automatically if unspecified, and
@@ -80,8 +80,9 @@ function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, shift = missi
 end
 
 function bandstructure(h::Hamiltonian, mesh::Mesh; method = defaultmethod(h), minprojection = 0.5)
+    ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     d = diagonalizer(h, mesh, method, minprojection)
-    matrix = similarmatrix(h)
+    matrix = Hermitian(similarmatrix(h))
     return bandstructure!(matrix, h, mesh, d)
 end
 
