@@ -248,7 +248,8 @@ function Base.sizehint!(s::SparseMatrixBuilder, n)
 end
 
 function pushtocolumn!(s::SparseMatrixBuilder, row::Int, x, skipdupcheck::Bool = true)
-    1 <= row <= size(s.matrix, 1) || throw(ArgumentError("tried adding a row $row out of bounds ($(size(s.matrix, 1)))"))
+    nrows = size(s.matrix, 1)
+    nrows == 0 || 1 <= row <= size(s.matrix, 1) || throw(ArgumentError("tried adding a row $row out of bounds ($(size(s.matrix, 1)))"))
     if skipdupcheck || !isintail(row, rowvals(s.matrix), getcolptr(s.matrix)[s.colcounter])
         push!(rowvals(s.matrix), row)
         push!(nonzeros(s.matrix), x)
