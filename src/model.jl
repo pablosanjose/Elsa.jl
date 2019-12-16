@@ -220,7 +220,6 @@ Base.:-(t::TightbindingModelTerm) = (-1) * t
 # Base.:+(t1::TightbindingModelTerm, t2::TightbindingModelTerm) = TightbindingModel((t1, t2))
 # Base.:-(t1::TightbindingModelTerm, t2::TightbindingModelTerm) = TightbindingModel((t1, -t2))
 
-
 #######################################################################
 # TightbindingModel
 #######################################################################

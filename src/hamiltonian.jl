@@ -527,7 +527,7 @@ function unitcell(ham::Hamiltonian{LA,L}) where {E,L,T,L´,LA<:Superlattice{E,L,
     return Hamiltonian(unitlat, harmonics, field, orbs)
 end
 
-function get_or_push!(hs::Vector{HamiltonianHarmonic{L,Tv,SparseMatrixBuilder{B}}}, dn, dim, currentcol) where {L,Tv,B}
+function get_or_push!(hs::Vector{<:HamiltonianHarmonic{L,B,<:SparseMatrixBuilder}}, dn, dim, currentcol) where {L,B}
     for h in hs
         h.dn == dn && return h
     end
@@ -867,9 +867,9 @@ function optimize!(ham::Hamiltonian{<:Superlattice})
 end
 
 
-# """
-#     flatten(h::Hamiltonian)
-# """
+"""
+    flatten(h::Hamiltonian)
+"""
 
 # function flatten(s::SparseMatrixCSC{S}) where {T,N,S<:SMatrix{N,N,T}}
 #     dst = sparse(Int[], Int[], T[], N * size(s, 1), N * size(s, 2))
@@ -878,3 +878,83 @@ end
 # end
 
 # flatten(s::Hermitian) = Hermitian(flatten(parent(s)))
+
+function flatten(h::Hamiltonian)
+    harmonics´ = [flatten(har, h.orbitals, h.lattice) for har in h.harmonics]
+    lattice´ = flatten(h.lattice, h.orbitals)
+    field´ = h.field
+    orbitals´ = (_ -> (:flat, )).(h.orbitals)
+    return Hamiltonian(lattice´, harmonics´, field´, orbitals´)
+end
+
+flatten(h::HamiltonianHarmonic, orbs, lat) =
+    HamiltonianHarmonic(h.dn, _flatten(h.h, length.(orbs), lat))
+
+function _flatten(src::SparseMatrixCSC{<:SMatrix{N,N,T}}, norbs::NTuple{S,<:Any}, lat) where {N,T,S}
+    offsets´ = flattenoffsets(lat.unitcell.offsets, norbs)
+    dim´ = last(offsets´)
+
+    builder = SparseMatrixBuilder{T}(dim´, dim´, nnz(src) * N * N)
+
+    for col in 1:size(src, 2)
+        scol = sublat(lat, col)
+        for j in 1:norbs[scol]
+            for p in nzrange(src, col)
+                row = rowvals(src)[p]
+                srow = sublat(lat, row)
+                rowoffset´ = flattenind(row, lat, norbs, offsets´) - 1
+                val = nonzeros(src)[p]
+                for i in 1:norbs[srow]
+                    pushtocolumn!(builder, rowoffset´ + i, val[i, j])
+                end
+            end
+            finalizecolumn!(builder, false)
+        end
+    end
+    matrix = sparse(builder)
+    return matrix
+end
+
+# sublat offsets after flattening (without padding zeros)
+function flattenoffsets(offsets, norbs)
+    offsets´ = similar(offsets)
+    i = 0
+    for s in eachindex(norbs)
+        offsets´[s] = i
+        ns = offsets[s + 1] - offsets[s]
+        no = norbs[s]
+        i += ns * no
+    end
+    offsets´[end] = i
+    return offsets´
+end
+
+# index of first orbital of site i after flattening
+function flattenind(i, lat, norbs, offsets´) where {S}
+    s = sublat(lat, i)
+    offset = lat.unitcell.offsets[s]
+    Δi = i - offset
+    i´ = offsets´[s] + (Δi - 1) * norbs[s] + 1
+    return i´
+end
+
+function flatten(lat::Lattice, orbs)
+    length(orbs) == nsublats(lat) || throw(ArgumentError("Msmatch between sublattices and orbitals"))
+    unitcell´ = flatten(lat.unitcell, length.(orbs))
+    bravais´ = lat.bravais
+    lat´ = Lattice(bravais´, unitcell´)
+end
+
+function flatten(unitcell::Unitcell, norbs::NTuple{S,Int}) where {S}
+    offsets´ = flattenoffsets(unitcell.offsets, norbs)
+    ns´ = last(offsets´)
+    sites´ = similar(unitcell.sites, ns´)
+    i = 1
+    for sl in 1:S, site in sites(unitcell, sl), rep in 1:norbs[sl]
+        sites´[i] = site
+        i += 1
+    end
+    names´ = unitcell.names
+    unitcell´ = Unitcell(sites´, names´, offsets´)
+    return unitcell´
+end
