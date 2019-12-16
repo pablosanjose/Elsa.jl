@@ -119,9 +119,6 @@ function _nnzdiag(s::SparseMatrixCSC)
 end
 _nnzdiag(s::Matrix) = count(!iszero, s[i,i] for i in 1:minimum(size(s)))
 
-nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : nsites(first(h.harmonics))
-nsites(h::HamiltonianHarmonic) = size(h.h, 1)
-
 sanitize_orbs(o::Union{Val,NameType,Integer}, names::NTuple{N}) where {N} =
     ntuple(n -> sanitize_orbs(o), Val(N))
 sanitize_orbs(o::NTuple{M,Union{NameType,Integer}}, names::NTuple{N}) where {M,N} =
@@ -272,7 +269,7 @@ hamiltonian(h::Hamiltonian) =
 Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.field, h.orbitals)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
-Base.copy(h::Hamiltonian) = Hamiltonian(h.lattice, copy.(h.harmonics), h.field)
+Base.copy(h::Hamiltonian) = Hamiltonian(h.lattice, copy.(h.harmonics), h.field, h.orbitals)
 Base.copy(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, copy(h.h))
 
 Base.size(h::Hamiltonian, n) = size(first(h.harmonics).h, n)
@@ -289,10 +286,14 @@ function LinearAlgebra.ishermitian(h::Hamiltonian)
     return true
 end
 
-
 bravais(h::Hamiltonian) = bravais(h.lattice)
 
 issemibounded(h::Hamiltonian) = issemibounded(h.lattice)
+
+nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : nsites(first(h.harmonics))
+nsites(h::HamiltonianHarmonic) = size(h.h, 1)
+
+norbitals(h::Hamiltonian) = length.(h.orbitals)
 
 # Indexing #
 
@@ -709,8 +710,6 @@ function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axi
     return matrix
 end
 
-## WIP!! : implement bloch! (add_harmonics) on flattened target matrix
-
 function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, dnfunc::Function) where {L,M}
     prefactor0 = dnfunc(zero(ϕs))
     rawmatrix = parent(matrix)
@@ -869,17 +868,13 @@ end
 
 """
     flatten(h::Hamiltonian)
+
+Flatten a multiorbital Hamiltonian `h` into one with a single orbital per site. The
+associated lattice is flattened also, so that there is one site per orbital for each initial
+site (all at the same position)
 """
-
-# function flatten(s::SparseMatrixCSC{S}) where {T,N,S<:SMatrix{N,N,T}}
-#     dst = sparse(Int[], Int[], T[], N * size(s, 1), N * size(s, 2))
-#     _copy!(dst, s)
-#     return dst
-# end
-
-# flatten(s::Hermitian) = Hermitian(flatten(parent(s)))
-
 function flatten(h::Hamiltonian)
+    all(isequal(1), norbitals(h)) && return copy(h)
     harmonics´ = [flatten(har, h.orbitals, h.lattice) for har in h.harmonics]
     lattice´ = flatten(h.lattice, h.orbitals)
     field´ = h.field
