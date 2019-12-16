@@ -866,14 +866,14 @@ function optimize!(ham::Hamiltonian{<:Superlattice})
 end
 
 
-"""
-    flatten(h::Hamiltonian)
-"""
+# """
+#     flatten(h::Hamiltonian)
+# """
 
-function flatten(s::SparseMatrixCSC{S}) where {T,N,S<:SMatrix{N,N,T}}
-    dst = sparse(Int[], Int[], T[], N * size(s, 1), N * size(s, 2))
-    _copy!(dst, s)
-    return dst
-end
+# function flatten(s::SparseMatrixCSC{S}) where {T,N,S<:SMatrix{N,N,T}}
+#     dst = sparse(Int[], Int[], T[], N * size(s, 1), N * size(s, 2))
+#     _copy!(dst, s)
+#     return dst
+# end
 
-flatten(s::Hermitian) = Hermitian(flatten(parent(s)))
+# flatten(s::Hermitian) = Hermitian(flatten(parent(s)))

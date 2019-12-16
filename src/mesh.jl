@@ -23,7 +23,9 @@ end
 
 nvertices(m::Mesh) = length(m.vertices)
 
-nedges(m::Mesh) = nnz(m.adjmat)
+nedges(m::Mesh) = div(nnz(m.adjmat), 2)
+
+nsimplices(m::Mesh) = length(simplices(m))
 
 vertices(m::Mesh) = m.vertices
 
@@ -47,7 +49,7 @@ function minmax_edge_length(m::Mesh{D,T}) where {D,T<:Real}
 end
 
 ######################################################################
-# Compute simplices
+# Compute N-simplices (N = number of vertices)
 ######################################################################
 function simplices(mesh::Mesh{D}, ::Val{N} = Val(D+1)) where {D,N}
     N > 0 || throw(ArgumentError("Need a positive number of vertices for simplices"))
@@ -78,7 +80,7 @@ function _simplices(buffer::Tuple{P,P,V}, mesh, src) where {N,P<:AbstractArray{<
             nextsrc = partial[pass - 1]
             for edge in edges(mesh, nextsrc)
                 dest = edgedest(mesh, edge)
-                dest > src || continue # If not directed, no need to check
+                dest > nextsrc || continue # If not directed, no need to check
                 dest in srcneighs && push!(partials´, modifyat(partial, pass, dest))
             end
         end
@@ -97,12 +99,10 @@ function alignnormals!(simplices, vertices)
     return simplices
 end
 
+# Project N-1 edges onto (N-1)-dimensional vectors to have a deterministic volume
 elementvolume(verts, s::NTuple{N,Int}) where {N} =
-    elementvolume(hcat(ntuple(i -> SVector(most(verts[s[i+1]] - verts[s[1]])), Val(N-1))...))
+    elementvolume(hcat(ntuple(i -> padright(SVector(verts[s[i+1]] - verts[s[1]]), Val(N-1)), Val(N-1))...))
 elementvolume(mat::SMatrix{N,N}) where {N} = det(mat)
-elementvolume(mat::SMatrix{M,N}) where {M,N} = det(qr(mat).R)
-
-most(s::SVector{N}) where {N} = ntuple(i -> s[i], Val(N-1))
 
 switchlast(s::NTuple{N,T}) where {N,T} = ntuple(i -> i < N - 1 ? s[i] : s[2N - i - 1] , Val(N))
 
