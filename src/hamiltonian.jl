@@ -14,7 +14,7 @@ HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Mat
 
 struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
                    H<:HamiltonianHarmonic{L,M,A},F<:Union{Missing,Field},
-                   O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}} <: AbstractArray{A,L}
+                   O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}} <: AbstractMatrix{M}
     lattice::LA
     harmonics::Vector{H}
     field::F
@@ -200,10 +200,10 @@ Functional form of `hamiltonian`, equivalent to `hamiltonian(lat, ...; ...)`
 
 # Indexing
 
-Indexing into a Hamiltonian `h` works as follows. Access the `HamiltonianHarmonic` matrix
-at a given `dn::NTuple{L,Int}` with `h[dn...]`. Assign `v` into element `(i,j)` of said
-matrix with `h[dn...][i,j] = v`. Broadcasting with vectors of indices `is` and `js` is
-supported, `h[dn...][is, js] = v_matrix`.
+Indexing into a Hamiltonian `h` works as follows. Access the `HamiltonianHarmonic` matrix at
+a given `dn::NTuple{L,Int}` with `h[dn]`. Assign `v` into element `(i,j)` of said matrix
+with `h[dn][i,j] = v` or `h[dn, i, j] = v`. Broadcasting with vectors of indices `is` and
+`js` is supported, `h[dn][is, js] = v_matrix`.
 
 To add an empty harmonic with a given `dn::NTuple{L,Int}`, do `push!(h, dn)`. To delete it,
 do `deleteat!(h, dn)`.
@@ -308,13 +308,14 @@ function Base.push!(h::Hamiltonian{<:Any,L,M,A}, dn::SVector{L,Int}) where {L,M,
     return h
 end
 
-Base.getindex(h::Hamiltonian, dn::Vararg{Int}) = getindex(h, SVector(dn))
 Base.getindex(h::Hamiltonian, dn::NTuple) = getindex(h, SVector(dn))
 @inline function Base.getindex(h::Hamiltonian{<:Any,L}, dn::SVector{L,Int}) where {L}
     nh = findfirst(hh -> hh.dn == dn, h.harmonics)
     nh === nothing && throw(BoundsError(h, dn))
     return h.harmonics[nh].h
 end
+Base.getindex(h::Hamiltonian, dn::NTuple, i::Vararg{Int}) = h[dn][i...]
+Base.getindex(h::Hamiltonian{LA, L}, i::Vararg{Int}) where {LA,L} = h[zero(SVector{L,Int})][i...]
 
 Base.deleteat!(h::Hamiltonian{<:Any,L}, dn::Vararg{Int,L}) where {L} =
     deleteat!(h, toSVector(dn))
