@@ -10,17 +10,19 @@ using Requires
 #     # @require IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153" include("diagonalizers/iterativesolvers.jl")
 # end
 
-using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays, Random,
-      ProgressMeter
+using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
+      ProgressMeter, LinearMaps
       #FFTW
+
+using SparseArrays: getcolptr
 
 export sublat, bravais, lattice, dims, hopping, onsite, hamiltonian, randomstate,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!, similarmatrix,
-       sites, bandstructure, marchingmesh, diagonalizer, bandstructure!
+       sites, bandstructure, marchingmesh, defaultmethod
 
 export LatticePresets, RegionPresets
 
-export LinearAlgebraPackage, ArpackPackage
+export LinearAlgebraPackage, ArpackPackage, KrylovKitPackage
 
 export @SMatrix, @SVector, SMatrix, SVector
 export ishermitian, I

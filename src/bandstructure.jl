@@ -33,11 +33,23 @@ end
 # bandstructure
 #######################################################################
 """
-    bandstructure(h::Hamiltonian, mesh::Mesh; kw...)
+    bandstructure(h::Hamiltonian, mesh::Mesh; minprojection = 0.5, method = defaultmethod(h))
 
 Compute the bandstructure of Bloch Hamiltonian `bloch(h, ϕs...)` with `ϕs` evaluated on the
-vertices of `mesh`. The diagonalization method is chosen automatically by calling
-`diagonalizer(h, mesh; kw...)` (see `diagonalizer` for details on `kw` options)
+vertices of `mesh`.
+
+The option `minprojection` determines the minimum projection between eigenstates to connect
+them into a common subband. The option `method` is chosen automatically if unspecified, and
+can be one of the following
+
+    method                    diagonalization function
+    --------------------------------------------------------------
+    LinearAlgebraPackage()     LinearAlgebra.eigen!
+    ArpackPackage()            Arpack.eigs (must be `using Arpack`)
+
+Options passed to the `method` will be forwarded to the diagonalization function. For example,
+`method = ArpackPackage(nev = 8, sigma = 1im)` will use `Arpack.eigs(matrix; nev = 8,
+sigma = 1im)` to compute the bandstructure.
 
     bandstructure(h::Hamiltonian; resolution = 13, shift = missing, kw...)
 
@@ -50,9 +62,9 @@ a tuple for axis-dependent points).
 ```
 julia> h = LatticePresets.honeycomb() |> unitcell(3) |> hamiltonian(hopping(-1, range = 1/√3));
 
-julia> bandstructure(h; resolution = 25, levels = 2)
+julia> bandstructure(h; resolution = 25, method = LinearAlgebraPackage())
 Bandstructure: bands for a 2D hamiltonian
-  Bands        : 2
+  Bands        : 8
   Element type : scalar (Complex{Float64})
   Mesh{2}: mesh of a 2-dimensional manifold
     Vertices   : 625
@@ -60,51 +72,37 @@ Bandstructure: bands for a 2D hamiltonian
 ```
 
 # See also
-    marchingmesh, diagonalizer, bandstructure!
+    marchingmesh
 """
 function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, shift = missing, kw...) where {L,M}
     mesh = marchingmesh(h; npoints = resolution, shift = shift)
-    # top-level barrier for type-unstable diagonalizer
-    return bandstructure!(diagonalizer(h, mesh; kw...), h,  mesh)
+    return bandstructure(h,  mesh; kw...)
 end
 
-bandstructure(h::Hamiltonian, mesh::Mesh; kw...) where {L,M} =
-    bandstructure!(diagonalizer(h, mesh; kw...), h,  mesh)
+function bandstructure(h::Hamiltonian, mesh::Mesh; method = defaultmethod(h), minprojection = 0.5)
+    d = diagonalizer(h, mesh, method, minprojection)
+    matrix = similarmatrix(h,  d.method)
+    return bandstructure!(matrix, h, mesh, d)
+end
 
-"""
-    bandstructure!(d::Diagonalizer, h::Hamiltonian, mesh::Mesh)
+function bandstructure!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD, d::Diagonalizer) where {M,D,T,MD<:Mesh{D,T}}
+    nϵ = 0                           # Temporary, to be reassigned
+    ϵks = Matrix{T}(undef, 0, 0)     # Temporary, to be reassigned
+    ψks = Array{M,3}(undef, 0, 0, 0) # Temporary, to be reassigned
 
-Driver method for `bandstructure` that takes method options and preallocated buffers as a
-`Diagonalizer` method (see `diagonalizer`).
-
-```
-julia> h = LatticePresets.square() |> unitcell(5) |> hamiltonian(hopping(-1, range = 1/√3));
-
-julia> d = diagonalizer(h; levels = 2)
-
-julia> bandstructure!(h; resolution = 25)
-Bandstructure: bands for a 2D hamiltonian
-  Bands        : 1
-  Element type : scalar (Complex{Float64})
-  Mesh{2}: mesh of a 2-dimensional manifold
-    Vertices   : 625
-    Edges      : 3552
-```
-
-# See also
-    bandstructure, diagonalizer
-"""
-function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh::MD) where {M,D,T,MD<:Mesh{D,T}}
-    nϵ = d.levels
     dimh = size(h, 1)
     nk = nvertices(mesh)
-    ϵks = Matrix{T}(undef, nϵ, nk)
-    ψks = Array{M,3}(undef, dimh, nϵ, nk)
+
     p = Progress(nk, "Step 1/2 - Diagonalising: ")
     for (n, ϕs) in enumerate(vertices(mesh))
-        bloch!(d.matrix, h, ϕs)
-        (ϵk, ψk) = diagonalize(d)
-        resolve_degeneracies!(ϵk, ψk, d, ϕs)
+        bloch!(matrix, h, ϕs)
+        (ϵk, ψk) = diagonalize(matrix, d)
+        resolve_degeneracies!(ϵk, ψk, ϕs, matrix, d.codiag)
+        if n == 1  # With first vertex can now know the number of eigenvalues... Reassign
+            nϵ = size(ϵk, 1)
+            ϵks = Matrix{T}(undef, nϵ, nk)
+            ψks = Array{M,3}(undef, dimh, nϵ, nk)
+        end
         copyslice!(ϵks, CartesianIndices((1:nϵ, n:n)),
                    ϵk,  CartesianIndices((1:nϵ,)))
         copyslice!(ψks, CartesianIndices((1:dimh, 1:nϵ, n:n)),
@@ -124,8 +122,9 @@ function bandstructure!(d::Diagonalizer, h::Hamiltonian{<:Lattice,<:Any,M}, mesh
         resize!(pending, 1)
         pending[1] = src # source for band search
         band = extractband(mesh, pending, ϵks, ψks, vertindices, d.minprojection)
-        push!(bands, band)
-        pcounter += nvertices(band.mesh)
+        nverts = nvertices(band.mesh)
+        nverts > D && push!(bands, band) # avoid bands with no simplices
+        pcounter += nverts
         ProgressMeter.update!(p, pcounter; showvalues = ())
     end
     return Bandstructure(bands, mesh)
