@@ -871,7 +871,31 @@ end
 
 Flatten a multiorbital Hamiltonian `h` into one with a single orbital per site. The
 associated lattice is flattened also, so that there is one site per orbital for each initial
-site (all at the same position)
+site (all at the same position). Note that zeros in hopping/onsite matrices are preserved as
+structural zeros upon flattenin
+
+# Examples
+```
+julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(@SMatrix[1 2], range = 1/√3, sublats = (:A,:B)), orbitals = (Val(1), Val(2)))
+Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
+  Harmonic size    : 2 × 2
+  Orbitals         : ((:a,), (:a, :a))
+  Element type     : 2 × 2 blocks (Complex{Float64})
+  Onsites          : 0
+  Hoppings         : 6
+  Coordination     : 3.0
+
+julia> flatten(h)
+Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
+  Harmonic size    : 3 × 3
+  Orbitals         : ((:flat,), (:flat,))
+  Element type     : scalar (Complex{Float64})
+  Onsites          : 0
+  Hoppings         : 12
+  Coordination     : 4.0
+```
 """
 function flatten(h::Hamiltonian)
     all(isequal(1), norbitals(h)) && return copy(h)
