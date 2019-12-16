@@ -856,12 +856,12 @@ end
 # Tested, it is slower
 
 function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {LA,L,M,A<:AbstractMatrix}
-    @warn "Hamiltonian is not sparse. Nothing changed."
+    # @warn "Hamiltonian is not sparse. Nothing changed."
     return ham
 end
 
 function optimize!(ham::Hamiltonian{<:Superlattice})
-    @warn "Hamiltonian is defined on a Superlattice. Nothing changed."
+    # @warn "Hamiltonian is defined on a Superlattice. Nothing changed."
     return ham
 end
 
