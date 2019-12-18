@@ -1,7 +1,7 @@
 #######################################################################
 # Hamiltonian
 #######################################################################
-struct HamiltonianHarmonic{L,M,A<:AbstractMatrix{M}}
+struct HamiltonianHarmonic{L,M,A<:Union{AbstractMatrix{M},SparseMatrixBuilder{M}}}
     dn::SVector{L,Int}
     h::A
 end
@@ -534,6 +534,72 @@ function get_or_push!(hs::Vector{<:HamiltonianHarmonic{L,B,<:SparseMatrixBuilder
     end
     newh = HamiltonianHarmonic(dn, SparseMatrixBuilder{B}(dim, dim))
     currentcol > 1 && finalizecolumn!(newh.h, currentcol - 1) # for columns that have been already processed
+    push!(hs, newh)
+    return newh
+end
+
+#######################################################################
+# wrap
+#######################################################################
+"""
+    wrap(h::Hamiltonian, axis::Int; factor = 1)
+
+Build a new Hamiltonian wherein the Bravais `axis` is wrapped into a loop. If a `factor` is
+given, the wrapped hoppings will be multiplied by said factor. This is useful to represent a
+flux Φ through the loop, if `factor = exp(im * 2π * Φ/Φ₀)`.
+
+    h |> wrap(axis; kw...)
+
+Functional form equivalent to `wrap(h, axis; kw...)`.
+
+# Examples
+```
+julia> LatticePresets.honeycomb() |> hamiltonian(hopping(1, range = 1/√3)) |> unitcell((1,-1), (10, 10)) |> wrap(2)
+Hamiltonian{<:Lattice} : 1D Hamiltonian on a 1D Lattice in 2D space
+  Bloch harmonics  : 3 (SparseMatrixCSC, sparse)
+  Harmonic size    : 40 × 40
+  Orbitals         : ((:a,), (:a,))
+  Element type     : scalar (Complex{Float64})
+  Onsites          : 0
+  Hoppings         : 120
+  Coordination     : 3.0
+```
+"""
+function wrap(h::Hamiltonian{<:Lattice,L}, axis; factor = 1) where {L}
+    1 <= axis <= L || throw(ArgumentError("axis should be between 1 and the lattice dimension $L"))
+    lattice´ = _wrap(h.lattice, axis)
+    harmonics´ = _wrap(h.harmonics, axis, factor)
+    return Hamiltonian(lattice´, harmonics´, h.field, h.orbitals)
+end
+
+wrap(axis; kw...) = h -> wrap(h, axis; kw...)
+
+_wrap(lat::Lattice, axis) = Lattice(_wrap(lat.bravais, axis), lat.unitcell)
+
+function _wrap(br::Bravais{E,L}, axis) where {E,L}
+    mask = deleteat(SVector{L}(1:L), axis)
+    return Bravais(br.matrix[:, mask], br.semibounded[mask])
+end
+
+function _wrap(harmonics::Vector{HamiltonianHarmonic{L,M,A}}, axis, factor) where {L,M,A}
+    harmonics´ = HamiltonianHarmonic{L-1,M,A}[]
+    for har in harmonics
+        dn = har.dn
+        dn´ = deleteat(dn, axis)
+        factor´ = iszero(dn[axis]) ? 1 : factor
+        add_or_push!(harmonics´, dn´, har.h, factor´)
+    end
+    return harmonics´
+end
+
+function add_or_push!(hs::Vector{<:HamiltonianHarmonic}, dn, matrix::AbstractMatrix, factor)
+    for h in hs
+        if h.dn == dn
+            h.h .+= factor .* matrix
+            return h
+        end
+    end
+    newh = HamiltonianHarmonic(dn, matrix)
     push!(hs, newh)
     return newh
 end
