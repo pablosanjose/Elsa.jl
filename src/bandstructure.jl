@@ -106,8 +106,6 @@ function bandstructure!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,<:Any,M
             ϵks = Matrix{T}(undef, nϵ, nk)
             ψks = Array{M,3}(undef, dimh, nϵ, nk)
         end
-        @show ishermitian(matrix), typeof(matrix), ϕs
-        iszero(ϕs) && @show matrix[1:4, 1:4]
         copyslice!(ϵks, CartesianIndices((1:nϵ, n:n)),
                    ϵk,  CartesianIndices((1:nϵ,)), by)
         copyslice!(ψks, CartesianIndices((1:dimh, 1:nϵ, n:n)),
