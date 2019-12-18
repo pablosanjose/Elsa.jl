@@ -18,7 +18,7 @@ function defaultmethod(h::Hamiltonian)
         method = issparse(h) ? ArpackPackage() : LinearAlgebraPackage()
     else
         # method = KrylovKitPackage()
-        throw(ArgumentError("Methods for generic Hamiltonian eltypes not yet implemented"))
+        throw(ArgumentError("Methods for generic Hamiltonian eltypes not yet implemented. Consider using `flatten` on your Hamiltonian."))
     end
     return method
 end
