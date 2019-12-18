@@ -38,6 +38,8 @@ function diagonalize(matrix, d::Diagonalizer{<:LinearAlgebraPackage})
     return ϵ, ψ
 end
 
+similarmatrix(h, ::LinearAlgebraPackage) = Matrix(similarmatrix(h))
+
 ## Arpack ##
 struct ArpackPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
     kw::K
@@ -49,6 +51,8 @@ function diagonalize(matrix, d::Diagonalizer{<:ArpackPackage})
     ϵ, ψ = Main.Arpack.eigs(matrix; (d.method.kw)...)
     return ϵ, ψ
 end
+
+similarmatrix(h, ::ArpackPackage) = similarmatrix(h)
 
 ## IterativeSolvers ##
 
@@ -80,6 +84,8 @@ function diagonalize(matrix::AbstractMatrix{M}, d::Diagonalizer{<:KrylovKitPacka
 
     return ϵ´, ψ´
 end
+
+similarmatrix(h, ::KrylovKitPackage) = similarmatrix(h)
 
 #######################################################################
 # shift and invert methods

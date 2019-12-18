@@ -82,7 +82,7 @@ end
 function bandstructure(h::Hamiltonian, mesh::Mesh; method = defaultmethod(h), minprojection = 0.5)
     ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     d = diagonalizer(h, mesh, method, minprojection)
-    matrix = similarmatrix(h)
+    matrix = similarmatrix(h, method)
     return bandstructure!(matrix, h, mesh, d)
 end
 
@@ -94,7 +94,7 @@ function bandstructure!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,<:Any,M
     dimh = size(h, 1)
     nk = nvertices(mesh)
 
-    by = _maybereal(T)
+    by = _maybereal(T)  # function to apply to eigenvalues when building bands
 
     p = Progress(nk, "Step 1/2 - Diagonalising: ")
     for (n, ϕs) in enumerate(vertices(mesh))
