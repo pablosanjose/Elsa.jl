@@ -111,8 +111,8 @@ isnonnegative(ndist) = iszero(ndist) || ispositive(ndist)
 ############################################################################################
 
 _copy!(dest, src) = copy!(dest, src)
-_copy!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}) = _fast_sparse_muladd!(dst, src)
-_copy!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}) where {N} = _fast_sparse_muladd!(dst, src)
+_copy!(dst::DenseMatrix{<:Number}, src::SparseMatrixCSC{<:Number}) = _fast_sparse_copy!(dst, src)
+_copy!(dst::DenseMatrix{<:SMatrix{N,N}}, src::SparseMatrixCSC{<:SMatrix{N,N}}) where {N} = _fast_sparse_copy!(dst, src)
 # _copy!(dst::AbstractMatrix{<:Number}, src::AbstractMatrix{<:SMatrix}) = _flatten_muladd!(dst, src)
 
 _add!(dest, src, α) = _plain_muladd(dest, src, α)
@@ -129,13 +129,23 @@ function _plain_muladd(dst, src, α)
     return dst
 end
 
-# Only needed for dense <- sparse (#33589), copy!(sparse, sparse) is fine
-function _fast_sparse_muladd!(dst::DenseMatrix{T}, src::SparseMatrixCSC, α = zero(T)) where {T}
+function _fast_sparse_copy!(dst::DenseMatrix{T}, src::SparseMatrixCSC) where {T}
     @boundscheck checkbounds(dst, axes(src)...)
-    iszero(α) ? fill!(dst, zero(eltype(src))) : (α != 1 && α != I && rmul!(dst, α))
+    fill!(dst, zero(eltype(src)))
     for col in 1:size(src, 1)
         for p in nzrange(src, col)
-            @inbounds dst[rowvals(src)[p], col] += nonzeros(src)[p]
+            @inbounds dst[rowvals(src)[p], col] = nonzeros(src)[p]
+        end
+    end
+    return dst
+end
+
+# Only needed for dense <- sparse (#33589), copy!(sparse, sparse) is fine
+function _fast_sparse_muladd!(dst::DenseMatrix{T}, src::SparseMatrixCSC, α = I) where {T}
+    @boundscheck checkbounds(dst, axes(src)...)
+    for col in 1:size(src, 1)
+        for p in nzrange(src, col)
+            @inbounds dst[rowvals(src)[p], col] += α * nonzeros(src)[p]
         end
     end
     return dst
