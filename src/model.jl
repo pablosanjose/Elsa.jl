@@ -250,3 +250,23 @@ end
 
 LinearAlgebra.ishermitian(m::TightbindingModel) = all(t -> ishermitian(t), m.terms)
 LinearAlgebra.ishermitian(t::TightbindingModelTerm) = t.forcehermitian
+
+checkmodelorbs(model::TightbindingModel, orbs, lat) =
+    foreach(term -> _checkmodelorbs(term, orbs, lat), model.terms)
+
+function _checkmodelorbs(term::HoppingTerm, orbs, lat)
+    for (s1, s2) in sublats(term, lat)
+        _checkmodelorbs(term(first(sites(lat, s1)), first(sites(lat, s2))), length(orbs[s1]), length(orbs[s2]))
+    end
+    return nothing
+end
+
+function _checkmodelorbs(term::OnsiteTerm, orbs, lat)
+    for s in sublats(term, lat)
+        _checkmodelorbs(term(first(sites(lat, s)), first(sites(lat, s))), length(orbs[s]))
+    end
+    return nothing
+end
+
+_checkmodelorbs(s::SMatrix, m, n = m) =
+    size(s) == (m, n) || @warn("Possible dimension mismatch between model and Hamiltonian. Did you correctly specify the `orbitals` in hamiltonian?")

@@ -385,6 +385,7 @@ Base.push!(h::IJV, (i, j, v)) = (push!(h.i, i); push!(h.j, j); push!(h.v, v))
 # hamiltonian_sparse
 #######################################################################
 function hamiltonian_sparse(::Type{M}, lat::AbstractLattice{E,L}, orbs, model; field = missing) where {E,L,M}
+    checkmodelorbs(model, orbs, lat)
     builder = IJVBuilder(M, lat, orbs)
     applyterms!(builder, terms(model)...)
     HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
