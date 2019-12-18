@@ -192,7 +192,7 @@ isgrowing(c::CoSort) = isgrowing(c.sortvector, c.offset + 1)
 # SparseMatrixBuilder
 #######################################################################
 
-mutable struct SparseMatrixBuilder{T,S<:AbstractSparseMatrix{T}} <: AbstractMatrix{T}
+mutable struct SparseMatrixBuilder{T,S<:AbstractSparseMatrix{T}}
     matrix::S
     colcounter::Int
     rowvalcounter::Int
