@@ -26,9 +26,6 @@ end
 checkloaded(package::Symbol) = isdefined(Main, package) ||
     throw(ArgumentError("Package $package not loaded, need to be `using $package`."))
 
-maybereal(ϵ::Vector{<:Complex}, matrix::Hermitian) = real.(ϵ)
-maybereal(ϵ, matrix) = ϵ
-
 ## LinearAlgebra ##
 struct LinearAlgebraPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
     kw::K
@@ -38,8 +35,7 @@ LinearAlgebraPackage(; kw...) = LinearAlgebraPackage(values(kw))
 
 function diagonalize(matrix, d::Diagonalizer{<:LinearAlgebraPackage})
     ϵ, ψ = eigen!(matrix; (d.method.kw)...)
-    ϵ´ = maybereal(ϵ, matrix)
-    return ϵ´, ψ
+    return ϵ, ψ
 end
 
 ## Arpack ##
@@ -51,8 +47,7 @@ ArpackPackage(; kw...) = (checkloaded(:Arpack); ArpackPackage(values(kw)))
 
 function diagonalize(matrix, d::Diagonalizer{<:ArpackPackage})
     ϵ, ψ = Main.Arpack.eigs(matrix; (d.method.kw)...)
-    ϵ´ = maybereal(ϵ, matrix)
-    return ϵ´, ψ
+    return ϵ, ψ
 end
 
 ## IterativeSolvers ##

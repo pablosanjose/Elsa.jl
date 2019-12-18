@@ -82,7 +82,7 @@ end
 function bandstructure(h::Hamiltonian, mesh::Mesh; method = defaultmethod(h), minprojection = 0.5)
     ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     d = diagonalizer(h, mesh, method, minprojection)
-    matrix = Hermitian(similarmatrix(h))
+    matrix = similarmatrix(h)
     return bandstructure!(matrix, h, mesh, d)
 end
 
@@ -105,9 +105,9 @@ function bandstructure!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,<:Any,M
             ψks = Array{M,3}(undef, dimh, nϵ, nk)
         end
         copyslice!(ϵks, CartesianIndices((1:nϵ, n:n)),
-                   ϵk,  CartesianIndices((1:nϵ,)))
+                   ϵk,  CartesianIndices((1:nϵ,)), real)
         copyslice!(ψks, CartesianIndices((1:dimh, 1:nϵ, n:n)),
-                   ψk,  CartesianIndices((1:dimh, 1:nϵ)))
+                   ψk,  CartesianIndices((1:dimh, 1:nϵ)), identity)
         ProgressMeter.next!(p; showvalues = ())
     end
 

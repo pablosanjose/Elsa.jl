@@ -85,7 +85,7 @@ function Base.show(io::IO, o::OnsiteTerm{F}) where {F}
     print(io,
 "$(i)OnsiteTerm{$(displayparameter(F))}:
 $(i)  Sublattices      : $(o.sublats === missing ? "any" : o.sublats)
-$(i)  Force Hermitian  : $(o.forcehermitian)
+$(i)  Force hermitian  : $(o.forcehermitian)
 $(i)  Coefficient      : $(o.coefficient)")
 end
 
@@ -96,7 +96,7 @@ function Base.show(io::IO, h::HoppingTerm{F}) where {F}
 $(i)  Sublattice pairs : $(h.sublats === missing ? "any" : (t -> Pair(reverse(t)...)).(h.sublats))
 $(i)  dn cell jumps    : $(h.dns === missing ? "any" : h.dns)
 $(i)  Hopping range    : $(round(h.range, digits = 6))
-$(i)  Force Hermitian  : $(h.forcehermitian)
+$(i)  Force hermitian  : $(h.forcehermitian)
 $(i)  Coefficient      : $(h.coefficient)")
 end
 
@@ -110,7 +110,7 @@ creating a `Hamiltonian` with `hamiltonian`.
 The onsite energy `o` can be a number, a matrix (preferably `SMatrix`) or a function of the
 form `r -> ...` for a position-dependent onsite energy. If `sublats` is specified as a
 sublattice name or tuple thereof, `onsite` is only applied to sublattices with said names.
-If `forcehermitian` is true, the model will produce an Hermitian Hamiltonian.
+If `forcehermitian` is true, the model will produce an hermitian Hamiltonian.
 
 The dimension of `o::AbstractMatrix` must match the orbital dimension of applicable
 sublattices (see also `orbitals` option for `hamiltonian`). If `o::Number` it will be
@@ -126,13 +126,13 @@ julia> onsite(1, sublats = (1,2)) - hopping(2)
 TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:
     Sublattices      : (1, 2)
-    Force Hermitian  : true
+    Force hermitian  : true
     Coefficient      : 1
   HoppingTerm{Int64}:
     Sublattice pairs : any
     dn cell jumps    : any
     Hopping range    : 1.0
-    Force Hermitian  : true
+    Force hermitian  : true
     Coefficient      : -1
 
 julia> hamiltonian(LatticePresets.honeycomb(orbitals = (:a, :b)), onsite(r->@SMatrix[1 2; 3 4]))
@@ -166,7 +166,7 @@ The hopping amplitude `h` can be a number, a matrix (preferably `SMatrix`) or a 
 of the form `(r, dr) -> ...` for a position-dependent hopping (`r` is the bond center,
 and `dr` the bond vector). If `sublats` is specified as a sublattice name pair, or tuple
 thereof, `hopping` is only applied between sublattices with said names. If `forcehermitian`
-is true, the model will produce an Hermitian Hamiltonian.
+is true, the model will produce an hermitian Hamiltonian.
 
 The dimension of `h::AbstractMatrix` must match the orbital dimension of applicable
 sublattices (see also `orbitals` option for `hamiltonian`). If `h::Number` it will be
@@ -182,13 +182,13 @@ julia> onsite(1) - hopping(2, dn = ((1,2), (0,0)), sublats = (1,1))
 TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:
     Sublattices      : any
-    Force Hermitian  : true
+    Force hermitian  : true
     Coefficient      : 1
   HoppingTerm{Int64}:
     Sublattice pairs : (1 => 1,)
     dn cell jumps    : ([1, 2], [0, 0])
     Hopping range    : 1.0
-    Force Hermitian  : true
+    Force hermitian  : true
     Coefficient      : -1
 
 julia> hamiltonian(LatticePresets.honeycomb(), hopping((r,dr) -> cos(r[1]), sublats = ((1,1), (2,2))))

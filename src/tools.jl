@@ -343,7 +343,7 @@ tuplesort(::Missing) = missing
 
 # Like copyto! but with potentially different tensor orders (adapted from Base.copyto!)
 function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
-                    src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}) where {T1,T2,N1,N2}
+                    src::AbstractArray{T2,N2}, Rsrc::CartesianIndices{N2}, by = identity) where {T1,T2,N1,N2}
     isempty(Rdest) && return dest
     if length(Rdest) != length(Rsrc)
         throw(ArgumentError("source and destination must have same length (got $(length(Rsrc)) and $(length(Rdest)))"))
@@ -354,7 +354,7 @@ function copyslice!(dest::AbstractArray{T1,N1}, Rdest::CartesianIndices{N1},
     checkbounds(src, last(Rsrc))
     src′ = Base.unalias(dest, src)
     @inbounds for (Is, Id) in zip(Rsrc, Rdest)
-        @inbounds dest[Id] = src′[Is]
+        @inbounds dest[Id] = by(src′[Is])
     end
     return dest
 end
