@@ -159,7 +159,7 @@ function sorteigs!(perm, ϵ::Vector, ψ::Matrix)
     resize!(perm, length(ϵ))
     p = sortperm!(perm, ϵ, by = real)
     # permute!(ϵ, p)
-    sort!(ϵ)
+    sort!(ϵ, by = real)
     Base.permutecols!!(ψ, p)
     return ϵ, ψ
 end
