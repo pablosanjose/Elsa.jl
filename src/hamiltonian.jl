@@ -702,7 +702,7 @@ function _bloch!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,L,M}, ϕs, axi
     rawmatrix = parent(matrix)
     if iszero(axis)
         _copy!(rawmatrix, first(h.harmonics).h) # faster copy!(dense, sparse) specialization
-        add_harmonics!(rawmatrix, h, ϕs, dn -> 1) 
+        add_harmonics!(rawmatrix, h, ϕs, dn -> 1)
     else
         fill!(rawmatrix, zero(M)) # There is no guarantee of same structure
         add_harmonics!(rawmatrix, h, ϕs, dn -> -im * dn[axis])

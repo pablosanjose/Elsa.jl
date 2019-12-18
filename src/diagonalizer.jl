@@ -26,9 +26,6 @@ end
 checkloaded(package::Symbol) = isdefined(Main, package) ||
     throw(ArgumentError("Package $package not loaded, need to be `using $package`."))
 
-maybereal(ϵ::Vector{<:Complex}, matrix::Hermitian) = real.(ϵ)
-maybereal(ϵ, matrix) = ϵ
-
 ## LinearAlgebra ##
 struct LinearAlgebraPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
     kw::K
@@ -38,9 +35,10 @@ LinearAlgebraPackage(; kw...) = LinearAlgebraPackage(values(kw))
 
 function diagonalize(matrix, d::Diagonalizer{<:LinearAlgebraPackage})
     ϵ, ψ = eigen!(matrix; (d.method.kw)...)
-    ϵ´ = maybereal(ϵ, matrix)
-    return ϵ´, ψ
+    return ϵ, ψ
 end
+
+similarmatrix(h, ::LinearAlgebraPackage) = Matrix(similarmatrix(h))
 
 ## Arpack ##
 struct ArpackPackage{K<:NamedTuple} <: AbstractDiagonalizeMethod
@@ -51,9 +49,10 @@ ArpackPackage(; kw...) = (checkloaded(:Arpack); ArpackPackage(values(kw)))
 
 function diagonalize(matrix, d::Diagonalizer{<:ArpackPackage})
     ϵ, ψ = Main.Arpack.eigs(matrix; (d.method.kw)...)
-    ϵ´ = maybereal(ϵ, matrix)
-    return ϵ´, ψ
+    return ϵ, ψ
 end
+
+similarmatrix(h, ::ArpackPackage) = similarmatrix(h)
 
 ## IterativeSolvers ##
 
@@ -85,6 +84,8 @@ function diagonalize(matrix::AbstractMatrix{M}, d::Diagonalizer{<:KrylovKitPacka
 
     return ϵ´, ψ´
 end
+
+similarmatrix(h, ::KrylovKitPackage) = similarmatrix(h)
 
 #######################################################################
 # shift and invert methods
@@ -158,7 +159,7 @@ function sorteigs!(perm, ϵ::Vector, ψ::Matrix)
     resize!(perm, length(ϵ))
     p = sortperm!(perm, ϵ, by = real)
     # permute!(ϵ, p)
-    sort!(ϵ)
+    sort!(ϵ, by = real)
     Base.permutecols!!(ψ, p)
     return ϵ, ψ
 end
