@@ -27,6 +27,34 @@ function Base.show(io::IO, b::Bandstructure{D,M}) where {D,M}
     print(ioindent, "\n", b.kmesh)
 end
 
+# API #
+"""
+    bands(bs::Bandstructure)
+
+Return a vector of all the `Band`s in `bs`.
+"""
+bands(bs::Bandstructure) = bs.bands
+
+"""
+    vertices(bs::Bandstructure, i)
+
+Return the vertices `(k..., ϵ)` of the i-th band in `bs`, in the form of a
+`Vector{SVector{L+1}}`, where `L` is the lattice dimension.
+"""
+vertices(bs::Bandstructure, i) = vertices(bands(bs)[i])
+
+vertices(b::Band) = vertices(b.mesh)
+
+"""
+    states(bs::Bandstructure, i)
+
+Return the states of each vertex of the i-th band in `bs`, in the form of a `Matrix` of size
+`(nψ, nk)`, where `nψ` is the length of each state vector, and `nk` the number of vertices.
+"""
+states(bs::Bandstructure, i) = states(bands(bs)[i])
+
+states(b::Band) = reshape(b.states, b.dimstates)
+
 #######################################################################
 # bandstructure
 #######################################################################
@@ -91,8 +119,8 @@ function bandstructure!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,<:Any,M
 
     dimh = size(h, 1)
     nk = nvertices(mesh)
-
-    by = _maybereal(T)  # function to apply to eigenvalues when building bands
+    # function to apply to eigenvalues when building bands (depends on momenta type)
+    by = _maybereal(T)
 
     p = Progress(nk, "Step 1/2 - Diagonalising: ")
     for (n, ϕs) in enumerate(vertices(mesh))
@@ -187,64 +215,3 @@ function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
     end
     return maxproj, destb
 end
-
-# function extractband!(vertexindices, bandindices, nb, ϵks, ψks, mesh::Mesh{D,T}) where {D,T}
-#     dimh, nϵ, nk = size(ψks)
-#     states = similar(ψks, dimh * nk)
-#     vertices = Vector{SVector{D+1,T}}(undef, nk)
-#     fill!(vertexindices, 0)
-#     k´ = 0
-#     for (k, ind) in enumerate(bandindices)
-#         if !iszero(ind)
-#             k´ += 1
-#             vertices[k´] = SVector(Tuple(mesh.vertices[k])..., ϵks[ind, k])
-#             copyto!(states, 1 + dimh * (k´ - 1), ψks, 1 + dimh * (k - 1), dimh)
-#             vertexindices[k] = k´ # Reuse to store new vertex indices
-#         end
-#     end
-#     if k´ < nk
-#         resize!(vertices, k´)
-#         resize!(states, k´ * dimh)
-#         simplices = extractsimplices(mesh.simplices, vertexindices)
-#         adjmat = extractsadjacencies(mesh.adjmat, vertexindices)
-#     else
-#         simplices = copy(vec(mesh.simplices))
-#         adjmat = copy(mesh.adjmat)
-#     end
-#     mesh´ = Mesh(vertices, adjmat, simplices)
-#     band = Band(mesh´, states, dimh)
-#     return band
-# end
-
-# function extractsimplices(simplices::AbstractArray{NTuple{N,Int}}, vertexindices) where {N}
-#     simplices´ = similar(vec(simplices))
-#     n = 0
-#     for simp in simplices
-#         simp´ = ntuple(i -> vertexindices[simp[i]], Val(N))
-#         if all(!iszero, simp´)
-#             n += 1
-#             simplices´[n] = simp´
-#         end
-#     end
-#     resize!(simplices´, n)
-#     return simplices´
-# end
-
-## This is simpler, but allocates more, and is slower
-# extractsadjacencies(adjmat, bandindices) =
-#     adjmat[(!iszero).(bandindices), (!iszero).(bandindices)]
-# 
-# function extractsadjacencies(adjmat::AbstractSparseMatrix{Tv}, vertexindices) where {Tv}
-#     n = count(!iszero, vertexindices)
-#     b = SparseMatrixBuilder{Tv}(n, n)
-#     for col in 1:size(adjmat, 2)
-#         iszero(vertexindices[col]) && continue
-#         for ptr in nzrange(adjmat, col)
-#             row = rowvals(adjmat)[ptr]
-#             iszero(vertexindices[row]) || pushtocolumn!(b, row, nonzeros(adjmat)[ptr])
-#         end
-#         finalizecolumn!(b)
-#     end
-#     adjmat´ = sparse(b)
-#     return adjmat´
-# end
