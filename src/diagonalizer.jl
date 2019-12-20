@@ -218,7 +218,8 @@ function randomfill!(matrix::AbstractArray{T}, seed = 1234) where {T}
     Random.seed!(seed)
     fill!(matrix, zero(T))
     for i in 1:minimum(size(matrix))
-        @inbounds matrix[i, i] = rand(T)
+        r = rand(T)
+        @inbounds matrix[i, i] = r + r'
     end
     return matrix
 end

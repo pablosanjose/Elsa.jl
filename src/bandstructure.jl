@@ -142,7 +142,7 @@ function extractband(kmesh::Mesh{D,T}, pending, ϵks::AbstractArray{T}, ψks::Ab
     verts = SVector{D+1,T}[]
     sizehint!(verts, nk)
     adjmat = SparseMatrixBuilder{Bool}()
-    vertindices[first(pending)] = 1
+    vertindices[first(pending)] = 1 # pending starts with a single vertex
     for c in pending
         ϵ, k = Tuple(c) # c == CartesianIndex(ϵ::Int, k::Int)
         vertex = vcat(kverts[k], SVector(ϵks[c]))
@@ -154,7 +154,7 @@ function extractband(kmesh::Mesh{D,T}, pending, ϵks::AbstractArray{T}, ψks::Ab
             if proj >= minprojection
                 if iszero(vertindices[ϵ´, k´]) # unclassified
                     push!(pending, CartesianIndex(ϵ´, k´))
-                    vertindices[ϵ´, k´] = length(pending)
+                    vertindices[ϵ´, k´] = length(pending) # this is clever!
                 end
                 indexk´ = vertindices[ϵ´, k´]
                 indexk´ > 0 && pushtocolumn!(adjmat, indexk´, true)
@@ -233,18 +233,18 @@ end
 ## This is simpler, but allocates more, and is slower
 # extractsadjacencies(adjmat, bandindices) =
 #     adjmat[(!iszero).(bandindices), (!iszero).(bandindices)]
-
-function extractsadjacencies(adjmat::AbstractSparseMatrix{Tv}, vertexindices) where {Tv}
-    n = count(!iszero, vertexindices)
-    b = SparseMatrixBuilder{Tv}(n, n)
-    for col in 1:size(adjmat, 2)
-        iszero(vertexindices[col]) && continue
-        for ptr in nzrange(adjmat, col)
-            row = rowvals(adjmat)[ptr]
-            iszero(vertexindices[row]) || pushtocolumn!(b, row, nonzeros(adjmat)[ptr])
-        end
-        finalizecolumn!(b)
-    end
-    adjmat´ = sparse(b)
-    return adjmat´
-end
+# 
+# function extractsadjacencies(adjmat::AbstractSparseMatrix{Tv}, vertexindices) where {Tv}
+#     n = count(!iszero, vertexindices)
+#     b = SparseMatrixBuilder{Tv}(n, n)
+#     for col in 1:size(adjmat, 2)
+#         iszero(vertexindices[col]) && continue
+#         for ptr in nzrange(adjmat, col)
+#             row = rowvals(adjmat)[ptr]
+#             iszero(vertexindices[row]) || pushtocolumn!(b, row, nonzeros(adjmat)[ptr])
+#         end
+#         finalizecolumn!(b)
+#     end
+#     adjmat´ = sparse(b)
+#     return adjmat´
+# end
