@@ -940,6 +940,11 @@ associated lattice is flattened also, so that there is one site per orbital for 
 site (all at the same position). Note that in the case of sparse Hamiltonians, zeros in
 hopping/onsite matrices are preserved as structural zeros upon flattening.
 
+    h |> flatten()
+
+Functional form equivalent to `flatten(h)` of `h |> flatten` (included for consistency with
+the rest of the API).
+
 # Examples
 ```
 julia> h = LatticePresets.honeycomb() |> hamiltonian(hopping(@SMatrix[1 2], range = 1/√3, sublats = (:A,:B)), orbitals = (Val(1), Val(2)))
@@ -963,6 +968,8 @@ Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
   Coordination     : 4.0
 ```
 """
+flatten() = h -> flatten(h)
+
 function flatten(h::Hamiltonian)
     all(isequal(1), norbitals(h)) && return copy(h)
     harmonics´ = [flatten(har, h.orbitals, h.lattice) for har in h.harmonics]
