@@ -270,3 +270,5 @@ end
 
 _checkmodelorbs(s::SMatrix, m, n = m) =
     size(s) == (m, n) || @warn("Possible dimension mismatch between model and Hamiltonian. Did you correctly specify the `orbitals` in hamiltonian?")
+
+_checkmodelorbs(s::Number, m, n = m) = _checkmodelorbs(SMatrix{1,1}(s), m, n)

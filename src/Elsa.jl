@@ -11,7 +11,7 @@ using Requires
 # end
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      ProgressMeter, LinearMaps
+      ProgressMeter, LinearMaps, Random
       #FFTW
 
 using SparseArrays: getcolptr
