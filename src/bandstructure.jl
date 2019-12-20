@@ -8,9 +8,7 @@ struct Band{M,A<:AbstractVector{M},MD<:Mesh,S<:AbstractArray}
     dimstates::Int  # Needed to extract the state at a given vertex from vector `states`
 end
 
-function Band{M}(mesh::Mesh{D}, dimstates::Int) where {M,D}
-    nk = nvertices(mesh)
-    states = M[]
+function Band(mesh::Mesh{D}, states::AbstractVector{M}, dimstates::Int) where {M,D}
     simps = simplices(mesh, Val(D))
     return Band(mesh, simps, states, dimstates)
 end
@@ -123,7 +121,7 @@ function bandstructure!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,<:Any,M
         src = findfirst(iszero, vertindices)
         src === nothing && break
         resize!(pending, 1)
-        pending[1] = src # source for band search
+        pending[1] = src # source CartesianIndex for band search
         band = extractband(mesh, pending, ϵks, ψks, vertindices, d.minprojection)
         nverts = nvertices(band.mesh)
         nverts > D && push!(bands, band) # avoid bands with no simplices
@@ -144,9 +142,9 @@ function extractband(kmesh::Mesh{D,T}, pending, ϵks::AbstractArray{T}, ψks::Ab
     verts = SVector{D+1,T}[]
     sizehint!(verts, nk)
     adjmat = SparseMatrixBuilder{Bool}()
-    vertindices[first(pending)] = 1
+    vertindices[first(pending)] = 1 # pending starts with a single vertex
     for c in pending
-        ϵ, k = Tuple(c) # c == CartesianIndex(ϵ, k)
+        ϵ, k = Tuple(c) # c == CartesianIndex(ϵ::Int, k::Int)
         vertex = vcat(kverts[k], SVector(ϵks[c]))
         push!(verts, vertex)
         appendslice!(states, ψks, CartesianIndices((1:dimh, ϵ:ϵ, k:k)))
@@ -156,7 +154,7 @@ function extractband(kmesh::Mesh{D,T}, pending, ϵks::AbstractArray{T}, ψks::Ab
             if proj >= minprojection
                 if iszero(vertindices[ϵ´, k´]) # unclassified
                     push!(pending, CartesianIndex(ϵ´, k´))
-                    vertindices[ϵ´, k´] = length(pending)
+                    vertindices[ϵ´, k´] = length(pending) # this is clever!
                 end
                 indexk´ = vertindices[ϵ´, k´]
                 indexk´ > 0 && pushtocolumn!(adjmat, indexk´, true)
@@ -168,7 +166,7 @@ function extractband(kmesh::Mesh{D,T}, pending, ϵks::AbstractArray{T}, ψks::Ab
         @inbounds vi > 0 && (vertindices[i] = -1) # mark as classified in a different band
     end
     mesh = Mesh(verts, sparse(adjmat))
-    return Band{M}(mesh, dimh)
+    return Band(mesh, states, dimh)
 end
 
 function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
@@ -190,63 +188,63 @@ function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
     return maxproj, destb
 end
 
-function extractband!(vertexindices, bandindices, nb, ϵks, ψks, mesh::Mesh{D,T}) where {D,T}
-    dimh, nϵ, nk = size(ψks)
-    states = similar(ψks, dimh * nk)
-    vertices = Vector{SVector{D+1,T}}(undef, nk)
-    fill!(vertexindices, 0)
-    k´ = 0
-    for (k, ind) in enumerate(bandindices)
-        if !iszero(ind)
-            k´ += 1
-            vertices[k´] = SVector(Tuple(mesh.vertices[k])..., ϵks[ind, k])
-            copyto!(states, 1 + dimh * (k´ - 1), ψks, 1 + dimh * (k - 1), dimh)
-            vertexindices[k] = k´ # Reuse to store new vertex indices
-        end
-    end
-    if k´ < nk
-        resize!(vertices, k´)
-        resize!(states, k´ * dimh)
-        simplices = extractsimplices(mesh.simplices, vertexindices)
-        adjmat = extractsadjacencies(mesh.adjmat, vertexindices)
-    else
-        simplices = copy(vec(mesh.simplices))
-        adjmat = copy(mesh.adjmat)
-    end
-    mesh´ = Mesh(vertices, adjmat, simplices)
-    band = Band(mesh´, states, dimh)
-    return band
-end
+# function extractband!(vertexindices, bandindices, nb, ϵks, ψks, mesh::Mesh{D,T}) where {D,T}
+#     dimh, nϵ, nk = size(ψks)
+#     states = similar(ψks, dimh * nk)
+#     vertices = Vector{SVector{D+1,T}}(undef, nk)
+#     fill!(vertexindices, 0)
+#     k´ = 0
+#     for (k, ind) in enumerate(bandindices)
+#         if !iszero(ind)
+#             k´ += 1
+#             vertices[k´] = SVector(Tuple(mesh.vertices[k])..., ϵks[ind, k])
+#             copyto!(states, 1 + dimh * (k´ - 1), ψks, 1 + dimh * (k - 1), dimh)
+#             vertexindices[k] = k´ # Reuse to store new vertex indices
+#         end
+#     end
+#     if k´ < nk
+#         resize!(vertices, k´)
+#         resize!(states, k´ * dimh)
+#         simplices = extractsimplices(mesh.simplices, vertexindices)
+#         adjmat = extractsadjacencies(mesh.adjmat, vertexindices)
+#     else
+#         simplices = copy(vec(mesh.simplices))
+#         adjmat = copy(mesh.adjmat)
+#     end
+#     mesh´ = Mesh(vertices, adjmat, simplices)
+#     band = Band(mesh´, states, dimh)
+#     return band
+# end
 
-function extractsimplices(simplices::AbstractArray{NTuple{N,Int}}, vertexindices) where {N}
-    simplices´ = similar(vec(simplices))
-    n = 0
-    for simp in simplices
-        simp´ = ntuple(i -> vertexindices[simp[i]], Val(N))
-        if all(!iszero, simp´)
-            n += 1
-            simplices´[n] = simp´
-        end
-    end
-    resize!(simplices´, n)
-    return simplices´
-end
+# function extractsimplices(simplices::AbstractArray{NTuple{N,Int}}, vertexindices) where {N}
+#     simplices´ = similar(vec(simplices))
+#     n = 0
+#     for simp in simplices
+#         simp´ = ntuple(i -> vertexindices[simp[i]], Val(N))
+#         if all(!iszero, simp´)
+#             n += 1
+#             simplices´[n] = simp´
+#         end
+#     end
+#     resize!(simplices´, n)
+#     return simplices´
+# end
 
 ## This is simpler, but allocates more, and is slower
 # extractsadjacencies(adjmat, bandindices) =
 #     adjmat[(!iszero).(bandindices), (!iszero).(bandindices)]
-
-function extractsadjacencies(adjmat::AbstractSparseMatrix{Tv}, vertexindices) where {Tv}
-    n = count(!iszero, vertexindices)
-    b = SparseMatrixBuilder{Tv}(n, n)
-    for col in 1:size(adjmat, 2)
-        iszero(vertexindices[col]) && continue
-        for ptr in nzrange(adjmat, col)
-            row = rowvals(adjmat)[ptr]
-            iszero(vertexindices[row]) || pushtocolumn!(b, row, nonzeros(adjmat)[ptr])
-        end
-        finalizecolumn!(b)
-    end
-    adjmat´ = sparse(b)
-    return adjmat´
-end
+# 
+# function extractsadjacencies(adjmat::AbstractSparseMatrix{Tv}, vertexindices) where {Tv}
+#     n = count(!iszero, vertexindices)
+#     b = SparseMatrixBuilder{Tv}(n, n)
+#     for col in 1:size(adjmat, 2)
+#         iszero(vertexindices[col]) && continue
+#         for ptr in nzrange(adjmat, col)
+#             row = rowvals(adjmat)[ptr]
+#             iszero(vertexindices[row]) || pushtocolumn!(b, row, nonzeros(adjmat)[ptr])
+#         end
+#         finalizecolumn!(b)
+#     end
+#     adjmat´ = sparse(b)
+#     return adjmat´
+# end

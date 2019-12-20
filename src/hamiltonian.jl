@@ -567,7 +567,7 @@ Hamiltonian{<:Lattice} : 1D Hamiltonian on a 1D Lattice in 2D space
 ```
 """
 function wrap(h::Hamiltonian{<:Lattice,L}, axis; factor = 1) where {L}
-    1 <= axis <= L || throw(ArgumentError("axis should be between 1 and the lattice dimension $L"))
+    1 <= axis <= L || throw(ArgumentError("wrap axis should be between 1 and the lattice dimension $L"))
     lattice´ = _wrap(h.lattice, axis)
     harmonics´ = _wrap(h.harmonics, axis, factor)
     return Hamiltonian(lattice´, harmonics´, h.field, h.orbitals)

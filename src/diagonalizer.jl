@@ -194,13 +194,32 @@ function VelocityCodiagonalizer(h::Hamiltonian{<:Any,L}, delta;
     VelocityCodiagonalizer(h, directions, degtol, delta´, UnitRange{Int}[], UnitRange{Int}[], Int[])
 end
 
-num_codiag_matrices(codiag) = 2 * length(codiag.directions)
+num_codiag_matrices(codiag) = 2 * length(codiag.directions) + 1
 function codiag_matrix!(matrix, n, codiag, ϕs)
     ndirs = length(codiag.directions)
     if n <= ndirs
         bloch!(matrix, codiag.h, ϕs, dn -> im * codiag.directions[n]' * dn)
-    else # resort to finite differences
+    elseif n <= 2ndirs # resort to finite differences
         bloch!(matrix, codiag.h, ϕs + codiag.delta * codiag.directions[n - ndirs])
+    else # use a fixed random matrix
+        randomfill!(matrix)
+    end
+    return matrix
+end
+
+function randomfill!(matrix::SparseMatrixCSC, seed = 1234)
+    Random.seed!(seed)
+    @show nnz(matrix)
+    rand!(nonzeros(matrix))
+    return matrix
+end
+
+function randomfill!(matrix::AbstractArray{T}, seed = 1234) where {T}
+    Random.seed!(seed)
+    fill!(matrix, zero(T))
+    for i in 1:minimum(size(matrix))
+        r = rand(T)
+        @inbounds matrix[i, i] = r + r'
     end
     return matrix
 end
