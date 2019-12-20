@@ -741,8 +741,7 @@ In-place version of `bloch`. Overwrite `matrix` with the Bloch Hamiltonian matri
 the specified Bloch phases `ϕs` (see `bloch` for definition and API).  A conventient way to
 obtain a `matrix` is to use `similarmatrix(h)`, which will return an `AbstractMatrix` of the
 same type as the Hamiltonian's. Note, however, that matrix need not be of the same type
-(e.g. it can be dense, while `h` is sparse, or it could be flat, as from `similarmatrix(h;
-flatten = true)`).
+(e.g. it can be dense, while `h` is sparse).
 
 # Examples
 ```
