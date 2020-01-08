@@ -125,6 +125,7 @@ function bandstructure!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,<:Any,M
     p = Progress(nk, "Step 1/2 - Diagonalising: ")
     for (n, ϕs) in enumerate(vertices(mesh))
         bloch!(matrix, h, ϕs)
+        # (ϵk, ψk) = diagonalize(Hermitian(matrix), d)  ## This is faster (!)
         (ϵk, ψk) = diagonalize(matrix, d)
         resolve_degeneracies!(ϵk, ψk, ϕs, matrix, d.codiag)
         if n == 1  # With first vertex can now know the number of eigenvalues... Reassign
@@ -208,7 +209,7 @@ function findmostparallel(ψks::Array{M,3}, destk, srcb, srck) where {M}
             proj += ψks[i, nb, destk]' * ψks[i, srcb, srck]
         end
         absproj = T(abs(tr(proj)))
-        if maxproj < absproj
+        if maxproj <= absproj  # must happen at least once
             destb = nb
             maxproj = absproj
         end

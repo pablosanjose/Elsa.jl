@@ -209,8 +209,7 @@ end
 
 function randomfill!(matrix::SparseMatrixCSC, seed = 1234)
     Random.seed!(seed)
-    @show nnz(matrix)
-    rand!(nonzeros(matrix))
+    rand!(nonzeros(matrix))  ## CAREFUL: this will be non-hermitian
     return matrix
 end
 
