@@ -121,15 +121,63 @@ _nnzdiag(s::Matrix) = count(!iszero, s[i,i] for i in 1:minimum(size(s)))
 
 # Iteration tools #
 
+# struct IndicesNonzeros{H}
+#     h::H
+# end
+# indicesnonzeros(h) = IndicesNonzeros(h)
+
+# function Base.iterate(itr::IndicesNonzeros{<:Hamiltonian}, (nptr, col, nhar) = (1, 1, 1))
+#     nhar > length(itr.h.harmonics) && return nothing
+#     har = itr.h.harmonics[nhar]
+#     i = _iterate(har, (nptr, col))
+#     if i === nothing
+#         return iterate(itr, (1, 1, nhar + 1))
+#     else
+#         ((row, col), (nptr, col)) = i
+#         return (row, col, har.dn), (nptr, col, nhar)
+#     end
+# end
+
+# function Base.iterate(itr::IndicesNonzeros{<:HamiltonianHarmonic}, state = (1, 1))
+#     _iterate(itr.h, state)
+# end
+
+# function _iterate(har::HamiltonianHarmonic{<:Any,<:Any,<:AbstractSparseMatrix}, (nptr, col))
+#     col > size(har.h, 2) && return nothing
+#     ptrs = nzrange(har.h, col)
+#     nptr > length(ptrs) && return _iterate(har, (1, col + 1))
+#     rows = rowvals(har.h)
+#     return (rows[ptrs[nptr]], col), (nptr + 1, col)
+# end
+
+# function _iterate(har::HamiltonianHarmonic{<:Any,<:Any,<:DenseMatrix}, (row, col))
+#     col > size(har.h, 2) && return nothing
+#     for row´ in row :size(har.h, 1)
+#         iszero(har.h[row´, col]) || return (row´, col), (row´ + 1, col)
+#     end
+#     return _iterate(har, (1, col + 1))
+# end
+
+# Base.IteratorSize(::IndicesNonzeros) = Base.HasLength()
+# Base.length(s::IndicesNonzeros{<:Hamiltonian}) = sum(har -> _nnz(har.h), s.h.harmonics)
+# Base.length(s::IndicesNonzeros{<:HamiltonianHarmonic}) = _nnz(s.h.h)
+# Base.IteratorEltype(::IndicesNonzeros) = Base.HasEltype()
+# Base.eltype(s::IndicesNonzeros{<:Hamiltonian}) = Tuple{Int, Int, typeof(first(s.h.harmonics).dn)}
+# Base.eltype(s::IndicesNonzeros{<:HamiltonianHarmonic}) = Tuple{Int, Int}
+
 struct IndicesNonzeros{H}
     h::H
+    rowrange::UnitRange{Int}
+    colrange::UnitRange{Int}
 end
-indicesnonzeros(h) = IndicesNonzeros(h)
+indicesnonzeros(h, rowrange = 1:size(h, 1), colrange = 1:size(h, 2)) =
+    IndicesNonzeros(h, rowrange, colrange)
 
-function Base.iterate(itr::IndicesNonzeros{<:Hamiltonian}, (nptr, col, nhar) = (1, 1, 1))
+function Base.iterate(itr::IndicesNonzeros{<:Hamiltonian},
+                      (nptr, col, nhar) = (firstrow(itr), first(itr.colrange), 1))
     nhar > length(itr.h.harmonics) && return nothing
     har = itr.h.harmonics[nhar]
-    i = _iterate(har, (nptr, col))
+    i = _iterate(har, (nptr, col, itr.rowrange, itr.colrange))
     if i === nothing
         return iterate(itr, (1, 1, nhar + 1))
     else
@@ -138,29 +186,42 @@ function Base.iterate(itr::IndicesNonzeros{<:Hamiltonian}, (nptr, col, nhar) = (
     end
 end
 
-function Base.iterate(itr::IndicesNonzeros{<:HamiltonianHarmonic}, state = (1, 1))
-    _iterate(itr.h, state)
+function Base.iterate(itr::IndicesNonzeros{<:HamiltonianHarmonic},
+                     (row, col) = (firstrow(itr), first(itr.colrange)))
+    _iterate(itr.h, (row, col, itr.rowrange, itr.colrange))
 end
 
-function _iterate(har::HamiltonianHarmonic{<:Any,<:Any,<:AbstractSparseMatrix}, (nptr, col))
-    col > size(har.h, 2) && return nothing
+# firstrow is either a rowval pointer or a row index, depending on the matrix
+firstrow(itr::IndicesNonzeros{<:Hamiltonian{<:Any,<:Any,<:Any,<:AbstractSparseMatrix}}) = 1
+firstrow(itr::IndicesNonzeros{<:Hamiltonian{<:Any,<:Any,<:Any,<:DenseMatrix}}) =
+    first(itr.rowrange)
+firstrow(itr::IndicesNonzeros{<:HamiltonianHarmonic{<:Any,<:Any,<:AbstractSparseMatrix}}) = 1
+firstrow(itr::IndicesNonzeros{<:HamiltonianHarmonic{<:Any,<:Any,<:DenseMatrix}}) =
+    first(itr.rowrange)
+
+function _iterate(har::HamiltonianHarmonic{<:Any,<:Any,<:AbstractSparseMatrix}, (nptr, col, rowrange, colrange))
+    col > last(colrange) && return nothing
     ptrs = nzrange(har.h, col)
-    nptr > length(ptrs) && return _iterate(har, (1, col + 1))
     rows = rowvals(har.h)
-    return (rows[ptrs[nptr]], col), (nptr + 1, col)
+    if nptr <= length(ptrs)
+        row = rows[ptrs[nptr]]
+        row <= last(rowrange) && return (row, col), (nptr + 1, col)
+    end
+    return _iterate(har, (1, col + 1, rowrange, colrange))
 end
 
-function _iterate(har::HamiltonianHarmonic{<:Any,<:Any,<:DenseMatrix}, (row, col))
-    col > size(har.h, 2) && return nothing
-    for row´ in row :size(har.h, 1)
+function _iterate(har::HamiltonianHarmonic{<:Any,<:Any,<:DenseMatrix}, (row, col, rowrange, colrange))
+    col > last(colrange) && return nothing
+    for row´ in row:last(rowrange)
         iszero(har.h[row´, col]) || return (row´, col), (row´ + 1, col)
     end
-    return _iterate(har, (1, col + 1))
+    return _iterate(har, (first(rowrange), col + 1, rowrange, colrange))
 end
 
-Base.IteratorSize(::IndicesNonzeros) = Base.HasLength()
-Base.length(s::IndicesNonzeros{<:Hamiltonian}) = sum(har -> _nnz(har.h), s.h.harmonics)
-Base.length(s::IndicesNonzeros{<:HamiltonianHarmonic}) = _nnz(s.h.h)
+# Base.IteratorSize(::IndicesNonzeros) = Base.HasLength()
+# Base.length(s::IndicesNonzeros{<:Hamiltonian}) = sum(har -> _nnz(har.h), s.h.harmonics)
+# Base.length(s::IndicesNonzeros{<:HamiltonianHarmonic}) = _nnz(s.h.h)
+Base.IteratorSize(::IndicesNonzeros) = Base.SizeUnknown()
 Base.IteratorEltype(::IndicesNonzeros) = Base.HasEltype()
 Base.eltype(s::IndicesNonzeros{<:Hamiltonian}) = Tuple{Int, Int, typeof(first(s.h.harmonics).dn)}
 Base.eltype(s::IndicesNonzeros{<:HamiltonianHarmonic}) = Tuple{Int, Int}
