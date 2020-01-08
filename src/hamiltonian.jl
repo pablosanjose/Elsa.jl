@@ -104,8 +104,8 @@ function nonsites(ham::Hamiltonian)
     return count
 end
 
-_nnz(h::SparseMatrixCSC) = nnz(h)
-_nnz(h::Matrix) = count(!iszero, h)
+_nnz(h::AbstractSparseMatrix) = nnz(h)
+_nnz(h::DenseMatrix) = count(!iszero, h)
 
 function _nnzdiag(s::SparseMatrixCSC)
     count = 0
@@ -118,6 +118,43 @@ function _nnzdiag(s::SparseMatrixCSC)
     return count
 end
 _nnzdiag(s::Matrix) = count(!iszero, s[i,i] for i in 1:minimum(size(s)))
+
+# Iteration tools #
+struct IndicesNonzeros{A,H<:Hamiltonian{<:Any,<:Any,<:Any,A}}
+    h::H
+end
+indicesnonzeros(h) = IndicesNonzeros(h)
+
+function iterate(s::IndicesNonzeros, (nhar, col, nptr) = (1, 1, 1))
+    nhar > length(s.h.harmonics) && return nothing
+    matrix = s.h.harmonics[nhar].h
+    col > size(matrix, 2) && return iterate(s, (nhar + 1, 1, 1))
+    return _iterate(s, (nhar, col, nptr))
+end
+
+function _iterate(s::IndicesNonzeros{<:AbstractSparseMatrix}, (nhar, col, nptr))
+    har = s.h.harmonics[nhar]
+    ptrs = nzrange(har.h, col)
+    nptr > length(ptrs) && return iterate(s, (nhar, col + 1, 1))
+    rows = rowvals(har.h)
+    return (har.dn, col, rows[ptrs[nptr]]), (nhar, col, nptr + 1)
+end
+
+function _iterate(s::IndicesNonzeros{<:DenseMatrix}, (nhar, col, row))
+    har = s.h.harmonics[nhar]
+    for row´ in row :size(har.h, 1)
+        iszero(har.h[row´, col]) || return (har.dn, col, row´), (nhar, col, row´ + 1)
+    end
+    return iterate(s, (nhar, col + 1, 1))
+end
+
+Base.IteratorSize(::IndicesNonzeros) = Base.HasLength()
+Base.length(s::IndicesNonzeros) = sum(har -> _nnz(har.h), s.h.harmonics)
+Base.IteratorEltype(::IndicesNonzeros) = Base.HasEltype()
+Base.eltype(s::IndicesNonzeros) = Tuple{typeof(first(s.h.harmonics).dn), Int, Int}
+
+# stored_indices(h::Hamiltonian) = ((har.dn, rowvals(har.h)[ptr], col) for har in h.harmonics
+#                                   for col in 1:size(har.h, 2) for ptr in nzrange(har.h, col))
 
 # External API #
 """
@@ -243,7 +280,6 @@ hamiltonian(h::Hamiltonian) =
 
 (h::Hamiltonian)(phases...) = bloch(h, phases...)
 
-
 sanitize_orbs(o::Union{Val,NameType,Integer}, names::NTuple{N}) where {N} =
     ntuple(n -> sanitize_orbs(o), Val(N))
 sanitize_orbs(o::NTuple{M,Union{NameType,Integer}}, names::NTuple{N}) where {M,N} =
@@ -266,7 +302,6 @@ sanitize_orbs(o::NameType) = (o,)
 sanitize_orbs(o::Val{N}) where {N} = ntuple(_ -> :a, Val(N))
 sanitize_orbs(o::NTuple{N,Union{Integer,NameType}}) where {N} = nametype.(o)
 sanitize_orbs(p) = throw(ArgumentError("Wrong format for orbitals, see `hamiltonian`"))
-
 
 Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.field, h.orbitals)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
