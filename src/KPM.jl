@@ -15,7 +15,10 @@ If `missing` it is computed automatically.
 
 # Example
 ```
+julia> h = LatticePresets.cubic() |> hamiltonian(hopping(1)) |> unitcell(region = RegionPresets.sphere(10));
 
+julia> Elsa.MomentaKPM(bloch(h), bandrange = (-6,6))
+Elsa.MomentaKPM{Float64}([0.9594929736144973, -0.005881595972403821, -0.4933354572913581, 0.00359537502632597, 0.09759451291347333, -0.0008081453185250322, -0.00896262538765363, 0.00048205637037715177, -0.0003705198310034668, 9.64901673962623e-20, 9.110915988898614e-18], (0.0, 6.030150753768845))
 ```
 """
 struct MomentaKPM{T}
