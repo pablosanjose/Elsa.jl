@@ -190,6 +190,8 @@ sublatsites(u::Unitcell) = diff(u.offsets)
 
 nsublats(u::Unitcell) = length(u.names)
 
+sublats(u::Unitcell) = 1:nsublats(u)
+
 #######################################################################
 # Lattice
 #######################################################################
@@ -358,6 +360,7 @@ issemibounded(lat::Superlattice) where {L} = issemibounded(lat.supercell)
 numbertype(::AbstractLattice{E,L,T}) where {E,L,T} = T
 
 sublat(lat::AbstractLattice, siteidx) = sublat(lat.unitcell, siteidx)
+sublats(lat::AbstractLattice) = sublats(lat.unitcell)
 
 siterange(lat::AbstractLattice, sublat) = siterange(lat.unitcell, sublat)
 

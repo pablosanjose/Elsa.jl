@@ -43,6 +43,7 @@ include("state.jl")
 include("mesh.jl")
 include("diagonalizer.jl")
 include("bandstructure.jl")
+include("KPM.jl")
 include("convert.jl")
 include("tools.jl")
 

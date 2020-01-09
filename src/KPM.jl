@@ -4,18 +4,19 @@
 """
     MomentaKPM(h::AbstractMatrix; ket = missing, order = 10, randomkets = 1, bandrange = missing)
 
-Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|T_n(h)|ket⟩/⟨ket|ket⟩` for a 
-given `ket::AbstractVector` and hamiltonian `h`, or `μ_n = Tr[T_n(h)]` if `ket` is 
+Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|T_n(h)|ket⟩/⟨ket|ket⟩` for a
+given `ket::AbstractVector` and hamiltonian `h`, or `μ_n = Tr[T_n(h)]` if `ket` is
 `missing`, where `T_n(x)` is the Chebyshev polynomial of order `n`.
 
-The order of the Chebyshev expansion is `order`. For the global density of states the trace 
-is estimated stochastically using a number `randomkets` of random vectors. The 
+The order of the Chebyshev expansion is `order`. For the global density of states the trace
+is estimated stochastically using a number `randomkets` of random vectors. The
 `bandbrange = (ϵmin, ϵmax)` should completely encompass the full bandwidth of `hamiltonian`.
 If `missing` it is computed automatically.
 
-    MomentaKPM(system::System; kw...)
+# Example
+```
 
-Same as above with `h = hamiltonian(sys; kw...)` (see `hamiltonian`).
+```
 """
 struct MomentaKPM{T}
     μlist::Vector{T}
@@ -23,7 +24,6 @@ struct MomentaKPM{T}
 end
 
 MomentaKPM(h::AbstractMatrix; ket = missing, kw...) = _momentaKPM(h, ket; kw...)
-MomentaKPM(sys::System; kw...) = MomentaKPM(hamiltonian(sys, kw...); kw...)
 
 function _momentaKPM(h::AbstractMatrix{Tv}, ket::AbstractVector{T}; order = 10, bandrange = missing, kw...) where {T,Tv}
     μlist = zeros(real(promote_type(T, Tv)), order + 1)
@@ -36,7 +36,7 @@ end
 function _momentaKPM(h::AbstractMatrix{Tv}, ket::Missing; randomkets = 1, order = 10, bandrange = missing, kw...) where {Tv}
     v = Vector{Tv}(undef, size(h, 2))
     μlist = zeros(real(Tv), order + 1)
-    bandbracket = _bandbracket(h, bandrange) 
+    bandbracket = _bandbracket(h, bandrange)
     for n in 1:randomkets
         _addmomenta!(μlist, randomize!(v), h, bandbracket)
     end
@@ -72,36 +72,37 @@ end
 
 function randomize!(v::AbstractVector{<:Complex})
     normalization = sqrt(length(v))
-    for i in eachindex(v) 
+    for i in eachindex(v)
         v[i] = exp(2 * π * 1im * rand()) / normalization
     end
     return v
 end
 
 function randomize!(v::AbstractVector{<:Real})
-    for i in eachindex(v) 
+    for i in eachindex(v)
         v[i] = randn()
     end
     normalize!(v)
     return v
 end
 
-function jackson!(μ::AbstractVector) 
+function jackson!(μ::AbstractVector)
     order = length(μ) - 1
     for n in eachindex(μ)
-        μ[n] *= ((order - n + 1) * cos(π * n / (order + 1)) + 
+        μ[n] *= ((order - n + 1) * cos(π * n / (order + 1)) +
                 sin(π * n / (order + 1)) * cot(π / (order + 1))) / (order + 1)
     end
     return μ
 end
 
 function _bandbracket(h, ::Missing)
-    @warn "Computing spectrum bounds..."
-    decompl, _ = partialschur(h, nev=1, tol=1e-4, which=LR());
-    decomps, _ = partialschur(h, nev=1, tol=1e-4, which=SR());
+    @warn "Computing spectrum bounds... Consider using the `bandrange` kwargs for faster performance."
+    checkloaded(:ArnoldiMethod)
+    decompl, _ = Main.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.LR());
+    decomps, _ = Main.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.SR());
     ϵmax = real(decompl.eigenvalues[1])
     ϵmin = real(decomps.eigenvalues[1])
-    @warn  "Consider using the `bandrange` kwargs for faster performance. Computed bandrange = ($ϵmin, $ϵmax)"
+    @warn  "Computed bandrange = ($ϵmin, $ϵmax)"
     return _bandbracket(h, (ϵmin, ϵmax))
 end
 
@@ -114,14 +115,14 @@ _bandbracket(h, (ϵmin, ϵmax), pad = 0.01) = ((ϵmax + ϵmin) / 2.0, (ϵmax - �
 """
     dosKPM(h::AbstractMatrix; ket = missing, randomkets = 1, order = 10, resolution = 2, bandrange = missing)
 
-Compute, using the Kernel Polynomial Method (KPM), the local density of states 
-`ρ(ϵ) = ⟨ket|δ(ϵ-h)|ket⟩/⟨ket|ket⟩` for a given `ket::AbstractVector` and hamiltonian `h`, 
+Compute, using the Kernel Polynomial Method (KPM), the local density of states
+`ρ(ϵ) = ⟨ket|δ(ϵ-h)|ket⟩/⟨ket|ket⟩` for a given `ket::AbstractVector` and hamiltonian `h`,
 or the global density of states `ρ(ϵ) = Tr[δ(ϵ-h)]` if `ket` is `missing`. A tuple of energy
 points `xk` and `ρ` values is returned.
 
-The order of the Chebyshev expansion is `order`. For the global density of states the trace 
-is estimated stochastically using a number `randomkets` of random vectors. The number of 
-energy points `xk` is `order * resolution`, rounded to the closest integer. The 
+The order of the Chebyshev expansion is `order`. For the global density of states the trace
+is estimated stochastically using a number `randomkets` of random vectors. The number of
+energy points `xk` is `order * resolution`, rounded to the closest integer. The
 `bandbrange = (ϵmin, ϵmax)` is computed automatically if `missing`.
 
     dosKPM(system::System; kw...)
