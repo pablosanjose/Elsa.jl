@@ -45,7 +45,7 @@ $i  Coordination     : $(nhoppings(ham) / nsites(ham))")
 end
 
 Base.summary(h::Hamiltonian{LA}) where {E,L,LA<:Lattice{E,L}} =
-    "Hamiltonian{<:Lattice} : $(latdim(h))D Hamiltonian on a $(L)D Lattice in $(E)D space"
+    "Hamiltonian{<:Lattice} : Hamiltonian on a $(L)D Lattice in $(E)D space"
 
 Base.summary(::Hamiltonian{LA}) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}} =
     "Hamiltonian{<:Superlattice} : $(L)D Hamiltonian on a $(L´)D Superlattice in $(E)D space"
