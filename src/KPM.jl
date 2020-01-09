@@ -7,7 +7,7 @@ struct MomentaKPM{T}
 end
 
 """
-    momentaKPM(h::AbstractMatrix; ket = missing, order = 10, randomkets = 1, bandrange = missing)
+    momentaKPM(h::AbstractMatrix, obs = I; ket = missing, order = 10, randomkets = 1, bandrange = missing)
 
 Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|T_n(h)|ket⟩/⟨ket|ket⟩` for a
 given `ket::AbstractVector` and hamiltonian `h`, or `μ_n = Tr[T_n(h)]` if `ket` is
@@ -128,16 +128,11 @@ is estimated stochastically using a number `randomkets` of random vectors. The n
 energy points `xk` is `order * resolution`, rounded to the closest integer. The
 `bandbrange = (ϵmin, ϵmax)` is computed automatically if `missing`.
 
-    dosKPM(system::System; kw...)
-
-Same as above with `h = hamiltonian(sys; kw...)` (see `hamiltonian`).
-
     dosKPM(momenta::MomentaKPM; resolution = 2)
 
 Same as above with the KPM momenta as input (see `MomentaKPM`).
 """
 dosKPM(h::AbstractMatrix; kw...) = dosKPM(MomentaKPM(h; kw...); kw...)
-dosKPM(sys::System; kw...) = dosKPM(hamiltonian(sys; kw...); kw...)
 
 function dosKPM(momenta::MomentaKPM{T}; resolution = 2, kw...) where {T}
     (center, halfwidth) = momenta.bandbracket
