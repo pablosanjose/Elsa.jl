@@ -177,6 +177,8 @@ end
 sites(u::Unitcell) = u.sites
 sites(u::Unitcell, s::Int) = view(u.sites, siterange(u, s))
 
+siteindex(u::Unitcell, sublat, idx) = idx + u.offsets[sublat]
+
 siterange(u::Unitcell, sublat) = (1+u.offsets[sublat]):u.offsets[sublat+1]
 
 nsites(u::Unitcell) = length(u.sites)
@@ -363,6 +365,8 @@ sublat(lat::AbstractLattice, siteidx) = sublat(lat.unitcell, siteidx)
 sublats(lat::AbstractLattice) = sublats(lat.unitcell)
 
 siterange(lat::AbstractLattice, sublat) = siterange(lat.unitcell, sublat)
+
+siteindex(lat::AbstractLattice, sublat, idx) = siteindex(lat.unitcell, sublat, idx)
 
 offsets(lat::AbstractLattice) = offsets(lat.unitcell)
 

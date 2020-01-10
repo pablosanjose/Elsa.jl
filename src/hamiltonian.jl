@@ -88,6 +88,10 @@ _blocktype(::Type{S}) where {S<:Number} = S
 
 blocktype(h::Hamiltonian{LA,L,M}) where {LA,L,M} = M
 
+blockdim(h::Hamiltonian) = blockdim(blocktype(h))
+blockdim(::Type{S}) where {N,S<:SMatrix{N,N}} = N
+blockdim(::Type{T}) where {T<:Number} = 1
+
 function nhoppings(ham::Hamiltonian)
     count = 0
     for h in ham.harmonics
