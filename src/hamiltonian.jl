@@ -134,37 +134,34 @@ end
 indicesnonzeros(h, rowrange = 1:size(h, 1), colrange = 1:size(h, 2)) =
     IndicesNonzeros(h, rclamp(rowrange, 1:size(h, 1)), rclamp(colrange, 1:size(h, 2)))
 
-function Base.iterate(itr::IndicesNonzeros{<:Hamiltonian},
-                      (nptr, col, nhar) = (firstrow(itr, 1), first(itr.colrange), 1))
+function Base.iterate(itr::IndicesNonzeros{<:Hamiltonian}, (nptr, col, nhar) = firststate(itr, 1))
     nhar > length(itr.h.harmonics) && return nothing
     har = itr.h.harmonics[nhar]
     i = _iterate(har, (nptr, col, itr.rowrange, itr.colrange))
     if i === nothing
-        return iterate(itr, (1, 1, nhar + 1))
+        nhar´ = nhar + 1
+        return nhar´ > length(itr.h.harmonics) ? nothing : iterate(itr, firststate(itr, nhar´))
     else
         ((row, col), (nptr, col)) = i
         return (row, col, har.dn), (nptr, col, nhar)
     end
 end
 
-function Base.iterate(itr::IndicesNonzeros{<:HamiltonianHarmonic},
-                     (row, col) = (firstrow(itr, 1), first(itr.colrange)))
+function Base.iterate(itr::IndicesNonzeros{<:HamiltonianHarmonic}, (row, col) = firststate(itr))
     _iterate(itr.h, (row, col, itr.rowrange, itr.colrange))
 end
 
-# firstrow is either a rowval pointer or a row index, depending on the matrix
-firstrow(itr::IndicesNonzeros{<:Hamiltonian{<:Any,<:Any,<:Any,<:AbstractSparseMatrix}}, col) =
-    firstrow(itr.h.harmonics[1].h, col, itr.rowrange)
-firstrow(itr::IndicesNonzeros{<:Hamiltonian{<:Any,<:Any,<:Any,<:DenseMatrix}}, col) =
-    first(itr.rowrange)
-firstrow(itr::IndicesNonzeros{<:HamiltonianHarmonic{<:Any,<:Any,<:AbstractSparseMatrix}}, col) =
-    firstrow(itr.h.h, col, itr.rowrange)
-firstrow(itr::IndicesNonzeros{<:HamiltonianHarmonic{<:Any,<:Any,<:DenseMatrix}}, col) =
-    first(itr.rowrange)
+firststate(itr::IndicesNonzeros{<:Hamiltonian}, nhar) =
+    (firstrow(itr.h.harmonics[nhar].h, first(itr.colrange), itr.rowrange), first(itr.colrange), nhar)
+firststate(itr::IndicesNonzeros{<:HamiltonianHarmonic}) =
+    (firstrow(itr.h.h, first(itr.colrange), itr.rowrange), first(itr.colrange))
 
-function firstrow(mat::AbstractMatrix, col, rowrange)
+# firstrow is either a rowval pointer or a row index, depending on the matrix
+firstrow(mat::DenseMatrix, col, rowrange) = first(rowrange)
+function firstrow(mat::AbstractSparseMatrix, col, rowrange)
     rows = rowvals(mat)
     ptr = findfirst(p -> rows[p] in rowrange, nzrange(mat, col))
+    # In case there is nothing in the column, give a ptr that will yield `nothing` for sure
     return ptr === nothing ? size(mat, 1) + 1 : ptr
 end
 
