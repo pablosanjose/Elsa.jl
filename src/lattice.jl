@@ -221,7 +221,7 @@ Base.summary(::Lattice{E,L,T}) where {E,L,T} =
 # External API #
 
 """
-    lattice([bravais::Bravais,] sublats::Sublat...; dim::Val{E}, type::T, names, orbitals)
+    lattice([bravais::Bravais,] sublats::Sublat...; dim::Val{E}, type::T, names)
 
 Create a `Lattice{E,L,T}` with Bravais matrix `bravais` and sublattices `sublats`
 converted to a common  `E`-dimensional embedding space and type `T`. To override the
