@@ -9,8 +9,8 @@ end
 """
     momentaKPM(h::AbstractMatrix, obs = I; ket = missing, order = 10, randomkets = 1, bandrange = missing)
 
-Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|T_n(h)|ket⟩/⟨ket|ket⟩` for a
-given `ket::AbstractVector` and hamiltonian `h`, or `μ_n = Tr[T_n(h)]` if `ket` is
+Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|I T_n(h)|ket⟩/⟨ket|ket⟩` for a
+given `ket::AbstractVector` and hamiltonian `h`, or `μ_n = Tr[I T_n(h)]` if `ket` is
 `missing`, where `T_n(x)` is the Chebyshev polynomial of order `n`.
 
 The order of the Chebyshev expansion is `order`. For the global density of states the trace
@@ -26,9 +26,9 @@ julia> Elsa.MomentaKPM(bloch(h), bandrange = (-6,6))
 Elsa.MomentaKPM{Float64}([0.9594929736144973, -0.005881595972403821, -0.4933354572913581, 0.00359537502632597, 0.09759451291347333, -0.0008081453185250322, -0.00896262538765363, 0.00048205637037715177, -0.0003705198310034668, 9.64901673962623e-20, 9.110915988898614e-18], (0.0, 6.030150753768845))
 ```
 """
-momentaKPM(h::AbstractMatrix; ket = missing, kw...) = _momentaKPM(h, ket; kw...)
+momentaKPM(h::AbstractMatrix; ket = missing, obs = missing, kw...) = _momentaKPM(h, ket, obs; kw...)
 
-function _momentaKPM(h::AbstractMatrix{Tv}, ket::AbstractVector{T}; order = 10, bandrange = missing, kw...) where {T,Tv}
+function _momentaKPM(h::AbstractMatrix{Tv}, ket::AbstractVector{T}, obs::Missing; order = 10, bandrange = missing, kw...) where {T,Tv}
     μlist = zeros(real(promote_type(T, Tv)), order + 1)
     bandbracket = _bandbracket(h, bandrange)
     ket0 = normalize(ket)
@@ -36,7 +36,7 @@ function _momentaKPM(h::AbstractMatrix{Tv}, ket::AbstractVector{T}; order = 10, 
     return MomentaKPM(jackson!(μlist), bandbracket)
 end
 
-function _momentaKPM(h::AbstractMatrix{Tv}, ket::Missing; randomkets = 1, order = 10, bandrange = missing, kw...) where {Tv}
+function _momentaKPM(h::AbstractMatrix{Tv}, ket::Missing, obs::Missing; randomkets = 1, order = 10, bandrange = missing, kw...) where {Tv}
     v = Vector{Tv}(undef, size(h, 2))
     μlist = zeros(real(Tv), order + 1)
     bandbracket = _bandbracket(h, bandrange)
