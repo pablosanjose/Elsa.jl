@@ -151,6 +151,8 @@ function _fast_sparse_muladd!(dst::DenseMatrix{T}, src::SparseMatrixCSC, α = I)
     return dst
 end
 
+rclamp(r1::UnitRange, r2::UnitRange) = clamp(minimum(r1), extrema(r2)...):clamp(maximum(r1), extrema(r2)...)
+
 # function _flatten_muladd!(dst::DenseMatrix{T}, src::SparseMatrixCSC{S}, α = zero(T)) where {T<:Number,N,S<:SMatrix{N,N}}
 #     checkflattenaxes(dst, src)
 #     iszero(α) ? fill!(dst, zero(eltype(src))) : (α != 1 && α != I && rmul!(dst, α))
