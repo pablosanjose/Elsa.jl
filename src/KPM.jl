@@ -7,11 +7,11 @@ struct MomentaKPM{T}
 end
 
 """
-    momentaKPM(h::AbstractMatrix, obs = I; ket = missing, order = 10, randomkets = 1, bandrange = missing)
+    momentaKPM(h::AbstractMatrix; ket = missing, obs = missing, order = 10, randomkets = 1, bandrange = missing)
 
-Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|I T_n(h)|ket⟩/⟨ket|ket⟩` for a
-given `ket::AbstractVector` and hamiltonian `h`, or `μ_n = Tr[I T_n(h)]` if `ket` is
-`missing`, where `T_n(x)` is the Chebyshev polynomial of order `n`.
+Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|A T_n(h)|ket⟩/⟨ket|ket⟩` for a
+given `ket::AbstractVector`, hamiltonian `h`, and observable `A`, or `μ_n = Tr[A T_n(h)]` if `ket` is
+`missing`, where `T_n(x)` is the Chebyshev polynomial of order `n`. `A = I` if `obs` is `missing`.
 
 The order of the Chebyshev expansion is `order`. For the global density of states the trace
 is estimated stochastically using a number `randomkets` of random vectors. The
@@ -28,34 +28,33 @@ Elsa.MomentaKPM{Float64}([0.9594929736144973, -0.005881595972403821, -0.49333545
 """
 momentaKPM(h::AbstractMatrix; ket = missing, obs = missing, kw...) = _momentaKPM(h, ket, obs; kw...)
 
-function _momentaKPM(h::AbstractMatrix{Tv}, ket::AbstractVector{T}, obs::Missing; order = 10, bandrange = missing, kw...) where {T,Tv}
+function _momentaKPM(h::AbstractMatrix{Tv}, ket::AbstractVector{T}, obs; order = 10, bandrange = missing, kw...) where {T,Tv}
     μlist = zeros(real(promote_type(T, Tv)), order + 1)
     bandbracket = _bandbracket(h, bandrange)
     ket0 = normalize(ket)
-    _addmomenta!(μlist, ket0, h, bandbracket)
+    _addmomenta!(μlist, ket0, h, bandbracket, obs)
     return MomentaKPM(jackson!(μlist), bandbracket)
 end
 
-function _momentaKPM(h::AbstractMatrix{Tv}, ket::Missing, obs::Missing; randomkets = 1, order = 10, bandrange = missing, kw...) where {Tv}
+function _momentaKPM(h::AbstractMatrix{Tv}, ket::Missing, obs; randomkets = 1, order = 10, bandrange = missing, kw...) where {Tv}
     v = Vector{Tv}(undef, size(h, 2))
     μlist = zeros(real(Tv), order + 1)
     bandbracket = _bandbracket(h, bandrange)
     for n in 1:randomkets
-        _addmomenta!(μlist, randomize!(v), h, bandbracket)
+        _addmomenta!(μlist, randomize!(v), h, bandbracket, obs)
     end
     μlist ./= randomkets
     return MomentaKPM(jackson!(μlist), bandbracket)
 end
 
-function _addmomenta!(μlist, ket, h, bandbracket)
+function _addmomenta!(μlist, ket, h, bandbracket, obs::Missing)
     order = length(μlist) - 1
     ket0 = ket
     ket1 = similar(ket)
     mulscaled!(ket1, h, ket0, bandbracket)
     ket2 = similar(ket)
-
-    μlist[1] += μ0 = 1.0
-    μlist[2] += μ1 = real(ket0' * ket1)
+    μlist[1]  += μ0 = 1.0
+    μlist[2]  += μ1 = real(ket0' * ket1)
     @showprogress for n in 3:2:(order+1)
         μlist[n] += 2 * real(ket1' * ket1) - μ0
         n + 1 > order + 1 && break
@@ -63,6 +62,26 @@ function _addmomenta!(μlist, ket, h, bandbracket)
         @. ket2 = 2 * ket2 - ket0
         μlist[n + 1] += 2 * real(ket2' * ket1) - μ1
         ket0, ket1, ket2 = ket1, ket2, ket0
+    end
+    return μlist
+end
+
+function _addmomenta!(μlist, ket, h, bandbracket, obs::AbstractMatrix)
+    order = length(μlist) - 1
+    ket0 = ket
+    ketL = similar(ket)
+    ket1 = similar(ket)
+    ket2 = similar(ket)
+    mul!(ketL', ket', obs) 
+    mulscaled!(ket1, h, ket0, bandbracket)
+    μlist[1] = real(ketL' * ket0)
+    μlist[2] = real(ketL' * ket1)
+    @showprogress for n in 3:1:(order+1) 
+        mulscaled!(ket2, h, ket1, bandbracket)
+        @. ket2 = 2 * ket2 - ket0
+        μlist[n] += real(ketL' * ket2)
+        n + 1 > order + 1 && break
+        ket0, ket1, ket2 =  ket1, ket2, ket0 
     end
     return μlist
 end
