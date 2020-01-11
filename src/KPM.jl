@@ -151,7 +151,7 @@ energy points `xk` is `order * resolution`, rounded to the closest integer. The
 
 Same as above with the KPM momenta as input (see `MomentaKPM`).
 """
-dosKPM(h::AbstractMatrix; kw...) = dosKPM(MomentaKPM(h; kw...); kw...)
+dosKPM(h::AbstractMatrix; obs = missing, kw...) = dosKPM(momentaKPM(h, obs = missing; kw...); kw...) 
 
 function dosKPM(momenta::MomentaKPM{T}; resolution = 2, kw...) where {T}
     (center, halfwidth) = momenta.bandbracket
@@ -164,3 +164,18 @@ function dosKPM(momenta::MomentaKPM{T}; resolution = 2, kw...) where {T}
     @. xk = center + halfwidth * xk
     return xk, doslist
 end
+
+"""
+thermalmeanKPM(A::AbstractMatrix, h::AbstractMatrix; ketset = missing, T = 0 ,ket = missing, randomkets = 1, order = 10, resolution = 2, bandrange = missing)
+
+Compute, using the Kernel Polynomial Method (KPM), the thermal expectation value
+`<A> = Σ_k f(E_k,E_F) <k|A|k> =  ∫dE f(E,E_f) Tr [A δ(E-H)] = Tr [A f(H,E_f)]`
+for a given hermitian operator `A` and a hamiltonian `h`. `f(E,E_f)` is the Fermi-Dirac 
+distribution function. 
+
+ """
+
+ thermalmeanKPM(A::AbstractMatrix, h::AbstractMatrix; kw...) = thermalmeanKPM(MomentaKPM(h; kw...), kw...)
+ 
+#  function thermalmean(momenta::MomentaKPM{T}; resolution = 2)
+#     (center, halfwidth) = momenta.bandbracket

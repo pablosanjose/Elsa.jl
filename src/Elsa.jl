@@ -11,15 +11,14 @@ using Requires
 # end
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      ProgressMeter, LinearMaps, Random
-      #FFTW
+      ProgressMeter, LinearMaps, Random, FFTW
 
 using SparseArrays: getcolptr
 
 export sublat, bravais, lattice, dims, hopping, onsite, hamiltonian, randomstate,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!, similarmatrix,
        sites, bandstructure, marchingmesh, defaultmethod, bands, vertices, states,
-       flatten, wrap
+       flatten, wrap, momentaKPM, dosKPM
 
 export LatticePresets, RegionPresets
 
