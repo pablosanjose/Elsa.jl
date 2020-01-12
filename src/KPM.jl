@@ -9,9 +9,12 @@ end
 """
     momentaKPM(h::AbstractMatrix; ket = missing, obs = missing, order = 10, randomkets = 1, bandrange = missing)
 
-Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|A T_n(h)|ket⟩/⟨ket|ket⟩` for a
-given `ket::AbstractVector`, hamiltonian `h`, and observable `A`, or `μ_n = Tr[A T_n(h)]` if `ket` is
-`missing`, where `T_n(x)` is the Chebyshev polynomial of order `n`. `A = I` if `obs` is `missing`.
+Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|A T_n(h)|ket⟩/⟨ket|ket⟩` where `T_n(x)` 
+is the Chebyshev polynomial of order `n`, for a given `ket::AbstractVector`, hamiltonian `h`, and 
+observable `A`. If `ket` is `missing` computes the momenta by means of a stochastic trace
+`μ_n = Tr[A T_n(h)]`. If `ket::AbstractMatrix` the trace is computed over a user-specified set of kets stored
+in `ket`. In the last case, the kets are encoded as the columns (or rows) of a size(h) diagonal sparse matrix.
+`A = I` if `obs` is `missing`.
 
 The order of the Chebyshev expansion is `order`. For the global density of states the trace
 is estimated stochastically using a number `randomkets` of random vectors. The
@@ -29,10 +32,26 @@ Elsa.MomentaKPM{Float64}([0.9594929736144973, -0.005881595972403821, -0.49333545
 momentaKPM(h::AbstractMatrix; ket = missing, obs = missing, kw...) = _momentaKPM(h, ket, obs; kw...)
 
 function _momentaKPM(h::AbstractMatrix{Tv}, ket::AbstractVector{T}, obs; order = 10, bandrange = missing, kw...) where {T,Tv}
+   
     μlist = zeros(real(promote_type(T, Tv)), order + 1)
     bandbracket = _bandbracket(h, bandrange)
     ket0 = normalize(ket)
     _addmomenta!(μlist, ket0, h, bandbracket, obs)
+    return MomentaKPM(jackson!(μlist), bandbracket)
+end
+
+function _momentaKPM(h::AbstractMatrix{Tv}, ket::AbstractMatrix{T}, obs; order = 10, bandrange = missing, kw...) where {T,Tv}
+    v = zeros(Tv, size(h,1))
+    μlist = zeros(real(Tv), order + 1)
+    bandbracket = _bandbracket(h, bandrange)
+    numkets = Int64(sum(nonzeros(ket)))
+    pos = [i[1] for i in findall(!iszero, ket)]; 
+    for n in pos
+        v[n] = 1.0
+        _addmomenta!(μlist, v, h, bandbracket, obs)
+        v[n] = 0.0
+    end
+    μlist ./= numkets
     return MomentaKPM(jackson!(μlist), bandbracket)
 end
 
@@ -108,6 +127,10 @@ function randomize!(v::AbstractVector{<:Real})
     return v
 end
 
+function keti!(v, dim, i)
+    v = zeros(v)
+end
+
 function jackson!(μ::AbstractVector)
     order = length(μ) - 1
     for n in eachindex(μ)
@@ -145,12 +168,11 @@ points `xk` and `ρ` values is returned.
 The order of the Chebyshev expansion is `order`. For the global density of states the trace
 is estimated stochastically using a number `randomkets` of random vectors. The number of
 energy points `xk` is `order * resolution`, rounded to the closest integer. The
-`bandbrange = (ϵmin, ϵmax)` is computed automatically if `missing`.
+`bandbrange = (ϵmin, ϵmax)` is computed automatically if `missing`. 
+ """
+#    dosKPM(momenta::MomentaKPM; resolution = 2)
+#Same as above with the KPM momenta as input (see `MomentaKPM`).
 
-    dosKPM(momenta::MomentaKPM; resolution = 2)
-
-Same as above with the KPM momenta as input (see `MomentaKPM`).
-"""
 dosKPM(h::AbstractMatrix; obs = missing, kw...) = dosKPM(momentaKPM(h, obs = missing; kw...); kw...) 
 
 function dosKPM(momenta::MomentaKPM{T}; resolution = 2, kw...) where {T}
@@ -166,16 +188,51 @@ function dosKPM(momenta::MomentaKPM{T}; resolution = 2, kw...) where {T}
 end
 
 """
-thermalmeanKPM(A::AbstractMatrix, h::AbstractMatrix; ketset = missing, T = 0 ,ket = missing, randomkets = 1, order = 10, resolution = 2, bandrange = missing)
+thermalaverageKPM(A::AbstractMatrix, h::AbstractMatrix; ketset = missing, T = 0 ,ket = missing, randomkets = 1, order = 10, resolution = 2, bandrange = missing)
 
 Compute, using the Kernel Polynomial Method (KPM), the thermal expectation value
 `<A> = Σ_k f(E_k,E_F) <k|A|k> =  ∫dE f(E,E_f) Tr [A δ(E-H)] = Tr [A f(H,E_f)]`
-for a given hermitian operator `A` and a hamiltonian `h`. `f(E,E_f)` is the Fermi-Dirac 
-distribution function. 
+for a given hermitian operator `A` and a hamiltonian `h`. If `ketset::AbstractMatrix` or
+`ketset::AbstractMatrix` computes the thermal average over the kets in ketset (see momentaKPM).
+
+`f(E,E_f)` is the Fermi-Dirac distribution function. The order of the Chebyshev expansion
+is `order`. `T` is the temperature
+and `Ef` the Fermi energy.
 
  """
+thermalaverageKPM(h::AbstractMatrix, A::AbstractMatrix; ket = missing, kw...) = thermalaverageKPM(momentaKPM(h, obs = A, ket = ket; kw...); kw...)
 
- thermalmeanKPM(A::AbstractMatrix, h::AbstractMatrix; kw...) = thermalmeanKPM(MomentaKPM(h; kw...), kw...)
+function thermalaverageKPM(momenta::MomentaKPM{T}; temp = 0.0, Ef = 0.0, kw...) where {T} 
+    (center, halfwidth) = momenta.bandbracket
+    Ef = Ef * halfwidth + center
+    dim = length(momenta.μlist)
+    @warn "Computing the integrals..."
+    meanlist = [_intαn(n,Ef,temp) for n in 0:dim-1]
+    jackson!(meanlist) 
+    return halfwidth * sum(meanlist .* (momenta.μlist .* halfwidth .+ center))    #Rescale A in energy units. Potential problem
+end
+
+_intαn(n,Ef,temp) = QuadGK.quadgk(E -> αn(n,E,Ef,temp), -1., 1., atol= 1e-10, rtol=1e-10)[1]
+
+αn(n,E,Ef,temp) = fermifun(E,Ef,temp) * 2/(π*(1-E^2)^(-1/2)) * chebypol(n,E) / (1+(n==0 ? 1 : 0))
+
+fermifun(E,Ef,temp) = temp==0 ? (E<Ef ? 1 : 0) : (1/(1+exp((E-0.)/(8.6173324*10^-2*temp))))   
+
+function chebypol(m,x) 
+    cheby0=1.0
+    cheby1=x
+    if m==0
+        chebym = cheby0
+    elseif m == 1
+        chebym = cheby1
+    else
+        for i in 2:m
+            chebym = 2*x*cheby1 - cheby0
+            cheby0, cheby1 = cheby1, chebym
+        end
+    end
+    return chebym
+end
  
 #  function thermalmean(momenta::MomentaKPM{T}; resolution = 2)
 #     (center, halfwidth) = momenta.bandbracket
