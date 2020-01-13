@@ -44,7 +44,7 @@ sublat(sites::Vector{<:SVector}; name = :_, kw...) =
     Sublat(sites, nametype(name))
 sublat(vs::Union{Tuple,AbstractVector{<:Number}}...; kw...) = sublat(toSVectors(vs...); kw...)
 
-transform!(s::S, f::F) where {S <: Sublat,F <: Function} = (s.sites .= f.(s.sites); s)
+# transform!(s::S, f::F) where {S <: Sublat,F <: Function} = (s.sites .= f.(s.sites); s)
 
 #######################################################################
 # Bravais
@@ -194,10 +194,13 @@ nsublats(u::Unitcell) = length(u.names)
 
 sublats(u::Unitcell) = 1:nsublats(u)
 
+transform!(u::Unitcell, f::Function) = (u.sites .= f.(u.sites); u)
+
 #######################################################################
 # Lattice
 #######################################################################
-struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: AbstractLattice{E,L,T}
+# Lattice is mutable to allow transform! (which changes bravais)
+mutable struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: AbstractLattice{E,L,T}
     bravais::B
     unitcell::U
 end
@@ -395,6 +398,17 @@ Extract the positions of all sites in a lattice, or in a specific sublattice
 """
 sites(lat::AbstractLattice) = sites(lat.unitcell)
 sites(lat::AbstractLattice, s) = sites(lat.unitcell, s)
+
+"""
+    transform!(lat::Lattice, f::Function)
+
+Transform the site positions of `lat` by applying `f` to them in place.
+"""
+function transform!(lat::Lattice, f::Function)
+    transform!(lat.unitcell, f)
+    lat.bravais = transform(lat.bravais, f)
+    return lat
+end
 
 #######################################################################
 # supercell

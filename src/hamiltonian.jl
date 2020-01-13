@@ -371,6 +371,19 @@ nsites(h::HamiltonianHarmonic) = size(h.h, 1)
 
 norbitals(h::Hamiltonian) = length.(h.orbitals)
 
+# External API #
+
+"""
+    transform!(h::Hamiltonian, f::Function)
+
+Transform the site positions of the Hamiltonian's lattice in place without modifying the
+Hamiltonian harmonics.
+"""
+function transform!(h::Hamiltonian, f::Function)
+    transform!(h.lattice, f)
+    return h
+end
+
 # Indexing #
 
 Base.push!(h::Hamiltonian{<:Any,L}, dn::NTuple{L,Int}) where {L} = push!(h, SVector(dn...))

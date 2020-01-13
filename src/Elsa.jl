@@ -19,9 +19,9 @@ using SparseArrays: getcolptr
 export sublat, bravais, lattice, dims, hopping, onsite, hamiltonian, randomstate,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!, similarmatrix,
        sites, bandstructure, marchingmesh, defaultmethod, bands, vertices, states,
-       flatten, wrap
+       flatten, wrap, transform!
 
-export LatticePresets, RegionPresets
+export LatticePresets, RegionPresets, HamiltonianPresets
 
 export LinearAlgebraPackage, ArpackPackage, KrylovKitPackage
 
