@@ -265,19 +265,14 @@ struct NondiagonalTerm{T<:HoppingTerm,S<:Tuple{Vararg{UnitRange{Int}}}} <: Abstr
 end
 
 function nondiagonal(m::TightbindingModel{N}, nsublats::Tuple{Vararg{Int}}) where {N}
-    sranges = sublatranges(nsublats)
+    sranges = sublatranges(nsublats...)
     return TightbindingModel(ntuple(i -> NondiagonalTerm(m.terms[i], sranges), Val(N)))
 end
 
-function sublatranges(nsublats::NTuple{N,Int}) where {N}
-    o = 1
-    r = ntuple(Val(N)) do i
-            ri = o:o + nsublats[i] - 1
-            o += nsublats[i]
-            return ri
-        end
-    return r
-end
+
+sublatranges(i::Int, is::Int...) = _sublatranges((1:i,), is...)
+_sublatranges(rs::Tuple, i::Int, is...) = _sublatranges((rs..., last(last(rs)) + 1: last(last(rs)) + i), is...)
+_sublatranges(rs::Tuple) = rs
 
 function Base.show(io::IO, h::NondiagonalTerm)
     i = get(io, :indent, "")
