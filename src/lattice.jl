@@ -414,33 +414,57 @@ function transform!(lat::Lattice, f::Function)
     return lat
 end
 
-# """
-#     combine(lats::Lattice...)
+"""
+    combine(lats::Lattice...)
 
-# When all `lats` have compatible Bravais vectors, combine them into a single lattice
-# """
-# function combine(lats::Lattice...)
-#     is_bravais_compatible(lats...) || throw(ArgumentError("Lattices must share all Bravais vectors"))
-#     u = combine((l -> l.unitcell).(lats)...)
+If all `lats` have compatible Bravais vectors, combine them into a single lattice.
+Sublattice names are renamed to be unique if necessary.
+"""
+function combine(lats::Lattice...)
+    is_bravais_compatible(lats...) || throw(ArgumentError("Lattices must share all Bravais vectors"))
+    bravais´ = first(lats).bravais
+    unitcell´ = combine((l -> l.unitcell).(lats)...)
+    return Lattice(bravais´, unitcell´)
+end
 
-# end
+function combine(us::Vararg{Unitcell,N}) where {N}
+    sites = vcat(ntuple(i -> us[i].sites, Val(N))...)
+    names = uniquenames(tuplejoin(ntuple(i -> us[i].names, Val(N))...))
+    offsets = combined_offsets(us...)
+    return Unitcell(sites, names, offsets)
+end
 
+is_bravais_compatible() = true
+is_bravais_compatible(lat::Lattice, lats::Lattice...) = all(l -> isequal(lat.bravais, l.bravais), lats)
 
-# is_bravais_compatible() = true
-# is_bravais_compatible(lat::Lattice, lats::Lattice...) = all(l -> isequal(lat.bravais, l.bravais), lats)
+function Base.isequal(b1::Bravais{E,L}, b2::Bravais{E,L}) where {E,L}
+    vs1 = ntuple(i -> b1.matrix[:, i], Val(L))
+    vs2 = ntuple(i -> b2.matrix[:, i], Val(L))
+    for v2 in vs2
+        found = false
+        for v1 in vs1
+            (isapprox(v1, v2) || isapprox(v1, -v2)) && (found = true; break)
+        end
+        !found && return false
+    end
+    return true
+end
 
-# function Base.isequal(b1::Bravais{E,L}, b2::Bravais{E,L}) where {E,L}
-#     vs1 = ntuple(i -> b1.matrix[:, i], Val(L))
-#     vs2 = ntuple(i -> b2.matrix[:, i], Val(L))
-#     for v2 in vs2
-#         found = false
-#         for v1 in vs1
-#             (isapprox(v1, v2) || isapprox(v1, -v2)) && (found = true; break)
-#         end
-#         !found && return false
-#     end
-#     return true
-# end
+function combined_offsets(us::Unitcell...)
+    nsubs = sum(nsublats, us)
+    offsets = Vector{Int}(undef, nsubs + 1)
+    lastoffset = 0
+    idx = 1
+    for u in us
+        for idx´ in 1:(length(u.offsets) - 1)
+            offsets[idx] = lastoffset + u.offsets[idx´]
+            idx += 1
+        end
+        lastoffset = u.offsets[end]
+    end
+    offsets[end] = lastoffset + last(us).offsets[end]
+    return offsets
+end
 
 #######################################################################
 # supercell

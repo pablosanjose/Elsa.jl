@@ -2,10 +2,12 @@
 # TightbindingModelTerm
 #######################################################################
 abstract type TightbindingModelTerm end
+abstract type AbstractOnsiteTerm <: TightbindingModelTerm end
+abstract type AbstractHoppingTerm <: TightbindingModelTerm end
 
 struct OnsiteTerm{F,
                   S<:Union{Missing,Tuple{Vararg{NameType}}},
-                  C} <: TightbindingModelTerm
+                  C} <: AbstractOnsiteTerm
     o::F
     sublats::S
     coefficient::C
@@ -16,7 +18,7 @@ struct HoppingTerm{F,
                    S<:Union{Missing,Tuple{Vararg{Tuple{NameType,NameType}}}},
                    D<:Union{Missing,Tuple{Vararg{SVector{L,Int}}} where L},
                    R<:Union{Missing,AbstractFloat},
-                   C} <: TightbindingModelTerm
+                   C} <: AbstractHoppingTerm
     h::F
     sublats::S
     dns::D
@@ -65,7 +67,7 @@ function sublats(t::OnsiteTerm{<:Any,<:Tuple}, lat::AbstractLattice)
 end
 
 sublats(t::HoppingTerm{<:Any,Missing}, lat::AbstractLattice) =
-    collect(Iterators.product(1:nsublats(lat), 1:nsublats(lat)))
+    vec(collect(Iterators.product(1:nsublats(lat), 1:nsublats(lat))))
 function sublats(t::HoppingTerm{<:Any,<:Tuple}, lat::AbstractLattice)
     names = lat.unitcell.names
     s = Tuple{Int,Int}[]
@@ -217,6 +219,9 @@ Base.:*(x, t::HoppingTerm) =
 Base.:*(t::TightbindingModelTerm, x) = x * t
 Base.:-(t::TightbindingModelTerm) = (-1) * t
 
+LinearAlgebra.ishermitian(t::OnsiteTerm) = t.forcehermitian
+LinearAlgebra.ishermitian(t::HoppingTerm) = t.forcehermitian
+
 # Base.:+(t1::TightbindingModelTerm, t2::TightbindingModelTerm) = TightbindingModel((t1, t2))
 # Base.:-(t1::TightbindingModelTerm, t2::TightbindingModelTerm) = TightbindingModel((t1, -t2))
 
@@ -249,8 +254,53 @@ function Base.show(io::IO, m::TightbindingModel{N}) where {N}
 end
 
 LinearAlgebra.ishermitian(m::TightbindingModel) = all(t -> ishermitian(t), m.terms)
-LinearAlgebra.ishermitian(t::TightbindingModelTerm) = t.forcehermitian
 
+#######################################################################
+# nondiagonal
+#######################################################################
+
+struct NondiagonalTerm{T<:HoppingTerm,S<:Tuple{Vararg{UnitRange{Int}}}} <: AbstractHoppingTerm
+    term::T
+    sublatranges::S
+end
+
+function nondiagonal(m::TightbindingModel{N}, nsublats::Tuple{Vararg{Int}}) where {N}
+    sranges = sublatranges(nsublats)
+    return TightbindingModel(ntuple(i -> NondiagonalTerm(m.terms[i], sranges), Val(N)))
+end
+
+function sublatranges(nsublats::NTuple{N,Int}) where {N}
+    o = 1
+    r = ntuple(Val(N)) do i
+            ri = o:o + nsublats[i] - 1
+            o += nsublats[i]
+            return ri
+        end
+    return r
+end
+
+function Base.show(io::IO, h::NondiagonalTerm)
+    i = get(io, :indent, "")
+    show(io, h.term)
+    print(io,"\n$(i)  Nondiagonal only : $(h.sublatranges)")
+end
+
+Base.:*(x, t::NondiagonalTerm) = NondiagonalTerm(x * t.term)
+
+LinearAlgebra.ishermitian(t::NondiagonalTerm) = ishermitian(t.term)
+
+function sublats(t::NondiagonalTerm, lat::AbstractLattice)
+    s = sublats(t.term, lat)
+    sr = t.sublatranges
+    filter!(spair ->  findblock(first(spair), sr) != findblock(last(spair), sr), s)
+    return s
+end
+
+findblock(s, sr) = findfirst(r -> s in r, sr)
+
+#######################################################################
+# checkmodelorbs - check for inconsistent orbital dimensions
+#######################################################################
 checkmodelorbs(model::TightbindingModel, orbs, lat) =
     foreach(term -> _checkmodelorbs(term, orbs, lat), model.terms)
 
@@ -267,6 +317,8 @@ function _checkmodelorbs(term::OnsiteTerm, orbs, lat)
     end
     return nothing
 end
+
+_checkmodelorbs(nt::NondiagonalTerm, orbs, lat) = _checkmodelorbs(nt.term, orbs, lat)
 
 _checkmodelorbs(s::SMatrix, m, n = m) =
     size(s) == (m, n) || @warn("Possible dimension mismatch between model and Hamiltonian. Did you correctly specify the `orbitals` in hamiltonian?")

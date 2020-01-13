@@ -55,16 +55,19 @@ function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 =
     sAtop = sublat((0.0, -0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :At)
     sBtop = sublat((0.0,  0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :Bt)
     br = a0 * bravais(( cos(pi/3), sin(pi/3), 0),
-                           (-cos(pi/3), sin(pi/3), 0))
+                      (-cos(pi/3), sin(pi/3), 0))
+    # Supercell matrices sc.
+    # The one here is a [1 0; -1 1] rotation of the one in Phys. Rev. B 86, 155449 (2012)
     if gcd(r, 3) == 1
-        scbot = @SMatrix[m -(m+r); (m+r) 2m+r]
-        sctop = @SMatrix[m+r -m; m 2m+r]
+        scbot = @SMatrix[m -(m+r); (m+r) 2m+r] * @SMatrix[1 0; -1 1]
+        sctop = @SMatrix[m+r -m; m 2m+r] * @SMatrix[1 0; -1 1]
     else
-        scbot = @SMatrix[m+r÷3 -r÷3; r÷3 m+2r÷3]
-        sctop = @SMatrix[m+2r÷3 r÷3; -r÷3 m+r÷3]
+        scbot = @SMatrix[m+r÷3 -r÷3; r÷3 m+2r÷3] * @SMatrix[1 0; -1 1]
+        sctop = @SMatrix[m+2r÷3 r÷3; -r÷3 m+r÷3] * @SMatrix[1 0; -1 1]
     end
-    lattop = lattice(br, sAtop, sBtop; dim = Val(3))
-    latbot = lattice(br, sAbot, sBbot; dim = Val(3))
+
+    lattop = lattice(br, sAtop, sBtop)
+    latbot = lattice(br, sAbot, sBbot)
     modelintra = hopping(hopintra, range = rangeintralayer)
     htop = hamiltonian(lattop, modelintra; kwsys...) |> unitcell(sctop)
     hbot = hamiltonian(latbot, modelintra; kwsys...) |> unitcell(scbot)
@@ -76,9 +79,8 @@ function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 =
     end
     modelinter = hopping(
         (r,dr) -> hopinter * exp(-3*(norm(dr)/interlayerdistance - 1)) * dr[3]^2/sum(abs2,dr),
-        range = rangeinterlayer,
-        sublats = ((:Ab,:At), (:Ab,:Bt), (:Bb,:At), (:Bb,:Bt)))
-    return combine(hbot, htop, modelinter)
+        range = rangeinterlayer)
+    return combine(hbot, htop; coupling = modelinter)
 end
 
 end # module

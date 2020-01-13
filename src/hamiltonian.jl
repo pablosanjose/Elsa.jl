@@ -88,6 +88,14 @@ _blocktype(::Type{S}) where {S<:Number} = S
 
 blocktype(h::Hamiltonian{LA,L,M}) where {LA,L,M} = M
 
+promote_blocktype(hs::Hamiltonian...) = promote_blocktype(blocktype.(hs)...)
+promote_blocktype(s1::Type, s2::Type, ss::Type...) =
+    promote_blocktype(promote_blocktype(s1, s2), ss...)
+promote_blocktype(::Type{SMatrix{N1,N1,T1,NN1}}, ::Type{SMatrix{N2,N2,T2,NN2}}) where {N1,NN1,T1,N2,NN2,T2} =
+    SMatrix{max(N1, N2), max(N1, N2), promote_type(T1, T2), max(NN1,NN2)}
+promote_blocktype(T1::Type{<:Number}, T2::Type{<:Number}) = promote_type(T1, T2)
+promote_blocktype(T::Type) = T
+
 blockdim(h::Hamiltonian) = blockdim(blocktype(h))
 blockdim(::Type{S}) where {N,S<:SMatrix{N,N}} = N
 blockdim(::Type{T}) where {T<:Number} = 1
@@ -369,6 +377,8 @@ issemibounded(h::Hamiltonian) = issemibounded(h.lattice)
 nsites(h::Hamiltonian) = isempty(h.harmonics) ? 0 : nsites(first(h.harmonics))
 nsites(h::HamiltonianHarmonic) = size(h.h, 1)
 
+nsublats(h::Hamiltonian) = nsublats(h.lattice)
+
 norbitals(h::Hamiltonian) = length.(h.orbitals)
 
 # External API #
@@ -441,10 +451,23 @@ end
 IJV{L,M}(dn::SVector{L} = zero(SVector{L,Int})) where {L,M} =
     IJV(dn, Int[], Int[], M[])
 
-function IJVBuilder(::Type{M}, lat::AbstractLattice{E,L,T}, orbs) where {E,L,T,M}
-    ijvs = IJV{L,M}[]
+function IJVBuilder(lat::AbstractLattice{E,L,T}, orbs, ijvs::Vector{IJV{L,M}}) where {E,L,T,M}
     kdtrees = Vector{KDTree{SVector{E,T},Euclidean,T}}(undef, nsublats(lat))
     return IJVBuilder(lat, orbs, ijvs, kdtrees)
+end
+
+IJVBuilder(lat::AbstractLattice{E,L}, orbs, ::Type{M}) where {E,L,M} =
+    IJVBuilder(lat, orbs, IJV{L,M}[])
+
+function IJVBuilder(lat::AbstractLattice{E,L}, orbs, hs::Hamiltonian...) where {E,L}
+    M = promote_blocktype(hs...)
+    ijvs = IJV{L,M}[]
+    builder = IJVBuilder(lat, orbs, ijvs)
+    for h in hs, har in h.harmonics
+        ijv = builder[har.dn]
+        push!(ijv, har)
+    end
+    return builder
 end
 
 function Base.getindex(b::IJVBuilder{L,M}, dn::SVector{L2,Int}) where {L,L2,M}
@@ -468,26 +491,45 @@ function Base.resize!(h::IJV, n)
     return h
 end
 
-Base.push!(h::IJV, (i, j, v)) = (push!(h.i, i); push!(h.j, j); push!(h.v, v))
+Base.push!(ijv::IJV, (i, j, v)::Tuple) = (push!(ijv.i, i); push!(ijv.j, j); push!(ijv.v, v))
+
+function Base.push!(ijv::IJV{L,M}, h::HamiltonianHarmonic) where {L,M}
+    I, J, V = findnz(h.h)
+    for (i, j, v) in zip(I, J, V)
+        push!(ijv, (i, j, padtotype(v, M)))
+    end
+    return ijv
+end
 
 #######################################################################
 # hamiltonian_sparse
 #######################################################################
-function hamiltonian_sparse(::Type{M}, lat::AbstractLattice{E,L}, orbs, model; field = missing) where {E,L,M}
-    checkmodelorbs(model, orbs, lat)
-    builder = IJVBuilder(M, lat, orbs)
-    applyterms!(builder, terms(model)...)
-    HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
-    n = nsites(lat)
-    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
-    return Hamiltonian(lat, harmonics, Field(field, lat), orbs, n, n)
+function hamiltonian_sparse(Mtype, lat, orbs, model; field = missing)
+    builder = IJVBuilder(lat, orbs, Mtype)
+    return hamiltonian_sparse!(builder, lat, orbs, model, Field(field, lat))
 end
+
+function hamiltonian_sparse!(builder::IJVBuilder{L,M}, lat::AbstractLattice{E,L}, orbs, model, field) where {E,L,M}
+    checkmodelorbs(model, orbs, lat)
+    applyterms!(builder, terms(model)...)
+    n = nsites(lat)
+    HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
+    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
+    return Hamiltonian(lat, harmonics, field, orbs, n, n)
+end
+
 
 applyterms!(builder, terms...) = foreach(term -> applyterm!(builder, term), terms)
 
-function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm) where {L,M}
+applyterm!(builder::IJVBuilder, term::Union{OnsiteTerm, HoppingTerm}) =
+    applyterm!(builder, term, sublats(term, builder.lat))
+
+applyterm!(builder::IJVBuilder, ndterm::NondiagonalTerm) =
+    applyterm!(builder, ndterm.term, sublats(ndterm, builder.lat))
+
+function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm, termsublats) where {L,M}
     lat = builder.lat
-    for s in sublats(term, lat)
+    for s in termsublats
         is = siterange(lat, s)
         dn0 = zero(SVector{L,Int})
         ijv = builder[dn0]
@@ -502,10 +544,10 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm) where {L,M}
     return nothing
 end
 
-function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm) where {L,M}
+function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) where {L,M}
     checkinfinite(term)
     lat = builder.lat
-    for (s1, s2) in sublats(term, lat)
+    for (s1, s2) in termsublats
         is, js = siterange(lat, s1), siterange(lat, s2)
         dns = dniter(term.dns, Val(L))
         for dn in dns
@@ -692,6 +734,31 @@ function add_or_push!(hs::Vector{<:HamiltonianHarmonic}, dn, matrix::AbstractMat
     newh = HamiltonianHarmonic(dn, matrix)
     push!(hs, newh)
     return newh
+end
+
+#######################################################################
+# combine
+#######################################################################
+"""
+    combine(hams::Hamiltonian...; coupling = missing)
+
+Build a new Hamiltonian `h` that combines all `hams` as diagonal blocks, and applies
+`coupling::Model`, if provided, to build the off-diagonal couplings. Note that the diagonal
+blocks are not modified by the coupling model. Any field in the source Hamiltonians is
+removed.
+"""
+combine(hams::Hamiltonian...; coupling = missing) = _combine(coupling, hams...)
+
+_combine(::Missing, hams...) = _combine(TightbindingModel(), hams...)
+
+function _combine(model::TightbindingModel, hams::Hamiltonian...)
+    lat = combine((h -> h.lattice).(hams)...)
+    orbs = tuplejoin((h -> h.orbitals).(hams)...)
+    builder = IJVBuilder(lat, orbs, hams...)
+    model´ = nondiagonal(model, nsublats.(hams))
+    field = Field(missing, lat)
+    ham = hamiltonian_sparse!(builder, lat, orbs, model´, field)
+    return ham
 end
 
 #######################################################################
