@@ -44,42 +44,42 @@ module HamiltonianPresets
 
 using Elsa, LinearAlgebra
 
-# function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 = 0.246,
-#                             interlayerdistance = 1.36a0, rangeintralayer = a0/sqrt(3),
-#                             rangeinterlayer = 4a0/sqrt(3), hopintra = 2.70, hopinter = 0.48,
-#                             kwsys...)
-#     (m, r) = twistindices
-#     θ = acos((3m^2 + 3m*r +r^2/2)/(3m^2 + 3m*r + r^2))
-#     sAbot = sublat((0.0, -0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Ab)
-#     sBbot = sublat((0.0,  0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Bb)
-#     sAtop = sublat((0.0, -0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :At)
-#     sBtop = sublat((0.0,  0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :Bt)
-#     br = a0 * bravais(( cos(pi/3), sin(pi/3), 0),
-#                            (-cos(pi/3), sin(pi/3), 0))
-#     if gcd(r, 3) == 1
-#         scbot = @SMatrix[m -(m+r); (m+r) 2m+r]
-#         sctop = @SMatrix[m+r -m; m 2m+r]
-#     else
-#         scbot = @SMatrix[m+r÷3 -r÷3; r÷3 m+2r÷3]
-#         sctop = @SMatrix[m+2r÷3 r÷3; -r÷3 m+r÷3]
-#     end
-#     lattop = lattice(br, sAtop, sBtop; dim = Val(3))
-#     latbot = lattice(br, sAbot, sBbot; dim = Val(3))
-#     modelintra = hopping(hopintra, range = rangeintralayer)
-#     htop = hamiltonian(lattop, modelintra; kwsys...) |> unitcell(sctop)
-#     hbot = hamiltonian(latbot, modelintra; kwsys...) |> unitcell(scbot)
-#     let R = @SMatrix[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]
-#         transform!(htop, r -> R * r)
-#     end
-#     let R = @SMatrix[cos(θ/2) sin(θ/2) 0; -sin(θ/2) cos(θ/2) 0; 0 0 1]
-#         transform!(hbot, r -> R * r)
-#     end
-#     modelinter = hopping(
-#         (r,dr) -> hopinter * exp(-3*(norm(dr)/interlayerdistance - 1)) * dr[3]^2/sum(abs2,dr),
-#         range = rangeinterlayer,
-#         sublats = ((:Ab,:At), (:Ab,:Bt), (:Bb,:At), (:Bb,:Bt)))
-#     return combine(hbot, htop, modelinter)
-# end
+function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 = 0.246,
+                            interlayerdistance = 1.36a0, rangeintralayer = a0/sqrt(3),
+                            rangeinterlayer = 4a0/sqrt(3), hopintra = 2.70, hopinter = 0.48,
+                            kwsys...)
+    (m, r) = twistindices
+    θ = acos((3m^2 + 3m*r +r^2/2)/(3m^2 + 3m*r + r^2))
+    sAbot = sublat((0.0, -0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Ab)
+    sBbot = sublat((0.0,  0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Bb)
+    sAtop = sublat((0.0, -0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :At)
+    sBtop = sublat((0.0,  0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :Bt)
+    br = a0 * bravais(( cos(pi/3), sin(pi/3), 0),
+                           (-cos(pi/3), sin(pi/3), 0))
+    if gcd(r, 3) == 1
+        scbot = @SMatrix[m -(m+r); (m+r) 2m+r]
+        sctop = @SMatrix[m+r -m; m 2m+r]
+    else
+        scbot = @SMatrix[m+r÷3 -r÷3; r÷3 m+2r÷3]
+        sctop = @SMatrix[m+2r÷3 r÷3; -r÷3 m+r÷3]
+    end
+    lattop = lattice(br, sAtop, sBtop; dim = Val(3))
+    latbot = lattice(br, sAbot, sBbot; dim = Val(3))
+    modelintra = hopping(hopintra, range = rangeintralayer)
+    htop = hamiltonian(lattop, modelintra; kwsys...) |> unitcell(sctop)
+    hbot = hamiltonian(latbot, modelintra; kwsys...) |> unitcell(scbot)
+    let R = @SMatrix[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]
+        transform!(htop, r -> R * r)
+    end
+    let R = @SMatrix[cos(θ/2) sin(θ/2) 0; -sin(θ/2) cos(θ/2) 0; 0 0 1]
+        transform!(hbot, r -> R * r)
+    end
+    modelinter = hopping(
+        (r,dr) -> hopinter * exp(-3*(norm(dr)/interlayerdistance - 1)) * dr[3]^2/sum(abs2,dr),
+        range = rangeinterlayer,
+        sublats = ((:Ab,:At), (:Ab,:Bt), (:Bb,:At), (:Bb,:Bt)))
+    return combine(hbot, htop, modelinter)
+end
 
 end # module
 

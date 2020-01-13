@@ -54,7 +54,7 @@ struct Bravais{E,L,T,EL}
     semibounded::SVector{L,Bool}
 end
 
-Bravais{E,T}() where {E,T} = Bravais(SMatrix{E,0,T,0}(), ())
+Bravais{E,T}() where {E,T} = Bravais(SMatrix{E,0,T,0}(), SVector{0,Bool}())
 
 displayvectors(br::Bravais) = displayvectors(br.matrix)
 
@@ -146,13 +146,6 @@ Unitcell(sublats::NTuple{N,Sublat{E,T}};
 _Unitcell(sublats, dim::Integer, type, names) = _Unitcell(sublats, Val(dim), type, names)
 
 function _Unitcell(sublats::NTuple{N,Sublat}, dim::Val{E}, type::Type{T}, names) where {N,E,T}
-    _names = nametype_vector(names, N)
-    # Make sublat names unique
-    allnames = NameType[:_]
-    for i in eachindex(_names)
-        _names[i] in allnames && (_names[i] = uniquename(allnames, _names[i], i))
-        push!(allnames, _names[i])
-    end
     sites = SVector{E,T}[]
     offsets = [0]  # length(offsets) == length(sublats) + 1
     for s in eachindex(sublats)
@@ -161,13 +154,24 @@ function _Unitcell(sublats::NTuple{N,Sublat}, dim::Val{E}, type::Type{T}, names)
         end
         push!(offsets, length(sites))
     end
-    return Unitcell(sites, sanitize_names(_names, Val(N)), offsets)
+    names´ = uniquenames(sanitize_names(names, Val(N)))
+    return Unitcell(sites, names´, offsets)
 end
 
-nametype_vector(names::AbstractVector, ::Integer) = nametype.(names)
-nametype_vector(names::Tuple, ::Integer) = [nametype.(names)...]
-nametype_vector(name::Union{NameType,Int}, N::Integer) = fill(name, N)
-sanitize_names(names::Vector, ::Val{N}) where {N} = ntuple(n -> names[n], Val(N))
+sanitize_names(name::Union{NameType,Int}, ::Val{N}) where {N} = ntuple(_ -> NameType(name), Val(N))
+sanitize_names(names::AbstractVector, ::Val{N}) where {N} = ntuple(i -> NameType(names[i]), Val(N))
+sanitize_names(names::NTuple{N,Union{NameType,Int}}, ::Val{N}) where {N} = NameType.(names)
+
+function uniquenames(names::NTuple{N,NameType}) where {N}
+    namesvec = [names...]
+    allnames = NameType[:_]
+    for i in eachindex(names)
+        namesvec[i] in allnames && (namesvec[i] = uniquename(allnames, namesvec[i], i))
+        push!(allnames, namesvec[i])
+    end
+    names´ = ntuple(i -> namesvec[i], Val(N))
+    return names´
+end
 
 function uniquename(allnames, name, i)
     newname = nametype(Char(64+i)) # Lexicographic, starting from Char(65) = 'A'
@@ -409,6 +413,34 @@ function transform!(lat::Lattice, f::Function)
     lat.bravais = transform(lat.bravais, f)
     return lat
 end
+
+# """
+#     combine(lats::Lattice...)
+
+# When all `lats` have compatible Bravais vectors, combine them into a single lattice
+# """
+# function combine(lats::Lattice...)
+#     is_bravais_compatible(lats...) || throw(ArgumentError("Lattices must share all Bravais vectors"))
+#     u = combine((l -> l.unitcell).(lats)...)
+
+# end
+
+
+# is_bravais_compatible() = true
+# is_bravais_compatible(lat::Lattice, lats::Lattice...) = all(l -> isequal(lat.bravais, l.bravais), lats)
+
+# function Base.isequal(b1::Bravais{E,L}, b2::Bravais{E,L}) where {E,L}
+#     vs1 = ntuple(i -> b1.matrix[:, i], Val(L))
+#     vs2 = ntuple(i -> b2.matrix[:, i], Val(L))
+#     for v2 in vs2
+#         found = false
+#         for v1 in vs1
+#             (isapprox(v1, v2) || isapprox(v1, -v2)) && (found = true; break)
+#         end
+#         !found && return false
+#     end
+#     return true
+# end
 
 #######################################################################
 # supercell
