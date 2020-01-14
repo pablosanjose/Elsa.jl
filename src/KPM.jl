@@ -7,17 +7,17 @@ struct MomentaKPM{T}
 end
 
 """
-    momentaKPM(h::AbstractMatrix; ket = missing, obs = missing, order = 10, randomkets = 1, bandrange = missing)
+    momentaKPM(h::AbstractMatrix, A = I; ket = missing, order = 10, randomkets = 1, bandrange = missing)
 
 Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|A T_n(h)|ket⟩/⟨ket|ket⟩` where `T_n(x)` 
 is the Chebyshev polynomial of order `n`, for a given `ket::AbstractVector`, hamiltonian `h`, and 
-observable `A`. If `ket` is `missing` computes the momenta by means of a stochastic trace
-`μ_n = Tr[A T_n(h)]`. In this case the trace is estimated stochastically using a number `randomkets` of
-random vectors. Furthermore, the trace over a specific set of kets can also be computed; in this case
-`ket::AbstractMatrix` must be a sparse matrix where the columns are the kets involved in the calculation.
+observable `A`. If `ket` is `missing`, momenta are computed by means of a stochastic trace
+`μ_n = Tr[A T_n(h)] ≈ ∑ₐ⟨a|A T_n(h)|a⟩/N` over `N = randomkets` normalized random `|a⟩`. 
+Furthermore, the trace over a specific set of kets can also be computed; in this case
+`ket::AbstractMatrix` must be a matrix where the columns are the kets involved in the calculation.
 
-`A = I` if `obs` is `missing`. The order of the Chebyshev expansion is `order`. The `bandbrange = (ϵmin, ϵmax)`
-should completely encompass the full bandwidth of `hamiltonian`. If `missing` it is computed automatically.
+The order of the Chebyshev expansion is `order`. The `bandbrange = (ϵmin, ϵmax)` should completely encompass 
+the full bandwidth of `hamiltonian`. If `missing` it is computed automatically using `ArnoldiMethods` (must be loaded).
 
 # Example
 ```
