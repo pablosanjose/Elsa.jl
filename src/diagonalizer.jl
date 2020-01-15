@@ -15,7 +15,8 @@ diagonalizer(h::Hamiltonian, mesh::Mesh, method, minprojection) =
 
 function defaultmethod(h::Hamiltonian)
     if eltype(h) <: Number
-        method = issparse(h) ? ArpackPackage() : LinearAlgebraPackage()
+        # method = issparse(h) ? ArpackPackage() : LinearAlgebraPackage()
+        method = LinearAlgebraPackage()
     else
         # method = KrylovKitPackage()
         throw(ArgumentError("Methods for generic Hamiltonian eltypes not yet implemented. Consider using `flatten` on your Hamiltonian."))
