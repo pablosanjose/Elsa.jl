@@ -767,12 +767,10 @@ function _combine(model::TightbindingModel, hams::Hamiltonian...)
     lat = combine((h -> h.lattice).(hams)...)
     orbs = tuplejoin((h -> h.orbitals).(hams)...)
     builder = IJVBuilder(lat, orbs, hams...)
-
-    # model´ = nondiagonal(model, nsublats.(hams))
-    # model´ = TightbindingModel()
-    # field = Field(missing, lat)
-    # ham = hamiltonian_sparse!(builder, lat, orbs, model´, field)
-    # return ham
+    model´ = nondiagonal(model, nsublats.(hams))
+    field = Field(missing, lat)
+    ham = hamiltonian_sparse!(builder, lat, orbs, model´, field)
+    return ham
 end
 
 #######################################################################
