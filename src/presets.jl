@@ -47,7 +47,8 @@ using Elsa, LinearAlgebra
 function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 = 0.246,
                             interlayerdistance = 1.36a0, rangeintralayer = a0/sqrt(3),
                             rangeinterlayer = 4a0/sqrt(3), hopintra = 2.70, hopinter = 0.48,
-                            kwsys...)
+                            modelintra = hopping(hopintra, range = rangeintralayer),
+                            kw...)
     (m, r) = twistindices
     θ = acos((3m^2 + 3m*r +r^2/2)/(3m^2 + 3m*r + r^2))
     sAbot = sublat((0.0, -0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Ab)
@@ -68,9 +69,8 @@ function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 =
 
     lattop = lattice(br, sAtop, sBtop)
     latbot = lattice(br, sAbot, sBbot)
-    modelintra = hopping(hopintra, range = rangeintralayer)
-    htop = hamiltonian(lattop, modelintra; kwsys...) |> unitcell(sctop)
-    hbot = hamiltonian(latbot, modelintra; kwsys...) |> unitcell(scbot)
+    htop = hamiltonian(lattop, modelintra; kw...) |> unitcell(sctop)
+    hbot = hamiltonian(latbot, modelintra; kw...) |> unitcell(scbot)
     let R = @SMatrix[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]
         transform!(htop, r -> R * r)
     end
