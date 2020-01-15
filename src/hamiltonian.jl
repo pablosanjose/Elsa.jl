@@ -169,21 +169,20 @@ firstrow(mat::DenseMatrix, col, rowrange) = first(rowrange)
 function firstrow(mat::AbstractSparseMatrix, col, rowrange)
     rows = rowvals(mat)
     ptr = findfirst(p -> rows[p] in rowrange, nzrange(mat, col))
-    # In case there is nothing in the column, give a ptr that will yield `nothing` for sure
-    return ptr === nothing ? size(mat, 1) + 1 : ptr
+    return ptr # may be nothing
 end
 
 function _iterate(har::HamiltonianHarmonic{<:Any,<:Any,<:AbstractSparseMatrix}, (nptr, col, rowrange, colrange))
-    col > last(colrange) && return nothing
+    (col > last(colrange) || nptr === nothing) && return nothing
     ptrs = nzrange(har.h, col)
     rows = rowvals(har.h)
     if nptr <= length(ptrs)
         row = rows[ptrs[nptr]]
         row <= last(rowrange) && return (row, col), (nptr + 1, col)
     end
-    col´ = col + 1
-    col´ > last(colrange) && return nothing
-    nptr´ = firstrow(har.h, col´, rowrange)
+    next = findnext_col_ptr(har.h, col + 1, rowrange, colrange)
+    next === nothing && return nothing
+    (col´, nptr´) = next
     return _iterate(har, (nptr´, col´, rowrange, colrange))
 end
 
@@ -199,6 +198,15 @@ Base.IteratorSize(::IndicesNonzeros) = Base.SizeUnknown()
 Base.IteratorEltype(::IndicesNonzeros) = Base.HasEltype()
 Base.eltype(s::IndicesNonzeros{<:Hamiltonian}) = Tuple{Int, Int, typeof(first(s.h.harmonics).dn)}
 Base.eltype(s::IndicesNonzeros{<:HamiltonianHarmonic}) = Tuple{Int, Int}
+
+function findnext_col_ptr(m::AbstractSparseMatrix, col, rowrange, colrange)
+    for col´ in col:last(colrange)
+        nptr = firstrow(m, col´, rowrange)
+        ptrs = nzrange(m, col´)
+        nptr === nothing || return (col´, nptr)
+    end
+    return nothing
+end
 
 # stored_indices(h::Hamiltonian) = ((har.dn, rowvals(har.h)[ptr], col) for har in h.harmonics
 #                                   for col in 1:size(har.h, 2) for ptr in nzrange(har.h, col))
