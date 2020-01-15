@@ -200,6 +200,8 @@ sublats(u::Unitcell) = 1:nsublats(u)
 
 transform!(u::Unitcell, f::Function) = (u.sites .= f.(u.sites); u)
 
+Base.copy(u::Unitcell) = Unitcell(copy(u.sites), u.names, copy(u.offsets))
+
 #######################################################################
 # Lattice
 #######################################################################
@@ -321,6 +323,12 @@ isinmask(s::Supercell{L,L´,Missing}, site) where {L,L´} = true
 
 issemibounded(sc::Supercell) where {L} = !iszero(sc.semibounded)
 
+Base.copy(s::Supercell{<:Any,<:Any,Missing}) =
+    Supercell(copy(s.matrix), s.sites, s.cells, s.mask, s.semibounded)
+
+Base.copy(s::Supercell{<:Any,<:Any,<:AbstractArray}) =
+    Supercell(copy(s.matrix), s.sites, s.cells, copy(s.mask), s.semibounded)
+
 #######################################################################
 # Superlattice
 #######################################################################
@@ -365,6 +373,9 @@ issemibounded(lat::Superlattice) where {L} = issemibounded(lat.supercell)
 #######################################################################
 # AbstractLattice interface
 #######################################################################
+
+Base.copy(lat::Lattice) = Lattice(lat.bravais, copy(lat.unitcell))
+Base.copy(lat::Superlattice) = Superlattice(lat.bravais, copy(lat.unitcell), copy(lat.supercell))
 
 numbertype(::AbstractLattice{E,L,T}) where {E,L,T} = T
 

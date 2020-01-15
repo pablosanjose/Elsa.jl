@@ -361,7 +361,7 @@ sanitize_orbs(p) = throw(ArgumentError("Wrong format for orbitals, see `hamilton
 Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.field, h.orbitals)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
-Base.copy(h::Hamiltonian) = Hamiltonian(h.lattice, copy.(h.harmonics), h.field, h.orbitals)
+Base.copy(h::Hamiltonian) = Hamiltonian(copy(h.lattice), copy.(h.harmonics), h.field, h.orbitals)
 Base.copy(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, copy(h.h))
 
 Base.size(h::Hamiltonian, n) = size(first(h.harmonics).h, n)
@@ -471,9 +471,13 @@ function IJVBuilder(lat::AbstractLattice{E,L}, orbs, hs::Hamiltonian...) where {
     M = promote_blocktype(hs...)
     ijvs = IJV{L,M}[]
     builder = IJVBuilder(lat, orbs, ijvs)
-    for h in hs, har in h.harmonics
-        ijv = builder[har.dn]
-        push!(ijv, har)
+    offset = 0
+    for h in hs
+        for har in h.harmonics
+            ijv = builder[har.dn]
+            push_block!(ijv, har, offset)
+        end
+        offset += size(h, 1)
     end
     return builder
 end
@@ -501,10 +505,10 @@ end
 
 Base.push!(ijv::IJV, (i, j, v)::Tuple) = (push!(ijv.i, i); push!(ijv.j, j); push!(ijv.v, v))
 
-function Base.push!(ijv::IJV{L,M}, h::HamiltonianHarmonic) where {L,M}
+function push_block!(ijv::IJV{L,M}, h::HamiltonianHarmonic, offset) where {L,M}
     I, J, V = findnz(h.h)
     for (i, j, v) in zip(I, J, V)
-        push!(ijv, (i, j, padtotype(v, M)))
+        push!(ijv, (i + offset, j + offset, padtotype(v, M)))
     end
     return ijv
 end
@@ -763,10 +767,12 @@ function _combine(model::TightbindingModel, hams::Hamiltonian...)
     lat = combine((h -> h.lattice).(hams)...)
     orbs = tuplejoin((h -> h.orbitals).(hams)...)
     builder = IJVBuilder(lat, orbs, hams...)
-    model´ = nondiagonal(model, nsublats.(hams))
-    field = Field(missing, lat)
-    ham = hamiltonian_sparse!(builder, lat, orbs, model´, field)
-    return ham
+
+    # model´ = nondiagonal(model, nsublats.(hams))
+    # model´ = TightbindingModel()
+    # field = Field(missing, lat)
+    # ham = hamiltonian_sparse!(builder, lat, orbs, model´, field)
+    # return ham
 end
 
 #######################################################################
