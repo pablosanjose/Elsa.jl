@@ -11,20 +11,22 @@ using Requires
 # end
 
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
-      ProgressMeter, LinearMaps, Random, FFTW, QuadGK
+      ProgressMeter, LinearMaps, Random
 
 using SparseArrays: getcolptr
 
 export sublat, bravais, lattice, dims, hopping, onsite, hamiltonian, randomstate,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!, similarmatrix,
        sites, bandstructure, marchingmesh, defaultmethod, bands, vertices, states,
-       flatten, wrap, momentaKPM, dosKPM, thermalaverageKPM, densityKPM
+       flatten, wrap, transform!, combine,
+       momentaKPM, dosKPM, averageKPM, densityKPM
 
-export LatticePresets, RegionPresets
+export LatticePresets, RegionPresets, HamiltonianPresets
 
 export LinearAlgebraPackage, ArpackPackage, KrylovKitPackage
 
 export @SMatrix, @SVector, SMatrix, SVector
+
 export ishermitian, I
 
 const NameType = Symbol
