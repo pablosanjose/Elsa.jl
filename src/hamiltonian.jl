@@ -169,21 +169,20 @@ firstrow(mat::DenseMatrix, col, rowrange) = first(rowrange)
 function firstrow(mat::AbstractSparseMatrix, col, rowrange)
     rows = rowvals(mat)
     ptr = findfirst(p -> rows[p] in rowrange, nzrange(mat, col))
-    # In case there is nothing in the column, give a ptr that will yield `nothing` for sure
-    return ptr === nothing ? size(mat, 1) + 1 : ptr
+    return ptr # may be nothing
 end
 
 function _iterate(har::HamiltonianHarmonic{<:Any,<:Any,<:AbstractSparseMatrix}, (nptr, col, rowrange, colrange))
-    col > last(colrange) && return nothing
+    (col > last(colrange) || nptr === nothing) && return nothing
     ptrs = nzrange(har.h, col)
     rows = rowvals(har.h)
     if nptr <= length(ptrs)
         row = rows[ptrs[nptr]]
         row <= last(rowrange) && return (row, col), (nptr + 1, col)
     end
-    col´ = col + 1
-    col´ > last(colrange) && return nothing
-    nptr´ = firstrow(har.h, col´, rowrange)
+    next = findnext_col_ptr(har.h, col + 1, rowrange, colrange)
+    next === nothing && return nothing
+    (col´, nptr´) = next
     return _iterate(har, (nptr´, col´, rowrange, colrange))
 end
 
@@ -199,6 +198,15 @@ Base.IteratorSize(::IndicesNonzeros) = Base.SizeUnknown()
 Base.IteratorEltype(::IndicesNonzeros) = Base.HasEltype()
 Base.eltype(s::IndicesNonzeros{<:Hamiltonian}) = Tuple{Int, Int, typeof(first(s.h.harmonics).dn)}
 Base.eltype(s::IndicesNonzeros{<:HamiltonianHarmonic}) = Tuple{Int, Int}
+
+function findnext_col_ptr(m::AbstractSparseMatrix, col, rowrange, colrange)
+    for col´ in col:last(colrange)
+        nptr = firstrow(m, col´, rowrange)
+        ptrs = nzrange(m, col´)
+        nptr === nothing || return (col´, nptr)
+    end
+    return nothing
+end
 
 # stored_indices(h::Hamiltonian) = ((har.dn, rowvals(har.h)[ptr], col) for har in h.harmonics
 #                                   for col in 1:size(har.h, 2) for ptr in nzrange(har.h, col))
@@ -353,7 +361,7 @@ sanitize_orbs(p) = throw(ArgumentError("Wrong format for orbitals, see `hamilton
 Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.field, h.orbitals)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
-Base.copy(h::Hamiltonian) = Hamiltonian(h.lattice, copy.(h.harmonics), h.field, h.orbitals)
+Base.copy(h::Hamiltonian) = Hamiltonian(copy(h.lattice), copy.(h.harmonics), h.field, h.orbitals)
 Base.copy(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, copy(h.h))
 
 Base.size(h::Hamiltonian, n) = size(first(h.harmonics).h, n)
@@ -463,9 +471,13 @@ function IJVBuilder(lat::AbstractLattice{E,L}, orbs, hs::Hamiltonian...) where {
     M = promote_blocktype(hs...)
     ijvs = IJV{L,M}[]
     builder = IJVBuilder(lat, orbs, ijvs)
-    for h in hs, har in h.harmonics
-        ijv = builder[har.dn]
-        push!(ijv, har)
+    offset = 0
+    for h in hs
+        for har in h.harmonics
+            ijv = builder[har.dn]
+            push_block!(ijv, har, offset)
+        end
+        offset += size(h, 1)
     end
     return builder
 end
@@ -493,10 +505,10 @@ end
 
 Base.push!(ijv::IJV, (i, j, v)::Tuple) = (push!(ijv.i, i); push!(ijv.j, j); push!(ijv.v, v))
 
-function Base.push!(ijv::IJV{L,M}, h::HamiltonianHarmonic) where {L,M}
+function push_block!(ijv::IJV{L,M}, h::HamiltonianHarmonic, offset) where {L,M}
     I, J, V = findnz(h.h)
     for (i, j, v) in zip(I, J, V)
-        push!(ijv, (i, j, padtotype(v, M)))
+        push!(ijv, (i + offset, j + offset, padtotype(v, M)))
     end
     return ijv
 end
