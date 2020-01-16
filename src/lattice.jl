@@ -205,8 +205,7 @@ Base.copy(u::Unitcell) = Unitcell(copy(u.sites), u.names, copy(u.offsets))
 #######################################################################
 # Lattice
 #######################################################################
-# Lattice is mutable to allow transform! (which changes bravais)
-mutable struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: AbstractLattice{E,L,T}
+struct Lattice{E,L,T<:AbstractFloat,B<:Bravais{E,L,T},U<:Unitcell{E,T}} <: AbstractLattice{E,L,T}
     bravais::B
     unitcell::U
 end
@@ -421,8 +420,8 @@ Transform the site positions of `lat` by applying `f` to them in place.
 """
 function transform!(lat::Lattice, f::Function)
     transform!(lat.unitcell, f)
-    lat.bravais = transform(lat.bravais, f)
-    return lat
+    bravais´ = transform(lat.bravais, f)
+    return Lattice(bravais´, lat.unitcell)
 end
 
 """
