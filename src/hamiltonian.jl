@@ -142,71 +142,75 @@ end
 indicesnonzeros(h, rowrange = 1:size(h, 1), colrange = 1:size(h, 2)) =
     IndicesNonzeros(h, rclamp(rowrange, 1:size(h, 1)), rclamp(colrange, 1:size(h, 2)))
 
-function Base.iterate(itr::IndicesNonzeros{<:Hamiltonian}, (nptr, col, nhar) = firststate(itr, 1))
+function firststate(itr::IndicesNonzeros{<:Hamiltonian}, nhar)
+    m = itr.h.harmonics[nhar].h
+    row, col = nextnonzero_row_col(m, itr)
+    return (row, col, nhar)
+end
+
+function nextnonzero_row_col(m::DenseMatrix, itr, col = first(itr.colrange))
+    for col´ in col:last(itr.colrange), row in itr.rowrange
+        iszero(m[row, col´]) || return (row, col´)
+    end
+    # (0, 0) is sentinel for "no non-zero row for col´ >= col
+    return (0, 0)
+end
+
+function nextnonzero_row_col(m::AbstractSparseMatrix, itr, col = first(itr.colrange))
+    rows = rowvals(m)
+    for col´ in col:last(itr.colrange)
+        ptridx = findfirst(p -> rows[p] in itr.rowrange, nzrange(m, col´))
+        ptridx === nothing || return (ptridx, col´)
+    end
+    # (0, 0) is sentinel for "no non-zero row for col´ >= col
+    return (0, 0)
+end
+
+function Base.iterate(itr::IndicesNonzeros{<:Hamiltonian}, (ptridx, col, nhar) = firststate(itr, 1))
     nhar > length(itr.h.harmonics) && return nothing
     har = itr.h.harmonics[nhar]
-    i = _iterate(har, (nptr, col, itr.rowrange, itr.colrange))
+    i = _iterate(har.h, itr, ptridx, col)
     if i === nothing
         nhar´ = nhar + 1
         return nhar´ > length(itr.h.harmonics) ? nothing : iterate(itr, firststate(itr, nhar´))
     else
-        ((row, col), (nptr, col)) = i
-        return (row, col, har.dn), (nptr, col, nhar)
+        ((row, col), (ptridx, col)) = i
+        return (row, col, har.dn), (ptridx, col, nhar)
     end
 end
+
+firststate(itr::IndicesNonzeros{<:HamiltonianHarmonic}) = nextnonzero_row_col(itr.h.h, itr)
 
 function Base.iterate(itr::IndicesNonzeros{<:HamiltonianHarmonic}, (row, col) = firststate(itr))
-    _iterate(itr.h, (row, col, itr.rowrange, itr.colrange))
+    _iterate(itr.h.h, itr, row, col)
 end
 
-firststate(itr::IndicesNonzeros{<:Hamiltonian}, nhar) =
-    (firstrow(itr.h.harmonics[nhar].h, first(itr.colrange), itr.rowrange), first(itr.colrange), nhar)
-firststate(itr::IndicesNonzeros{<:HamiltonianHarmonic}) =
-    (firstrow(itr.h.h, first(itr.colrange), itr.rowrange), first(itr.colrange))
-
-# firstrow is either a rowval pointer or a row index, depending on the matrix
-firstrow(mat::DenseMatrix, col, rowrange) = first(rowrange)
-function firstrow(mat::AbstractSparseMatrix, col, rowrange)
-    rows = rowvals(mat)
-    ptr = findfirst(p -> rows[p] in rowrange, nzrange(mat, col))
-    return ptr # may be nothing
-end
-
-function _iterate(har::HamiltonianHarmonic{<:Any,<:Any,<:AbstractSparseMatrix}, (nptr, col, rowrange, colrange))
-    (col > last(colrange) || nptr === nothing) && return nothing
-    ptrs = nzrange(har.h, col)
-    rows = rowvals(har.h)
-    if nptr <= length(ptrs)
-        row = rows[ptrs[nptr]]
-        row <= last(rowrange) && return (row, col), (nptr + 1, col)
+# Returns nothing or ((row, col), (nextrow, nextcol)), where row and nextrow can be a ptridx
+function _iterate(m::AbstractSparseMatrix, itr, ptridx, col)
+    col in itr.colrange || return nothing  # will also return nothing if col == 0 (sentinel)
+    ptrs = nzrange(m, col)
+    rows = rowvals(m)
+    if ptridx <= length(ptrs)
+        row = rows[ptrs[ptridx]]
+        row in itr.rowrange && return (row, col), (ptridx + 1, col)
     end
-    next = findnext_col_ptr(har.h, col + 1, rowrange, colrange)
-    next === nothing && return nothing
-    (col´, nptr´) = next
-    return _iterate(har, (nptr´, col´, rowrange, colrange))
+    ptridx´, col´ = nextnonzero_row_col(m, itr, col + 1)
+    return _iterate(m, itr, ptridx´, col´)
 end
 
-function _iterate(har::HamiltonianHarmonic{<:Any,<:Any,<:DenseMatrix}, (row, col, rowrange, colrange))
-    col > last(colrange) && return nothing
-    for row´ in row:last(rowrange)
-        iszero(har.h[row´, col]) || return (row´, col), (row´ + 1, col)
+function _iterate(m::DenseMatrix, itr, row, col)
+    col in itr.colrange || return nothing
+    for row´ in row:last(itr.rowrange)
+        iszero(m[row´, col]) || return (row´, col), (row´ + 1, col)
     end
-    return _iterate(har, (first(rowrange), col + 1, rowrange, colrange))
+    row´, col´ = nextnonzero_row_col(m, itr, col + 1)
+    return _iterate(m, itr, row´, col´)
 end
 
 Base.IteratorSize(::IndicesNonzeros) = Base.SizeUnknown()
 Base.IteratorEltype(::IndicesNonzeros) = Base.HasEltype()
 Base.eltype(s::IndicesNonzeros{<:Hamiltonian}) = Tuple{Int, Int, typeof(first(s.h.harmonics).dn)}
 Base.eltype(s::IndicesNonzeros{<:HamiltonianHarmonic}) = Tuple{Int, Int}
-
-function findnext_col_ptr(m::AbstractSparseMatrix, col, rowrange, colrange)
-    for col´ in col:last(colrange)
-        nptr = firstrow(m, col´, rowrange)
-        ptrs = nzrange(m, col´)
-        nptr === nothing || return (col´, nptr)
-    end
-    return nothing
-end
 
 # stored_indices(h::Hamiltonian) = ((har.dn, rowvals(har.h)[ptr], col) for har in h.harmonics
 #                                   for col in 1:size(har.h, 2) for ptr in nzrange(har.h, col))
