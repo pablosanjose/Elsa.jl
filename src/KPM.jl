@@ -18,14 +18,14 @@ KPMBuilder(μlist, ket) =
 """
     momentaKPM(h::AbstractMatrix, A = I; ket = missing, order = 10, randomkets = 1, bandrange = missing)
 
-Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|A T_n(h)|ket⟩/⟨ket|ket⟩` where `T_n(x)` 
-is the Chebyshev polynomial of order `n`, for a given `ket::AbstractVector`, hamiltonian `h`, and 
+Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|A T_n(h)|ket⟩/⟨ket|ket⟩` where `T_n(x)`
+is the Chebyshev polynomial of order `n`, for a given `ket::AbstractVector`, hamiltonian `h`, and
 observable `A`. If `ket` is `missing`, momenta are computed by means of a stochastic trace
-`μ_n = Tr[A T_n(h)] ≈ ∑ₐ⟨a|A T_n(h)|a⟩/N` over `N = randomkets` normalized random `|a⟩`. 
+`μ_n = Tr[A T_n(h)] ≈ ∑ₐ⟨a|A T_n(h)|a⟩/N` over `N = randomkets` normalized random `|a⟩`.
 Furthermore, the trace over a specific set of kets can also be computed; in this case
 `ket::AbstractMatrix` must be a matrix where the columns are the kets involved in the calculation.
 
-The order of the Chebyshev expansion is `order`. The `bandbrange = (ϵmin, ϵmax)` should completely encompass 
+The order of the Chebyshev expansion is `order`. The `bandbrange = (ϵmin, ϵmax)` should completely encompass
 the full bandwidth of `hamiltonian`. If `missing` it is computed automatically using `ArnoldiMethods` (must be loaded).
 
 # Example
@@ -96,7 +96,8 @@ function mulscaled!(y, h, x, (center, halfwidth))
     return y
 end
 
-proj(ket1, ket2) = dot(vec(ket1), vec(ket2)) # This is equivalent to tr(ket1'*ket2) for matrices, and ket1'*ket2 for vectors
+# This is equivalent to tr(ket1'*ket2) for matrices, and ket1'*ket2 for vectors
+proj(ket1, ket2) = dot(vec(ket1), vec(ket2))
 
 function randomize!(v::AbstractVector{<:Complex})
     normalization = sqrt(length(v))
@@ -208,8 +209,7 @@ function averageKPM(momenta::MomentaKPM{T}; kBT = 0.0, Ef = 0.0) where {T}
     return average
 end
 
-# Issue 2: Unexpected behaviour with center != 0. 
-
+# Pending issue: Unexpected behaviour with center != 0.
 function fermicheby(n, Ef, kBT, center, halfwidth)
     kBT´ = kBT / halfwidth;
     Ef´ = (Ef - center) / halfwidth;
