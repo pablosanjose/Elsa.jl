@@ -31,6 +31,7 @@ the full bandwidth of `hamiltonian`. If `missing` it is computed automatically u
 # Example
 ```
 julia> h = LatticePresets.cubic() |> hamiltonian(hopping(1)) |> unitcell(region = RegionPresets.sphere(10));
+
 julia> momentaKPM(bloch(h), bandrange = (-6,6))
 Elsa.MomentaKPM{Float64}([0.9594929736144973, -0.005881595972403821, -0.4933354572913581, 0.00359537502632597, 0.09759451291347333, -0.0008081453185250322, -0.00896262538765363, 0.00048205637037715177, -0.0003705198310034668, 9.64901673962623e-20, 9.110915988898614e-18], (0.0, 6.030150753768845))
 ```
@@ -161,7 +162,6 @@ dosKPM(h::AbstractMatrix; resolution = 2, kw...) =
 
 dosKPM(μ::MomentaKPM; resolution = 2) = real.(densityKPM(μ; resolution = resolution))
 
-
 """
     densityKPM(h::AbstractMatrix, A; resolution = 2, kw...)
 
@@ -177,7 +177,6 @@ resolution`, rounded to the closest integer.
 
 Same as above with the KPM momenta as input (see `momentaKPM`).
 """
-
 densityKPM(h::AbstractMatrix, A; resolution = 2, kw...) =
     real.(densityKPM(momentaKPM(h, A; kw...); resolution = resolution))
 
@@ -202,14 +201,7 @@ f(E_k) <k|A|k> =  ∫dE f(E) Tr [A δ(E-H)] = Tr [A f(H)]` for a given hermitian
 and a hamiltonian `h` (see `momentaKPM` and its options `kw` for further details).
 `f(E)` is the Fermi-Dirac distribution function, `kBT` is the temperature in energy
 units and `Ef` the Fermi energy.
-
-# Example
-```
-julia> h = LatticePresets.cubic() |> hamiltonian(hopping(1)) |> unitcell(region = RegionPresets.sphere(10)) |> flatten;
-julia> hij = LatticePresets.cubic() |> hamiltonian(hopping(.5)) |> unitcell(region = RegionPresets.sphere(10)) |> flatten;
-julia> averageKPM(bloch(h), bloch(hij), kBT = 0, randomkets = 200, order = 5000, bandrange =  (-12, 12))
- """
-
+"""
 averageKPM(h::AbstractMatrix, A; kBT = 0, Ef = 0, kw...) = averageKPM(momentaKPM(h, A; kw...); kBT = kBT, Ef = Ef)
 
 function averageKPM(momenta::MomentaKPM{T}; kBT = 0.0, Ef = 0.0) where {T}
