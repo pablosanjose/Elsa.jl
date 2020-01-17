@@ -77,8 +77,9 @@ function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 =
     let R = @SMatrix[cos(θ/2) sin(θ/2) 0; -sin(θ/2) cos(θ/2) 0; 0 0 1]
         transform!(hbot, r -> R * r)
     end
-    modelinter = hopping(
-        (r,dr) -> hopinter * exp(-3*(norm(dr)/interlayerdistance - 1)) * dr[3]^2/sum(abs2,dr),
+    modelinter = hopping((r,dr) -> (
+        hopintra * exp(-3*(norm(dr)/a0 - 1))  *  dot(dr, SVector(1,1,0))^2/sum(abs2, dr) -
+        hopinter * exp(-3*(norm(dr)/a0 - interlayerdistance/a0)) * dr[3]^2/sum(abs2, dr)),
         range = rangeinterlayer)
     return combine(hbot, htop; coupling = modelinter)
 end
