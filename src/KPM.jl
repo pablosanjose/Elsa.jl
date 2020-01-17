@@ -49,7 +49,6 @@ function momentaKPM(h::AbstractMatrix{Tv}, A = one(Tv) * I;
         μlist ./= randomkets
     else
         addmomentaKPM!(builder, h, A, bandbracket)
-        μlist ./= size(h,2)  # Issue 1: Discussion.
     end
     return MomentaKPM(jackson!(μlist), bandbracket)
 end
@@ -205,25 +204,25 @@ function averageKPM(momenta::MomentaKPM{T}; kBT = 0.0, Ef = 0.0) where {T}
         @warn "Finite temperature requires numerical evaluation of the integrals"
         checkloaded(:QuadGK)
     end
-    meanlist = [_intαn(n, Ef, kBT, center, halfwidth) for n in 0:order]
-    return sum(meanlist .* momenta.μlist)
+    average = sum(n -> momenta.μlist[n + 1] * fermicheby(n, Ef, kBT, center, halfwidth), 0:order)
+    return average
 end
 
-# Issue 2: Unexpected behaviour. 
+# Issue 2: Unexpected behaviour with center != 0. 
 
-function _intαn(n, Ef, kBT, center, halfwidth)
+function fermicheby(n, Ef, kBT, center, halfwidth)
     kBT´ = kBT / halfwidth;
     Ef´ = (Ef - center) / halfwidth;
     if kBT´ == 0
         int = n == 0 ? 0.5+asin(Ef´)/π : -2.0*sin(n*acos(Ef´))/(n*π)
     else
         η = 1e-10
-        int = Main.QuadGK.quadgk(E´ -> αn(n, E´, Ef´, kBT´), -1.0+η, 1.0-η, atol= 1e-10, rtol=1e-10)[1]
+        int = Main.QuadGK.quadgk(E´ -> _intfermi(n, E´, Ef´, kBT´), -1.0+η, 1.0-η, atol= 1e-10, rtol=1e-10)[1]
     end
     return int
 end
 
-αn(n, E´, Ef´, kBT´) = fermifun(E´, Ef´, kBT´) * 2/(π*(1-E´^2)^(1/2)) * chebypol(n, E´) / (1+(n == 0 ? 1 : 0))
+_intfermi(n, E´, Ef´, kBT´) = fermifun(E´, Ef´, kBT´) * 2/(π*(1-E´^2)^(1/2)) * chebypol(n, E´) / (1+(n == 0 ? 1 : 0))
 
 fermifun(E´, Ef´, kBT´) = kBT´ == 0 ? (E´<Ef´ ? 1 : 0) : (1/(1+exp((E´-Ef´)/(kBT´))))
 
