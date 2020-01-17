@@ -206,7 +206,6 @@ function averageKPM(momenta::MomentaKPM{T}; kBT = 0.0, Ef = 0.0) where {T}
         checkloaded(:QuadGK)
     end
     meanlist = [_intαn(n, Ef, kBT, center, halfwidth) for n in 0:order]
-    jackson!(meanlist)
     return sum(meanlist .* momenta.μlist)
 end
 
