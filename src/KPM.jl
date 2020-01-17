@@ -43,18 +43,21 @@ function momentaKPM(h::AbstractMatrix{Tv}, A = one(Tv) * I;
     ket´ = ket === missing ? Vector{Tv}(undef, size(h, 2)) : ket
     builder = KPMBuilder(μlist, ket´)
     if ket === missing
-        @showprogress for n in 1:randomkets
+        pmeter = Progress(order * randomkets, "Averaging moments: ")
+        for n in 1:randomkets
             randomize!(builder.ket)
-            addmomentaKPM!(builder, h, A, bandbracket)
+            addmomentaKPM!(builder, h, A, bandbracket, pmeter)
         end
         μlist ./= randomkets
     else
-        addmomentaKPM!(builder, h, A, bandbracket)
+        @show 1
+        pmeter = Progress(order, "Computing moments: ")
+        addmomentaKPM!(builder, h, A, bandbracket, pmeter)
     end
     return MomentaKPM(jackson!(μlist), bandbracket)
 end
 
-function addmomentaKPM!(b::KPMBuilder, h, A::UniformScaling, bandbracket)
+function addmomentaKPM!(b::KPMBuilder, h, A::UniformScaling, bandbracket, pmeter)
     μlist, ket, ket0, ket1, ket2 = b.μlist, b.ket, b.ket0, b.ket1, b.ket2
     order = length(μlist) - 1
     ket0 .= ket
@@ -68,12 +71,14 @@ function addmomentaKPM!(b::KPMBuilder, h, A::UniformScaling, bandbracket)
         @. ket2 = 2 * ket2 - ket0
         μlist[n + 1] += 2 * proj(ket2, ket1) - μ1
         ket0, ket1, ket2 = ket1, ket2, ket0
+        ProgressMeter.next!(pmeter; showvalues = ())
+        ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
     end
     A.λ ≈ 1 || (μlist .*= A.λ)
     return μlist
 end
 
-function addmomentaKPM!(b::KPMBuilder, h, A::AbstractMatrix, bandbracket)
+function addmomentaKPM!(b::KPMBuilder, h, A::AbstractMatrix, bandbracket, pmeter)
     μlist, ket, ket0, ket1, ket2, ketL = b.μlist, b.ket, b.ket0, b.ket1, b.ket2, b.ketL
     order = length(μlist) - 1
     ket0 .= ket
@@ -87,6 +92,7 @@ function addmomentaKPM!(b::KPMBuilder, h, A::AbstractMatrix, bandbracket)
         μlist[n] += proj(ketL, ket2)
         n + 1 > order + 1 && break
         ket0, ket1, ket2 =  ket1, ket2, ket0
+        ProgressMeter.next!(pmeter; showvalues = ())
     end
     return μlist
 end
@@ -156,11 +162,21 @@ the number of energy points `xk` is `order * resolution`, rounded to the closest
     dosKPM(μ::MomentaKPM; resolution = 2)
 
 Same as above with momenta `μ` as input.
+
+    dosKPM(h::Hamiltonian; kw...)
+
+Equivalent to `dosKPM(bloch(h); kw...)` for finite hamiltonians (zero dimensional).
 """
 dosKPM(h::AbstractMatrix; resolution = 2, kw...) =
     dosKPM(momentaKPM(h; kw...), resolution = resolution)
 
 dosKPM(μ::MomentaKPM; resolution = 2) = real.(densityKPM(μ; resolution = resolution))
+
+function dosKPM(h::Hamiltonian{<:Lattice,L}; kw...) where {L}
+    iszero(L) ||
+        throw(ArgumentError("Hamiltonian is defined on an infinite lattice. Convert it to a matrix first using `bloch(h, φs...)`"))
+    return dosKPM(bloch(h); kw...)
+end
 
 """
     densityKPM(h::AbstractMatrix, A; resolution = 2, kw...)
@@ -176,9 +192,19 @@ resolution`, rounded to the closest integer.
     densityKPM(momenta::MomentaKPM; resolution = 2)
 
 Same as above with the KPM momenta as input (see `momentaKPM`).
+
+    densityKPM(h::Hamiltonian, A::Hamiltonian; kw...)
+
+Equivalent to `densityKPM(bloch(h), bloch(A); kw...)` for finite Hamiltonians (zero dimensional).
 """
 densityKPM(h::AbstractMatrix, A; resolution = 2, kw...) =
-    real.(densityKPM(momentaKPM(h, A; kw...); resolution = resolution))
+    densityKPM(momentaKPM(h, A; kw...); resolution = resolution)
+
+function densityKPM(h::Hamiltonian{<:Lattice,L1}, A::Hamiltonian{<:Lattice,L2}; kw...) where {L1,L2}
+    (iszero(L1) && iszero(L2)) ||
+        throw(ArgumentError("Hamiltonians are defined on an infinite lattice. Convert them to matrices first using `bloch(h, φs...)`"))
+    return densityKPM(bloch(h), bloch(A); kw...)
+end
 
 function densityKPM(momenta::MomentaKPM{T}; resolution = 2) where {T}
     checkloaded(:FFTW)
@@ -201,8 +227,23 @@ f(E_k) <k|A|k> =  ∫dE f(E) Tr [A δ(E-H)] = Tr [A f(H)]` for a given hermitian
 and a hamiltonian `h` (see `momentaKPM` and its options `kw` for further details).
 `f(E)` is the Fermi-Dirac distribution function, `kBT` is the temperature in energy
 units and `Ef` the Fermi energy.
+
+    averageKPM(μ::MomentaKPM, A; kBT = 0, Ef = 0)
+
+Same as above with the KPM momenta as input (see `momentaKPM`).
+
+    averageKPM(h::Hamiltonian, A::Hamiltonian; kw...)
+
+Equivalent to `averageKPM(bloch(h), bloch(A); kw...)` for finite Hamiltonians (zero
+dimensional).
 """
 averageKPM(h::AbstractMatrix, A; kBT = 0, Ef = 0, kw...) = averageKPM(momentaKPM(h, A; kw...); kBT = kBT, Ef = Ef)
+
+function averageKPM(h::Hamiltonian{<:Lattice,L1}, A::Hamiltonian{<:Lattice,L2};  kw...) where {L1,L2}
+    (iszero(L1) && iszero(L2)) ||
+        throw(ArgumentError("Hamiltonians are defined on an infinite lattice. Convert them to matrices first using `bloch(h, φs...)`"))
+    return averageKPM(bloch(h), bloch(A); kw...)
+end
 
 function averageKPM(momenta::MomentaKPM{T}; kBT = 0.0, Ef = 0.0) where {T}
     (center, halfwidth) = momenta.bandbracket
