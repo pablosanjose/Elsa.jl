@@ -33,6 +33,9 @@ edges(m::Mesh, src) = nzrange(m.adjmat, src)
 
 edgedest(m::Mesh, edge) = rowvals(m.adjmat)[edge]
 
+edgevertices(m::Mesh) =
+    ((vsrc, m.vertices[edgedest(m, edge)]) for (i, vsrc) in enumerate(m.vertices) for edge in edges(m, i))
+
 function minmax_edge_length(m::Mesh{D,T}) where {D,T<:Real}
     minlen2 = typemax(T)
     maxlen2 = zero(T)
