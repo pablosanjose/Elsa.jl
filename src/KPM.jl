@@ -142,19 +142,29 @@ bandbracketKPM(h, (ϵmin, ϵmax), pad = 0.01) = ((ϵmax + ϵmin) / 2.0, (ϵmax -
 #######################################################################
 """
     dosKPM(h::AbstractMatrix; resolution = 2, kw...)
+
 Compute, using the Kernel Polynomial Method (KPM), the local density of states `ρ(ϵ) =
 ⟨ket|δ(ϵ-h)|ket⟩/⟨ket|ket⟩` for a given `ket::AbstractVector` and hamiltonian `h`, or the
-global density of states `ρ(ϵ) = Tr[δ(ϵ-h)]` if `ket` is `missing`. If `ket` is an
-`AbstractMatrix` it evaluates the trace over the set of kets in `ket` (see `momentaKPM` and
-its options `kw` for further details). A tuple of energy points
-`xk` and `ρ` values is returned where the number of energy points `xk` is `order *
-resolution`, rounded to the closest integer.
-"""
+global density of states `ρ(ϵ) = Tr[δ(ϵ-h)]` if `ket` is `missing`.
 
-dosKPM(h::AbstractMatrix; resolution = 2, kw...) = densityKPM(momentaKPM(h; kw...); resolution = resolution)
+If `ket` is an `AbstractMatrix` it evaluates the trace over the set of kets in `ket` (see
+`momentaKPM` and its options `kw` for further details). The result is a tuple of energy
+points `xk::Vector` and real `ρ::Vector` values (any imaginary part in ρ is dropped), where
+the number of energy points `xk` is `order * resolution`, rounded to the closest integer.
+
+    dosKPM(μ::MomentaKPM; resolution = 2)
+
+Same as above with momenta `μ` as input.
+"""
+dosKPM(h::AbstractMatrix; resolution = 2, kw...) =
+    dosKPM(momentaKPM(h; kw...), resolution = resolution)
+
+dosKPM(μ::MomentaKPM; resolution = 2) = real.(densityKPM(μ; resolution = resolution))
+
 
 """
     densityKPM(h::AbstractMatrix, A; resolution = 2, kw...)
+
 Compute, using the Kernel Polynomial Method (KPM), the local spectral density of an operator
 `A` `ρ_A(ϵ) = ⟨ket|A δ(ϵ-h)|ket⟩/⟨ket|ket⟩` for a given `ket::AbstractVector` and
 hamiltonian `h`, or the global spectral density `ρ_A(ϵ) = Tr[A δ(ϵ-h)]` if `ket` is
@@ -162,7 +172,9 @@ hamiltonian `h`, or the global spectral density `ρ_A(ϵ) = Tr[A δ(ϵ-h)]` if `
 `ket` (see `momentaKPM` and its options `kw` for further details). A tuple of energy points
 `xk` and `ρ_A` values is returned where the number of energy points `xk` is `order *
 resolution`, rounded to the closest integer.
+
     densityKPM(momenta::MomentaKPM; resolution = 2)
+
 Same as above with the KPM momenta as input (see `momentaKPM`).
 """
 
@@ -183,12 +195,14 @@ function densityKPM(momenta::MomentaKPM{T}; resolution = 2) where {T}
 end
 
 """
-averageKPM(h::AbstractMatrix, A; kBT = 0, Ef = 0, kw...)
+    averageKPM(h::AbstractMatrix, A; kBT = 0, Ef = 0, kw...)
+
 Compute, using the Kernel Polynomial Method (KPM), the thermal expectation value `<A> = Σ_k
 f(E_k) <k|A|k> =  ∫dE f(E) Tr [A δ(E-H)] = Tr [A f(H)]` for a given hermitian operator `A`
 and a hamiltonian `h` (see `momentaKPM` and its options `kw` for further details).
 `f(E)` is the Fermi-Dirac distribution function, `kBT` is the temperature in energy
 units and `Ef` the Fermi energy.
+
 # Example
 ```
 julia> h = LatticePresets.cubic() |> hamiltonian(hopping(1)) |> unitcell(region = RegionPresets.sphere(10)) |> flatten;
