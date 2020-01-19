@@ -15,6 +15,22 @@ struct KPMBuilder{T,K}
 end
 KPMBuilder(μlist, ket) =
     KPMBuilder(μlist, ket, similar(ket), similar(ket), similar(ket), similar(ket))
+
+ketundef(h::AbstractMatrix{T}) where {T<:Number} =
+    Vector{T}(undef, size(h, 2))
+ketundef(h::AbstractMatrix{S}) where {N,T,S<:SMatrix{N,N,T}} =
+    Vector{SVector{N,T}}(undef, size(h, 2))
+
+iscompatibleket(h::AbstractMatrix{T1}, ket::AbstractArray{T2}) where {T1,T2} =
+    _iscompatibleket(T1, T2)
+_iscompatibleket(::Type{T1}, ::Type{T2}) where {T1<:Real, T2<:Real} = true
+_iscompatibleket(::Type{T1}, ::Type{T2}) where {T1<:Number, T2<:Complex} = true
+_iscompatibleket(::Type{S1}, ::Type{S2}) where {N, S1<:SMatrix{N,N}, S2<:SVector{N}} =
+    _iscompatibleket(eltype(S1), eltype(S2))
+_iscompatibleket(::Type{S1}, ::Type{S2}) where {N, S1<:SMatrix{N,N}, S2<:SMatrix{N}} =
+    _iscompatibleket(eltype(S1), eltype(S2))
+_iscompatibleket(t1, t2) = false
+
 """
     momentaKPM(h::AbstractMatrix, A = I; ket = missing, order = 10, randomkets = 1, bandrange = missing)
 
@@ -38,9 +54,12 @@ Elsa.MomentaKPM{Float64}([0.9594929736144973, -0.005881595972403821, -0.49333545
 """
 function momentaKPM(h::AbstractMatrix{Tv}, A = one(Tv) * I;
                     ket = missing, randomkets = 1, order = 10, bandrange = missing) where {Tv}
-    μlist = zeros(promote_type(eltype(h), eltype(A)), order + 1)
+    eh = eltype(eltype(h))
+    aA = eltype(eltype(A))
+    μlist = zeros(promote_type(eh, aA), order + 1)
     bandbracket = bandbracketKPM(h, bandrange)
-    ket´ = ket === missing ? Vector{Tv}(undef, size(h, 2)) : ket
+    ket´ = ket === missing ? ketundef(h) : ket
+    iscompatibleket(h, ket´) || throw(ArgumentError("ket is incomatible with Hamiltonian"))
     builder = KPMBuilder(μlist, ket´)
     if ket === missing
         pmeter = Progress(order * randomkets, "Averaging moments: ")
@@ -50,7 +69,6 @@ function momentaKPM(h::AbstractMatrix{Tv}, A = one(Tv) * I;
         end
         μlist ./= randomkets
     else
-        @show 1
         pmeter = Progress(order, "Computing moments: ")
         addmomentaKPM!(builder, h, A, bandbracket, pmeter)
     end
@@ -106,21 +124,17 @@ end
 # This is equivalent to tr(ket1'*ket2) for matrices, and ket1'*ket2 for vectors
 proj(ket1, ket2) = dot(vec(ket1), vec(ket2))
 
-function randomize!(v::AbstractVector{<:Complex})
-    normalization = sqrt(length(v))
+function randomize!(v::AbstractVector{T}) where {T}
     for i in eachindex(v)
-        v[i] = exp(2 * π * 1im * rand()) / normalization
-    end
-    return v
-end
-
-function randomize!(v::AbstractVector{<:Real})
-    for i in eachindex(v)
-        v[i] = randn()
+        v[i] = _isreal(T) ? randn(T) : exp.((2π * im) .* rand(T))
     end
     normalize!(v)
     return v
 end
+
+_isreal(::Type{<:Real}) = true
+_isreal(::Type{<:Complex}) = false
+_isreal(::Type{S}) where {S<:SArray} = _isreal(eltype(S))
 
 function jackson!(μ::AbstractVector)
     order = length(μ) - 1
