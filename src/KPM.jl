@@ -147,16 +147,19 @@ end
 
 function bandbracketKPM(h, ::Missing)
     @warn "Computing spectrum bounds... Consider using the `bandrange` kwargs for faster performance."
+    bandbracketKPM(h, bandrangeKPM(h))
+end
+bandbracketKPM(h, (ϵmin, ϵmax), pad = 0.01) = ((ϵmax + ϵmin) / 2.0, (ϵmax - ϵmin) / (2.0 - pad))
+
+function bandrangeKPM(h)
     checkloaded(:ArnoldiMethod)
     decompl, _ = Main.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.LR());
     decomps, _ = Main.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.SR());
     ϵmax = real(decompl.eigenvalues[1])
     ϵmin = real(decomps.eigenvalues[1])
     @warn  "Computed bandrange = ($ϵmin, $ϵmax)"
-    return bandbracketKPM(h, (ϵmin, ϵmax))
+    return (ϵmin, ϵmax)
 end
-
-bandbracketKPM(h, (ϵmin, ϵmax), pad = 0.01) = ((ϵmax + ϵmin) / 2.0, (ϵmax - ϵmin) / (2.0 - pad))
 
 #######################################################################
 # Kernel Polynomial Method : observables
