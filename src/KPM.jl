@@ -152,7 +152,8 @@ function randomize!(v::AbstractVector{T}) where {T}
     normalize!(v)
     return v
 end
-@inline _randomize(v::T) where {T<:Number} = 2 * rand(T) - 1
+@inline _randomize(v::T) where {T<:Real} = 2 * rand(T) - 1
+@inline _randomize(v::T) where {T<:Complex} = 2 * rand(T) - 1 - im
 @inline _randomize(v::T) where {T<:SArray} = _randomize.(v)
 
 function jackson!(μ::AbstractVector)
