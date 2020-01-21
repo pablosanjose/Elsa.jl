@@ -5,13 +5,30 @@ struct MomentaKPM{T,B<:Tuple}
     μlist::Vector{T}
     bandbracket::B
 end
-struct KPMBuilder{T,K}
+struct KPMBuilder{A,H<:AbstractMatrix,T,K,B}
+    A::A
+    h::H
+    bandbracket::Tuple{B,B}
+    order::Int
+    missingket::Bool
     μlist::Vector{T}
     ket::K
     ket0::K
     ket1::K
     ket2::K
     ketL::K
+end
+
+function KPMBuilder(h::AbstractMatrix{Tv}, A = one(Tv) * I; ket = missing, order = 10, bandrange = missing) where {Tv}
+    eh = eltype(eltype(h))
+    aA = eltype(eltype(A))
+    μlist = zeros(promote_type(eh, aA), order + 1)
+    bandbracket = bandbracketKPM(h, bandrange)
+    missingket = ket === missing
+    ket´ = missingket ? ketundef(h) : ket
+    iscompatibleket(h, ket´) || throw(ArgumentError("ket is incomatible with Hamiltonian"))
+    builder = KPMBuilder(A, h, bandbracket, order, missingket,
+        μlist, ket´, similar(ket´), similar(ket´), similar(ket´), similar(ket´))
 end
 KPMBuilder(μlist, ket) =
     KPMBuilder(μlist, ket, similar(ket), similar(ket), similar(ket), similar(ket))
@@ -30,6 +47,15 @@ _iscompatibleket(::Type{S1}, ::Type{S2}) where {N, S1<:SMatrix{N,N}, S2<:SVector
 _iscompatibleket(::Type{S1}, ::Type{S2}) where {N, S1<:SMatrix{N,N}, S2<:SMatrix{N}} =
     _iscompatibleket(eltype(S1), eltype(S2))
 _iscompatibleket(t1, t2) = false
+
+function matrixKPM(h::Hamiltonian{<:Lattice,L}) where {L}
+    iszero(L) ||
+        throw(ArgumentError("Hamiltonian is defined on an infinite lattice. Convert it to a matrix first using `bloch(h, φs...)`"))
+    return bloch(h)
+end
+
+matrixKPM(h::AbstractMatrix) = h
+matrixKPM(A::UniformScaling) = A
 
 """
     momentaKPM(h::AbstractMatrix, A = I; ket = missing, order = 10, randomkets = 1, bandrange = missing)
@@ -52,36 +78,32 @@ julia> momentaKPM(bloch(h), bandrange = (-6,6))
 Elsa.MomentaKPM{Float64}([0.9594929736144973, -0.005881595972403821, -0.4933354572913581, 0.00359537502632597, 0.09759451291347333, -0.0008081453185250322, -0.00896262538765363, 0.00048205637037715177, -0.0003705198310034668, 9.64901673962623e-20, 9.110915988898614e-18], (0.0, 6.030150753768845))
 ```
 """
-function momentaKPM(h::AbstractMatrix{Tv}, A = one(Tv) * I;
-                    ket = missing, randomkets = 1, order = 10, bandrange = missing) where {Tv}
-    eh = eltype(eltype(h))
-    aA = eltype(eltype(A))
-    μlist = zeros(promote_type(eh, aA), order + 1)
-    bandbracket = bandbracketKPM(h, bandrange)
-    ket´ = ket === missing ? ketundef(h) : ket
-    iscompatibleket(h, ket´) || throw(ArgumentError("ket is incomatible with Hamiltonian"))
-    builder = KPMBuilder(μlist, ket´)
-    if ket === missing
-        pmeter = Progress(order * randomkets, "Averaging moments: ")
+momentaKPM(h::Hamiltonian, A = one(eltype(h)) * I; kw...) = momentaKPM(matrixKPM(h), matrixKPM(A); kw...)
+
+function momentaKPM(h::AbstractMatrix, A = one(eltype(h)) * I; randomkets = 1, kw...)
+   b = KPMBuilder(h, A; kw...)
+    if b.missingket
+        pmeter = Progress(b.order * randomkets, "Averaging moments: ")
         for n in 1:randomkets
-            randomize!(builder.ket)
-            addmomentaKPM!(builder, h, A, bandbracket, pmeter)
+            randomize!(b.ket)
+            addmomentaKPM!(b, pmeter)
         end
-        μlist ./= randomkets
+        b.μlist ./= randomkets
     else
-        pmeter = Progress(order, "Computing moments: ")
-        addmomentaKPM!(builder, h, A, bandbracket, pmeter)
+        pmeter = Progress(b.order, "Computing moments: ")
+        addmomentaKPM!(b, pmeter)
     end
-    return MomentaKPM(jackson!(μlist), bandbracket)
+    return MomentaKPM(jackson!(b.μlist), b.bandbracket)
 end
 
-function addmomentaKPM!(b::KPMBuilder, h, A::UniformScaling, bandbracket, pmeter)
+function addmomentaKPM!(b::KPMBuilder{<:UniformScaling}, pmeter)
     μlist, ket, ket0, ket1, ket2 = b.μlist, b.ket, b.ket0, b.ket1, b.ket2
+    h, A, bandbracket = b.h, b.A, b.bandbracket
     order = length(μlist) - 1
     ket0 .= ket
     mulscaled!(ket1, h, ket0, bandbracket)
-    μlist[1]  += μ0 = 1.0
-    μlist[2]  += μ1 = proj(ket0, ket1)
+    μlist[1] += μ0 = 1.0
+    μlist[2] += μ1 = proj(ket0, ket1)
     for n in 3:2:(order+1)
         μlist[n] += 2 * proj(ket1, ket1) - μ0
         n + 1 > order + 1 && break
@@ -96,8 +118,9 @@ function addmomentaKPM!(b::KPMBuilder, h, A::UniformScaling, bandbracket, pmeter
     return μlist
 end
 
-function addmomentaKPM!(b::KPMBuilder, h, A::AbstractMatrix, bandbracket, pmeter)
+function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix}, pmeter)
     μlist, ket, ket0, ket1, ket2, ketL = b.μlist, b.ket, b.ket0, b.ket1, b.ket2, b.ketL
+    h, A, bandbracket = b.h, b.A, b.bandbracket
     order = length(μlist) - 1
     ket0 .= ket
     mul!(ketL, A', ket)
@@ -125,7 +148,7 @@ end
 proj(ket1, ket2) = dot(vec(ket1), vec(ket2))
 
 function randomize!(v::AbstractVector{T}) where {T}
-    for i in eachindex(v)
+    @inbounds for i in eachindex(v)
         v[i] = _isreal(T) ? randn(T) : exp.((2π * im) .* rand(T))
     end
     normalize!(v)
@@ -138,7 +161,7 @@ _isreal(::Type{S}) where {S<:SArray} = _isreal(eltype(S))
 
 function jackson!(μ::AbstractVector)
     order = length(μ) - 1
-    for n in eachindex(μ)
+    @inbounds for n in eachindex(μ)
         μ[n] *= ((order - n + 1) * cos(π * n / (order + 1)) +
                 sin(π * n / (order + 1)) * cot(π / (order + 1))) / (order + 1)
     end
@@ -189,11 +212,7 @@ dosKPM(h::AbstractMatrix; resolution = 2, kw...) =
 
 dosKPM(μ::MomentaKPM; resolution = 2) = real.(densityKPM(μ; resolution = resolution))
 
-function dosKPM(h::Hamiltonian{<:Lattice,L}; kw...) where {L}
-    iszero(L) ||
-        throw(ArgumentError("Hamiltonian is defined on an infinite lattice. Convert it to a matrix first using `bloch(h, φs...)`"))
-    return dosKPM(bloch(h); kw...)
-end
+dosKPM(h::Hamiltonian; kw...) = dosKPM(matrixKPM(h); kw...)
 
 """
     densityKPM(h::AbstractMatrix, A; resolution = 2, kw...)
@@ -217,11 +236,7 @@ Equivalent to `densityKPM(bloch(h), bloch(A); kw...)` for finite Hamiltonians (z
 densityKPM(h::AbstractMatrix, A; resolution = 2, kw...) =
     densityKPM(momentaKPM(h, A; kw...); resolution = resolution)
 
-function densityKPM(h::Hamiltonian{<:Lattice,L1}, A::Hamiltonian{<:Lattice,L2}; kw...) where {L1,L2}
-    (iszero(L1) && iszero(L2)) ||
-        throw(ArgumentError("Hamiltonians are defined on an infinite lattice. Convert them to matrices first using `bloch(h, φs...)`"))
-    return densityKPM(bloch(h), bloch(A); kw...)
-end
+densityKPM(h::Hamiltonian, A::Hamiltonian; kw...) = densityKPM(matrixKPM(h), matrixKPM(A); kw...)
 
 function densityKPM(momenta::MomentaKPM{T}; resolution = 2) where {T}
     checkloaded(:FFTW)
@@ -256,11 +271,7 @@ dimensional).
 """
 averageKPM(h::AbstractMatrix, A; kBT = 0, Ef = 0, kw...) = averageKPM(momentaKPM(h, A; kw...); kBT = kBT, Ef = Ef)
 
-function averageKPM(h::Hamiltonian{<:Lattice,L1}, A::Hamiltonian{<:Lattice,L2};  kw...) where {L1,L2}
-    (iszero(L1) && iszero(L2)) ||
-        throw(ArgumentError("Hamiltonians are defined on an infinite lattice. Convert them to matrices first using `bloch(h, φs...)`"))
-    return averageKPM(bloch(h), bloch(A); kw...)
-end
+averageKPM(h::Hamiltonian, A::Hamiltonian; kw...) = averageKPM(matrixKPM(h), matrixKPM(A); kw...)
 
 function averageKPM(momenta::MomentaKPM{T}; kBT = 0.0, Ef = 0.0) where {T}
     (center, halfwidth) = momenta.bandbracket
