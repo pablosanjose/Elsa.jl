@@ -148,16 +148,12 @@ end
 proj(ket1, ket2) = dot(vec(ket1), vec(ket2))
 
 function randomize!(v::AbstractVector{T}) where {T}
-    @inbounds for i in eachindex(v)
-        v[i] = _isreal(T) ? randn(T) : exp.((2π * im) .* rand(T))
-    end
+    v .= _randomize.(v)
     normalize!(v)
     return v
 end
-
-_isreal(::Type{<:Real}) = true
-_isreal(::Type{<:Complex}) = false
-_isreal(::Type{S}) where {S<:SArray} = _isreal(eltype(S))
+@inline _randomize(v::T) where {T<:Number} = 2 * rand(T) - 1
+@inline _randomize(v::T) where {T<:SArray} = _randomize.(v)
 
 function jackson!(μ::AbstractVector)
     order = length(μ) - 1
