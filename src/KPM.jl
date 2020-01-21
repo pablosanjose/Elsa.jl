@@ -96,18 +96,18 @@ function momentaKPM(h::AbstractMatrix, A = one(eltype(h)) * I; randomkets = 1, k
     return MomentaKPM(jackson!(b.μlist), b.bandbracket)
 end
 
-function addmomentaKPM!(b::KPMBuilder{<:UniformScaling}, pmeter)
+function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrixCSC}, pmeter)
     μlist, ket, ket0, ket1, ket2 = b.μlist, b.ket, b.ket0, b.ket1, b.ket2
-    h, A, bandbracket = b.h, b.A, b.bandbracket
+    h´, A, bandbracket = b.h', b.A, b.bandbracket
     order = length(μlist) - 1
     ket0 .= ket
-    mulscaled!(ket1, h, ket0, bandbracket)
+    mulscaled!(ket1, h´, ket0, bandbracket)
     μlist[1] += μ0 = 1.0
     μlist[2] += μ1 = proj(ket0, ket1)
     for n in 3:2:(order+1)
         μlist[n] += 2 * proj(ket1, ket1) - μ0
         n + 1 > order + 1 && break
-        mulscaled!(ket2, h, ket1, bandbracket)
+        mulscaled!(ket2, h´, ket1, bandbracket)
         @. ket2 = 2 * ket2 - ket0
         μlist[n + 1] += 2 * proj(ket2, ket1) - μ1
         ket0, ket1, ket2 = ket1, ket2, ket0
@@ -118,17 +118,17 @@ function addmomentaKPM!(b::KPMBuilder{<:UniformScaling}, pmeter)
     return μlist
 end
 
-function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix}, pmeter)
+function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrixCSC}, pmeter)
     μlist, ket, ket0, ket1, ket2, ketL = b.μlist, b.ket, b.ket0, b.ket1, b.ket2, b.ketL
-    h, A, bandbracket = b.h, b.A, b.bandbracket
+    h´, A, bandbracket = b.h', b.A, b.bandbracket
     order = length(μlist) - 1
     ket0 .= ket
-    mul!(ketL, A', ket)
-    mulscaled!(ket1, h, ket0, bandbracket)
+    mul!(ketL, A, ket)
+    mulscaled!(ket1, h´, ket0, bandbracket)
     μlist[1] += proj(ketL, ket0)
     μlist[2] += proj(ketL, ket1)
     for n in 3:(order+1)
-        mulscaled!(ket2, h, ket1, bandbracket)
+        mulscaled!(ket2, h´, ket1, bandbracket)
         @. ket2 = 2 * ket2 - ket0
         μlist[n] += proj(ketL, ket2)
         n + 1 > order + 1 && break
@@ -153,7 +153,7 @@ function randomize!(v::AbstractVector{T}) where {T}
     return v
 end
 @inline _randomize(v::T) where {T<:Real} = 2 * rand(T) - 1
-@inline _randomize(v::T) where {R,T<:Complex{R}} = (2 * rand(R) - 1) + (2 * rand(R) - 1)*im
+@inline _randomize(v::T) where {R,T<:Complex{R}} = (2rand(R) - 1) + (2rand(R) - 1)im
 @inline _randomize(v::T) where {T<:SArray} = _randomize.(v)
 
 function jackson!(μ::AbstractVector)

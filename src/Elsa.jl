@@ -13,7 +13,7 @@ using Requires
 using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
       ProgressMeter, LinearMaps, Random
 
-using SparseArrays: getcolptr
+using SparseArrays: getcolptr, AbstractSparseMatrixCSC
 
 export sublat, bravais, lattice, dims, hopping, onsite, hamiltonian, randomstate,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!, similarmatrix,
