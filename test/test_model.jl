@@ -2,7 +2,7 @@ module ModelTest
 
 using Test
 using Elsa
-using Elsa: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype
+using Elsa: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, FixedArgs
 
 @testset "onsite" begin
     r = SVector(0.0, 0.0)
@@ -13,10 +13,10 @@ using Elsa: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype
     for o in os, s in ss, c in cs
         ons = c * onsite(o, sublats = s)
         @test ons isa
-            TightbindingModel{1,Tuple{OnsiteTerm{typeof(o),S,typeof(c)}}} where S
+            TightbindingModel{1,Tuple{OnsiteTerm{typeof(FixedArgs(o)),S,typeof(c)}}} where S
         term = first(ons.terms)
         for t in ts
-            @test padtotype(term(r, r), t) isa t
+            @test padtotype(term(r, r, :A, :A), t) isa t
         end
     end
 end
@@ -32,10 +32,10 @@ end
     for h in hs, s in ss, c in cs, d in dns, r in rs
         hop = c * hopping(h, sublats = s, dn = d, range = r)
         @test hop isa
-            TightbindingModel{1,Tuple{HoppingTerm{typeof(h),S,D,typeof(float(r)),typeof(c)}}} where {S,D}
+            TightbindingModel{1,Tuple{HoppingTerm{typeof(FixedArgs(h)),S,D,typeof(float(r)),typeof(c)}}} where {S,D}
         term = first(hop.terms)
         for t in ts
-            @test padtotype(term(r, r), t) isa t
+            @test padtotype(term(r, r, :A, :A), t) isa t
         end
     end
 end
@@ -43,12 +43,12 @@ end
 @testset "term algebra" begin
     r = SVector(0, 0)
     model = onsite(1) + hopping(2I)
-    @test (t -> t(r, r)).(model.terms) == (1, 2I)
+    @test (t -> t(r, r, :A, :A)).(model.terms) == (1, 2I)
     model = onsite(1) - hopping(2I)
-    @test (t -> t(r, r)).(model.terms) == (1, -2I)
+    @test (t -> t(r, r, :A, :A)).(model.terms) == (1, -2I)
     model = -onsite(@SMatrix[1 0; 1 1]) - 2hopping(2I)
-    @test (t -> t(r, r)).(model.terms) == (-@SMatrix[1 0; 1 1], -4I)
-    @test model(r, r) == @SMatrix[-5 0; -1 -5]
+    @test (t -> t(r, r, :A, :A)).(model.terms) == (-@SMatrix[1 0; 1 1], -4I)
+    # @test model(r, r, :A, :A) == @SMatrix[-5 0; -1 -5]
 end
 
 end # module
