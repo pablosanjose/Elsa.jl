@@ -1,5 +1,5 @@
 #######################################################################
-# Function wrappers
+# Function wrappers with fixed number of arguments
 #######################################################################
 struct FixedArgs{N,F}
     f::F
@@ -50,12 +50,12 @@ struct HoppingTerm{F,
     forcehermitian::Bool
 end
 
-(o::OnsiteTerm{<:FixedArgs{1}})(r, dr, s1, s2) = o.coefficient * o.o(r)
-(o::OnsiteTerm{<:FixedArgs{2}})(r, dr, s1, s2) = o.coefficient * o.o(r, s1)
+(o::OnsiteTerm{<:FixedArgs{1}})(r, dr, s1, s2) = o.coefficient * o.o.f(r)
+(o::OnsiteTerm{<:FixedArgs{2}})(r, dr, s1, s2) = o.coefficient * o.o.f(r, s1)
 (o::OnsiteTerm)(r, dr, s1, s2) = o.coefficient * o.o
 
-(h::HoppingTerm{<:FixedArgs{2}})(r, dr, s1, s2) = h.coefficient * h.h(r, dr)
-(h::HoppingTerm{<:FixedArgs{4}})(r, dr, s1, s2) = h.coefficient * h.h(r, dr, s1, s2)
+(h::HoppingTerm{<:FixedArgs{2}})(r, dr, s1, s2) = h.coefficient * h.h.f(r, dr)
+(h::HoppingTerm{<:FixedArgs{4}})(r, dr, s1, s2) = h.coefficient * h.h.f(r, dr, s1, s2)
 (h::HoppingTerm)(r, dr, s1, s2) = h.coefficient * h.h
 
 sanitize_sublats(s::Missing) = missing
@@ -335,7 +335,7 @@ end
 
 function _checkmodelorbs(term::OnsiteTerm, orbs, lat)
     for s in sublats(term, lat)
-        _checkmodelorbs(term(first(sites(lat, s)), first(sites(lat, s))), length(orbs[s]))
+        _checkmodelorbs(term(first(sites(lat, s)), first(sites(lat, s)), s, s), length(orbs[s]))
     end
     return nothing
 end
