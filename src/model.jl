@@ -43,7 +43,7 @@ sanitize_sublats(n) = throw(ErrorException(
 
 sanitize_sublatpairs(s::Missing) = missing
 sanitize_sublatpairs((s1, s2)::NTuple{2,Union{Integer,NameType}}) = ((nametype(s1), nametype(s2)),)
-sanitize_sublatpairs((s2, s1)::Pair) = (sanitize_sublatpairs(s1, s2),)
+sanitize_sublatpairs((s2, s1)::Pair) = sanitize_sublatpairs((s1, s2))
 sanitize_sublatpairs(s::Union{Integer,NameType}) = sanitize_sublatpairs((s,s))
 sanitize_sublatpairs(s::NTuple{N,Any}) where {N} =
     ntuple(n -> first(sanitize_sublatpairs(s[n])), Val(N))
