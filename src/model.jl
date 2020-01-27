@@ -328,8 +328,7 @@ checkmodelorbs(model::TightbindingModel, orbs, lat) =
 
 function _checkmodelorbs(term::HoppingTerm, orbs, lat)
     for (s1, s2) in sublats(term, lat)
-        name1, name2 = sublatname(lat, s1), sublatname(lat, s2)
-        _checkmodelorbs(term(first(sites(lat, s1)), first(sites(lat, s2)), name1, name2), length(orbs[s1]), length(orbs[s2]))
+        _checkmodelorbs(term(first(sites(lat, s1)), first(sites(lat, s2)), s1, s2), length(orbs[s1]), length(orbs[s2]))
     end
     return nothing
 end
