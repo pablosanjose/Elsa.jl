@@ -568,6 +568,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) wh
     for (s1, s2) in termsublats
         is, js = siterange(lat, s1), siterange(lat, s2)
         dns = dniter(term.dns, Val(L))
+        name1, name2 = sublatname(lat, s1), sublatname(lat, s2)
         for dn in dns
             addadjoint = term.forcehermitian
             foundlink = false
@@ -582,7 +583,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) wh
                     foundlink = true
                     rtarget = lat.unitcell.sites[i]
                     r, dr = _rdr(rsource, rtarget)
-                    vs = orbsized(term(r, dr), builder.orbs[s1], builder.orbs[s2])
+                    vs = orbsized(term(r, dr, name1, name2), builder.orbs[s1], builder.orbs[s2])
                     v = padtotype(vs, M)
                     if addadjoint
                         v *= redundancyfactor(dn, (s1, s2), term)

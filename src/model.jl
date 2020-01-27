@@ -1,4 +1,27 @@
 #######################################################################
+# Function wrappers
+#######################################################################
+struct FixedArgs{N,F}
+    f::F
+end
+
+function FixedArgs(f::F) where {F<:Function}
+    if applicable(f, SVector(0.0))
+        return FixedArgs{1,F}(f)
+    elseif applicable(f, SVector(0.0), :A)
+        return FixedArgs{2,F}(f)
+    elseif applicable(f, SVector(0.0), SVector(0.0))
+        return FixedArgs{2,F}(f)
+    elseif applicable(f, SVector(0.0), SVector(0.0), :A, :A)
+        return FixedArgs{4,F}(f)
+    else
+        throw(ArgumentError("Function with wrong number of arguments"))
+    end
+end
+
+FixedArgs(x) = x
+
+#######################################################################
 # TightbindingModelTerm
 #######################################################################
 abstract type TightbindingModelTerm end
@@ -27,11 +50,13 @@ struct HoppingTerm{F,
     forcehermitian::Bool
 end
 
-(o::OnsiteTerm{<:Function})(r,dr) = o.coefficient * o.o(r)
-(o::OnsiteTerm)(r,dr) = o.coefficient * o.o
+(o::OnsiteTerm{<:FixedArgs{1}})(r, dr, s1, s2) = o.coefficient * o.o(r)
+(o::OnsiteTerm{<:FixedArgs{2}})(r, dr, s1, s2) = o.coefficient * o.o(r, s1)
+(o::OnsiteTerm)(r, dr, s1, s2) = o.coefficient * o.o
 
-(h::HoppingTerm{<:Function})(r, dr) = h.coefficient * h.h(r, dr)
-(h::HoppingTerm)(r, dr) = h.coefficient * h.h
+(h::HoppingTerm{<:FixedArgs{2}})(r, dr, s1, s2) = h.coefficient * h.h(r, dr)
+(h::HoppingTerm{<:FixedArgs{4}})(r, dr, s1, s2) = h.coefficient * h.h(r, dr, s1, s2)
+(h::HoppingTerm)(r, dr, s1, s2) = h.coefficient * h.h
 
 sanitize_sublats(s::Missing) = missing
 sanitize_sublats(s::Integer) = (nametype(s),)
@@ -151,7 +176,8 @@ Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
     `hopping`
 """
 function onsite(o; sublats = missing, forcehermitian::Bool = true)
-    return TightbindingModel(OnsiteTerm(o, sanitize_sublats(sublats), 1, forcehermitian))
+    term = OnsiteTerm(FixedArgs(o), sanitize_sublats(sublats), 1, forcehermitian)
+    return TightbindingModel(term)
 end
 
 """
@@ -207,8 +233,9 @@ Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
     `onsite`
 """
 function hopping(h; sublats = missing, range::Real = 1, dn = missing, forcehermitian::Bool = true)
-    return TightbindingModel(HoppingTerm(h, sanitize_sublatpairs(sublats), sanitize_dn(dn),
-        float(range) + sqrt(eps(float(range))), 1, forcehermitian))
+    term = HoppingTerm(FixedArgs(h), sanitize_sublatpairs(sublats), sanitize_dn(dn),
+        float(range) + sqrt(eps(float(range))), 1, forcehermitian)
+    return TightbindingModel(term)
 end
 
 
@@ -301,7 +328,8 @@ checkmodelorbs(model::TightbindingModel, orbs, lat) =
 
 function _checkmodelorbs(term::HoppingTerm, orbs, lat)
     for (s1, s2) in sublats(term, lat)
-        _checkmodelorbs(term(first(sites(lat, s1)), first(sites(lat, s2))), length(orbs[s1]), length(orbs[s2]))
+        name1, name2 = sublatname(lat, s1), sublatname(lat, s2)
+        _checkmodelorbs(term(first(sites(lat, s1)), first(sites(lat, s2)), name1, name2), length(orbs[s1]), length(orbs[s2]))
     end
     return nothing
 end

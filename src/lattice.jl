@@ -198,6 +198,8 @@ nsublats(u::Unitcell) = length(u.names)
 
 sublats(u::Unitcell) = 1:nsublats(u)
 
+sublatname(u::Unitcell, s) = u.names[s]
+
 transform!(u::Unitcell, f::Function) = (u.sites .= f.(u.sites); u)
 
 Base.copy(u::Unitcell) = Unitcell(copy(u.sites), u.names, copy(u.offsets))
@@ -388,6 +390,8 @@ siteindex(lat::AbstractLattice, sublat, idx) = siteindex(lat.unitcell, sublat, i
 offsets(lat::AbstractLattice) = offsets(lat.unitcell)
 
 sublatsites(lat::AbstractLattice) = sublatsites(lat.unitcell)
+
+sublatname(lat::AbstractLattice, s) = sublatname(lat.unitcell, s)
 
 nsites(lat::AbstractLattice) = nsites(lat.unitcell)
 nsites(lat::AbstractLattice, sublat) = nsites(lat.unitcell, sublat)
