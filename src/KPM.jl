@@ -60,7 +60,7 @@ matrixKPM(A::UniformScaling) = A
 """
     momentaKPM(h::AbstractMatrix, A = I; ket = missing, order = 10, randomkets = 1, bandrange = missing)
 
-Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|A T_n(h)|ket⟩/⟨ket|ket⟩` where `T_n(x)`
+Compute the Kernel Polynomial Method (KPM) momenta `μ_n = ⟨ket|T_n(h) A|ket⟩/⟨ket|ket⟩` where `T_n(x)`
 is the Chebyshev polynomial of order `n`, for a given `ket::AbstractVector`, hamiltonian `h`, and
 observable `A`. If `ket` is `missing`, momenta are computed by means of a stochastic trace
 `μ_n = Tr[A T_n(h)] ≈ ∑ₐ⟨a|A T_n(h)|a⟩/N` over `N = randomkets` normalized random `|a⟩`.
@@ -96,28 +96,9 @@ function momentaKPM(h::AbstractMatrix, A = one(eltype(h)) * I; randomkets = 1, k
     return MomentaKPM(jackson!(b.μlist), b.bandbracket)
 end
 
-function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrixCSC}, pmeter)
-    μlist, ket, ket0, ket1, ket2 = b.μlist, b.ket, b.ket0, b.ket1, b.ket2
-    h´, A, bandbracket = b.h', b.A, b.bandbracket
-    order = length(μlist) - 1
-    ket0 .= ket
-    mulscaled!(ket1, h´, ket0, bandbracket)
-    μlist[1] += μ0 = 1.0
-    μlist[2] += μ1 = proj(ket0, ket1)
-    for n in 3:2:(order+1)
-        μlist[n] += 2 * proj(ket1, ket1) - μ0
-        n + 1 > order + 1 && break
-        mulscaled!(ket2, h´, ket1, bandbracket)
-        @. ket2 = 2 * ket2 - ket0
-        μlist[n + 1] += 2 * proj(ket2, ket1) - μ1
-        ket0, ket1, ket2 = ket1, ket2, ket0
-        ProgressMeter.next!(pmeter; showvalues = ())
-        ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
-    end
-    A.λ ≈ 1 || (μlist .*= A.λ)
-    return μlist
-end
-
+# This iterates bras <psi_n| = <psi_0|T_n(h) instead of kets (faster CSC multiplication)
+# In practice we iterate their conjugate |psi_n> = T_n(h') |psi_0>, and do the projection
+# onto the start ket, A |psi_L>
 function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrixCSC}, pmeter)
     μlist, ket, ket0, ket1, ket2, ketL = b.μlist, b.ket, b.ket0, b.ket1, b.ket2, b.ketL
     h´, A, bandbracket = b.h', b.A, b.bandbracket
@@ -125,16 +106,38 @@ function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrixCSC
     ket0 .= ket
     mul!(ketL, A, ket)
     mulscaled!(ket1, h´, ket0, bandbracket)
-    μlist[1] += proj(ketL, ket0)
-    μlist[2] += proj(ketL, ket1)
+    μlist[1] += proj(ket0, ketL)
+    μlist[2] += proj(ket1, ketL)
     for n in 3:(order+1)
         mulscaled!(ket2, h´, ket1, bandbracket)
         @. ket2 = 2 * ket2 - ket0
-        μlist[n] += proj(ketL, ket2)
+        μlist[n] += proj(ket2, ketL)
         n + 1 > order + 1 && break
         ket0, ket1, ket2 =  ket1, ket2, ket0
         ProgressMeter.next!(pmeter; showvalues = ())
     end
+    return μlist
+end
+
+function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrixCSC}, pmeter)
+    μlist, ket, ket0, ket1, ket2 = b.μlist, b.ket, b.ket0, b.ket1, b.ket2
+    h´, A, bandbracket = b.h', b.A, b.bandbracket
+    order = length(μlist) - 1
+    ket0 .= ket
+    mulscaled!(ket1, h´, ket0, bandbracket)
+    μlist[1] += μ0 = 1.0
+    μlist[2] += μ1 = proj(ket1, ket0)
+    for n in 3:2:(order+1)
+        μlist[n] += 2 * proj(ket1, ket1) - μ0
+        n + 1 > order + 1 && break
+        mulscaled!(ket2, h´, ket1, bandbracket)
+        @. ket2 = 2 * ket2 - ket0
+        μlist[n + 1] += 2 * proj(ket1, ket2) - μ1
+        ket0, ket1, ket2 = ket1, ket2, ket0
+        ProgressMeter.next!(pmeter; showvalues = ())
+        ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
+    end
+    A.λ ≈ 1 || (μlist .*= A.λ)
     return μlist
 end
 
