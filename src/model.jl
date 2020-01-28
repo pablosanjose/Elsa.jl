@@ -124,24 +124,25 @@ together to build more complicated `TightbindingModel`s.
 
 # Examples
 ```
-julia> onsite(1, sublats = (1,2)) - hopping(2)
+julia> onsite(1, sublats = (:A,:B)) - hopping(2, sublats = :A=>:A)
 TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:
-    Sublattices      : (1, 2)
+    Sublattices      : (:A, :B)
     Force hermitian  : true
     Coefficient      : 1
   HoppingTerm{Int64}:
-    Sublattice pairs : any
+    Sublattice pairs : (:A => :A,)
     dn cell jumps    : any
     Hopping range    : 1.0
     Force hermitian  : true
     Coefficient      : -1
 
-julia> hamiltonian(LatticePresets.honeycomb(orbitals = (:a, :b)), onsite(r->@SMatrix[1 2; 3 4]))
-Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+julia> LatticePresets.honeycomb() |> hamiltonian(onsite(r->@SMatrix[1 2; 3 4]), orbitals = Val(2))
+Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 1 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
-  Elements         : 2 × 2 blocks
+  Orbitals         : ((:a, :a), (:a, :a))
+  Element type     : 2 × 2 blocks (Complex{Float64})
   Onsites          : 2
   Hoppings         : 0
   Coordination     : 0.0
@@ -180,24 +181,25 @@ together to build more complicated `TightbindingModel`s.
 
 # Examples
 ```
-julia> onsite(1) - hopping(2, dn = ((1,2), (0,0)), sublats = (1,1))
+julia> onsite(1) - hopping(2, dn = ((1,2), (0,0)), sublats = :A=>:B)
 TightbindingModel{2}: model with 2 terms
   OnsiteTerm{Int64}:
     Sublattices      : any
     Force hermitian  : true
     Coefficient      : 1
   HoppingTerm{Int64}:
-    Sublattice pairs : (1 => 1,)
+    Sublattice pairs : (:A => :B,)
     dn cell jumps    : ([1, 2], [0, 0])
     Hopping range    : 1.0
     Force hermitian  : true
     Coefficient      : -1
 
-julia> hamiltonian(LatticePresets.honeycomb(), hopping((r,dr) -> cos(r[1]), sublats = ((1,1), (2,2))))
-Hamiltonian{<:Lattice} : 2D Hamiltonian on a 2D Lattice in 2D space
+julia> LatticePresets.honeycomb() |> hamiltonian(hopping((r,dr) -> cos(r[1]), sublats = ((:A,:A), (:B,:B))))
+Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
   Bloch harmonics  : 7 (SparseMatrixCSC, sparse)
   Harmonic size    : 2 × 2
-  Elements         : scalars
+  Orbitals         : ((:a,), (:a,))
+  Element type     : scalar (Complex{Float64})
   Onsites          : 0
   Hoppings         : 12
   Coordination     : 6.0
