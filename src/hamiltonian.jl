@@ -133,16 +133,16 @@ _nnzdiag(s::Matrix) = count(!iszero, s[i,i] for i in 1:minimum(size(s)))
 
 # Iteration tools #
 
-struct IndicesNonzeros{H}
+struct EachIndexNonzeros{H}
     h::H
     rowrange::UnitRange{Int}
     colrange::UnitRange{Int}
 end
 
-indicesnonzeros(h, rowrange = 1:size(h, 1), colrange = 1:size(h, 2)) =
-    IndicesNonzeros(h, rclamp(rowrange, 1:size(h, 1)), rclamp(colrange, 1:size(h, 2)))
+eachindex_nz(h, rowrange = 1:size(h, 1), colrange = 1:size(h, 2)) =
+    EachIndexNonzeros(h, rclamp(rowrange, 1:size(h, 1)), rclamp(colrange, 1:size(h, 2)))
 
-function firststate(itr::IndicesNonzeros{<:Hamiltonian}, nhar)
+function firststate(itr::EachIndexNonzeros{<:Hamiltonian}, nhar)
     m = itr.h.harmonics[nhar].h
     row, col = nextnonzero_row_col(m, itr)
     return (row, col, nhar)
@@ -168,7 +168,7 @@ end
 
 isvalidrowcol(row, col, m, itr) = row in itr.rowrange && !iszero(m[row, col])
 
-function Base.iterate(itr::IndicesNonzeros{<:Hamiltonian}, (ptridx, col, nhar) = firststate(itr, 1))
+function Base.iterate(itr::EachIndexNonzeros{<:Hamiltonian}, (ptridx, col, nhar) = firststate(itr, 1))
     nhar > length(itr.h.harmonics) && return nothing
     har = itr.h.harmonics[nhar]
     i = _iterate(har.h, itr, ptridx, col)
@@ -181,9 +181,9 @@ function Base.iterate(itr::IndicesNonzeros{<:Hamiltonian}, (ptridx, col, nhar) =
     end
 end
 
-firststate(itr::IndicesNonzeros{<:HamiltonianHarmonic}) = nextnonzero_row_col(itr.h.h, itr)
+firststate(itr::EachIndexNonzeros{<:HamiltonianHarmonic}) = nextnonzero_row_col(itr.h.h, itr)
 
-function Base.iterate(itr::IndicesNonzeros{<:HamiltonianHarmonic}, (row, col) = firststate(itr))
+function Base.iterate(itr::EachIndexNonzeros{<:HamiltonianHarmonic}, (row, col) = firststate(itr))
     _iterate(itr.h.h, itr, row, col)
 end
 
@@ -209,10 +209,10 @@ function _iterate(m::DenseMatrix, itr, row, col)
     return _iterate(m, itr, row´, col´)
 end
 
-Base.IteratorSize(::IndicesNonzeros) = Base.SizeUnknown()
-Base.IteratorEltype(::IndicesNonzeros) = Base.HasEltype()
-Base.eltype(s::IndicesNonzeros{<:Hamiltonian}) = Tuple{Int, Int, typeof(first(s.h.harmonics).dn)}
-Base.eltype(s::IndicesNonzeros{<:HamiltonianHarmonic}) = Tuple{Int, Int}
+Base.IteratorSize(::EachIndexNonzeros) = Base.SizeUnknown()
+Base.IteratorEltype(::EachIndexNonzeros) = Base.HasEltype()
+Base.eltype(s::EachIndexNonzeros{<:Hamiltonian}) = Tuple{Int, Int, typeof(first(s.h.harmonics).dn)}
+Base.eltype(s::EachIndexNonzeros{<:HamiltonianHarmonic}) = Tuple{Int, Int}
 
 # stored_indices(h::Hamiltonian) = ((har.dn, rowvals(har.h)[ptr], col) for har in h.harmonics
 #                                   for col in 1:size(har.h, 2) for ptr in nzrange(har.h, col))
