@@ -265,9 +265,9 @@ corresponding Bloch Hamiltonian matrix (equivalent to `h(;params...)(ϕ₁, ϕ�
 It's important to note that `params` keywords in the definition of `funcmodel` must have
 default values, as in `model(;o = 1) = onsite(o)`.
 
-    lat |> hamiltonian([func, model]; kw...)
+    lat |> hamiltonian(model[, funcmodel]; kw...)
 
-Functional form of `hamiltonian`, equivalent to `hamiltonian(lat, ...; ...)`
+Functional `hamiltonian` form equivalent to `hamiltonian(lat, model[, funcmodel]; kw...)`.
 
 # Indexing
 
@@ -1149,7 +1149,7 @@ Base.show(io::IO, pham::ParametricHamiltonian) = print(io, "Parametric ", pham.h
 
 function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, orbs, model, f::F;
                                 field = missing) where {M,E,L,T,F<:Function}
-    builder = IJVBuilder(M, lat, orbs)
+    builder = IJVBuilder(lat, orbs, M)
     applyterms!(builder, terms(model)...)
     nels = length.(builder.ijvs) # element counters for each harmonic
     model_f = f()
