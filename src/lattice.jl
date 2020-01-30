@@ -360,7 +360,7 @@ function foreach_supersite(f::F, lat::Superlattice) where {F<:Function}
         for dn in CartesianIndices(lat.supercell)
             if isinmask(lat.supercell, oldi, dn)
                 newi += 1
-                f(s, oldi, SVector(Tuple(dn)), newi)
+                f(s, oldi, toSVector(Int, Tuple(dn)), newi)
             end
         end
     end
@@ -584,7 +584,7 @@ function _supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}, reg
     mask = OffsetArray(BitArray(undef, ns, size(cells)...), 1:ns, cells.indices...)
     @inbounds for dn in cells
         dntup = Tuple(dn)
-        dnvec = SVector(dntup)
+        dnvec = toSVector(Int, dntup)
         in_supercell = in_supercell_func(dnvec)
         in_supercell || (mask[:, dntup...] .= false; continue)
         r0 = brmatrix * dnvec
@@ -628,8 +628,8 @@ function supercell_cells(lat::Lattice{E,L}, regionfunc, in_supercell_func) where
         found = false
         counter += 1; counter == TOOMANYITERS &&
             throw(ArgumentError("`region` seems unbounded (after $TOOMANYITERS iterations)"))
-        in_supercell = in_supercell_func(SVector(Tuple(dn)))
-        r0 = bravais * SVector(Tuple(dn))
+        in_supercell = in_supercell_func(toSVector(Int, dn))
+        r0 = bravais * toSVector(Int, dn)
         for site in lat.unitcell.sites
             r = r0 + site
             found = in_supercell && regionfunc(r)
