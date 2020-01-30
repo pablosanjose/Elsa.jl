@@ -603,8 +603,6 @@ is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(new_dn
 new_dn(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
 new_dn(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
 
-wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell * newdn
-
 function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E,L,T,L´}
     L <= L´ && return r -> true
     # real-space supercell axes + all space
@@ -689,18 +687,25 @@ Calls `unitcell` with a uniformly scaled `uc = SMatrix{L,L}(factor * I)`
 Calls `unitcell` with different scaling along each Bravais vector (diagonal supercell
 with factors along the diagonal)
 
-    lattice |> unitcell(v...; kw...)
-
-Functional syntax, equivalent to `unitcell(lattice, v...; kw...)
-
     unitcell(slat::Superlattice)
 
 Convert Superlattice `slat` into a lattice with its unit cell matching `slat`'s supercell.
 
-    unitcell(h::Hamiltonian, v...; kw...)
+    unitcell(h::Hamiltonian, v...; onsitefield = missing, hoppingfield = missing, kw...)
 
-Transforms the `Lattice` of `h` to have a larger unitcell, and expanding the Hamiltonian
-accordingly.
+Transforms the `Lattice` of `h` to have a larger unitcell, while expanding the Hamiltonian
+accordingly. If not missing, the function `onsitefield(o, r)` is applied to each onsite
+energy 'o' of sites at position `r`, and `hoppingfield(h, r, dr)` is applied to hoppings `h`
+between sites at positions `r1, r2 = r - dr/2, r + dr/2`. 
+
+Note: for performance reasons, in sparse hamiltonians only the stored `o`s and `h`s will be
+transformed by these fields, so you might want to add zero onsites or hoppings when building
+`h` to have a field applied to them. Note also that additional `o`s and `h`s may be stored
+when calling `optimize!` or `bloch`/`bloch!` on `h` for the first time.
+
+    lat_or_h |> unitcell(v...; kw...)
+
+Functional syntax, equivalent to `unitcell(lat_or_h, v...; kw...)
 
 # Examples
 ```jldoctest

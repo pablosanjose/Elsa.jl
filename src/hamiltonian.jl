@@ -13,20 +13,19 @@ HamiltonianHarmonic{L,M,A}(dn::SVector{L,Int}, n::Int, m::Int) where {L,M,A<:Mat
     HamiltonianHarmonic(dn, zeros(M, n, m))
 
 struct Hamiltonian{LA<:AbstractLattice,L,M,A<:AbstractMatrix,
-                   H<:HamiltonianHarmonic{L,M,A},F<:Union{Missing,Field},
+                   H<:HamiltonianHarmonic{L,M,A},
                    O<:Tuple{Vararg{Tuple{Vararg{NameType}}}}} <: AbstractMatrix{M}
     lattice::LA
     harmonics::Vector{H}
-    field::F
     orbitals::O
 end
 
-function Hamiltonian(lat, hs::Vector{H}, field, orbs, n::Int, m::Int) where {L,M,H<:HamiltonianHarmonic{L,M}}
+function Hamiltonian(lat, hs::Vector{H}, orbs, n::Int, m::Int) where {L,M,H<:HamiltonianHarmonic{L,M}}
     sort!(hs, by = h -> abs.(h.dn))
     if isempty(hs) || !iszero(first(hs).dn)
         pushfirst!(hs, H(zero(SVector{L,Int}), empty_sparse(M, n, m)))
     end
-    return Hamiltonian(lat, hs, field, orbs)
+    return Hamiltonian(lat, hs, orbs)
 end
 
 Base.show(io::IO, ham::Hamiltonian) = show(io, MIME("text/plain"), ham)
@@ -219,7 +218,7 @@ Base.eltype(s::EachIndexNonzeros{<:HamiltonianHarmonic}) = Tuple{Int, Int}
 
 # External API #
 """
-    hamiltonian(lat[, model]; orbitals, field, type)
+    hamiltonian(lat[, model]; orbitals, type)
 
 Create a `Hamiltonian` by additively applying `model::TighbindingModel` to the lattice `lat`
 (see `hopping` and `onsite` for details on building tightbinding models).
@@ -242,11 +241,6 @@ define a block size `N = max(num_orbitals)`. If `N = 1` (all sublattices with on
 the the Hamiltonian element type is `type`. Otherwise it is `SMatrix{N,N,type}` blocks,
 padded with the necessary zeros as required. Keyword `type` is `Complex{T}` by default,
 where `T` is the number type of `lat`.
-
-Advanced use: if a `field = f(r,dr,h)` function is given, it will modify the hamiltonian
-element `h` operating on sites `r₁` and `r₂`, where `r = (r₁ + r₂)/2` and `dr = r₂ - r₁`.
-In combination with `supercell`, it allows to do matrix-free operations including position-
-dependent perturbations (e.g. disorder, gauge fields).
 
     h(ϕ₁, ϕ₂, ...)
     h((ϕ₁, ϕ₂, ...))
@@ -364,10 +358,10 @@ sanitize_orbs(o::Val{N}) where {N} = ntuple(_ -> :a, Val(N))
 sanitize_orbs(o::NTuple{N,Union{Integer,NameType}}) where {N} = nametype.(o)
 sanitize_orbs(p) = throw(ArgumentError("Wrong format for orbitals, see `hamiltonian`"))
 
-Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.field, h.orbitals)
+Base.Matrix(h::Hamiltonian) = Hamiltonian(h.lattice, Matrix.(h.harmonics), h.orbitals)
 Base.Matrix(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, Matrix(h.h))
 
-Base.copy(h::Hamiltonian) = Hamiltonian(copy(h.lattice), copy.(h.harmonics), h.field, h.orbitals)
+Base.copy(h::Hamiltonian) = Hamiltonian(copy(h.lattice), copy.(h.harmonics), h.orbitals)
 Base.copy(h::HamiltonianHarmonic) = HamiltonianHarmonic(h.dn, copy(h.h))
 
 Base.size(h::Hamiltonian, n) = size(first(h.harmonics).h, n)
@@ -522,18 +516,18 @@ end
 #######################################################################
 # hamiltonian_sparse
 #######################################################################
-function hamiltonian_sparse(Mtype, lat, orbs, model; field = missing)
+function hamiltonian_sparse(Mtype, lat, orbs, model)
     builder = IJVBuilder(lat, orbs, Mtype)
-    return hamiltonian_sparse!(builder, lat, orbs, model, Field(field, lat))
+    return hamiltonian_sparse!(builder, lat, orbs, model)
 end
 
-function hamiltonian_sparse!(builder::IJVBuilder{L,M}, lat::AbstractLattice{E,L}, orbs, model, field) where {E,L,M}
+function hamiltonian_sparse!(builder::IJVBuilder{L,M}, lat::AbstractLattice{E,L}, orbs, model) where {E,L,M}
     checkmodelorbs(model, orbs, lat)
     applyterms!(builder, terms(model)...)
     n = nsites(lat)
     HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs if !isempty(e)]
-    return Hamiltonian(lat, harmonics, field, orbs, n, n)
+    return Hamiltonian(lat, harmonics, orbs, n, n)
 end
 
 
@@ -633,15 +627,16 @@ isnotredundant((s1, s2)::Tuple{Int,Int}, term) = term.sublats !== missing && s1 
 #######################################################################
 function supercell(ham::Hamiltonian, args...; kw...)
     slat = supercell(ham.lattice, args...; kw...)
-    return Hamiltonian(slat, ham.harmonics, ham.field, ham.orbitals)
+    return Hamiltonian(slat, ham.harmonics, ham.orbitals)
 end
 
-function unitcell(ham::Hamiltonian{<:Lattice}, args...; kw...)
+function unitcell(ham::Hamiltonian{<:Lattice}, args...;
+                  onsitefield = missing, hoppingfield = missing, kw...)
     sham = supercell(ham, args...; kw...)
-    return unitcell(sham)
+    return unitcell(sham; onsitefield = onsitefield, hoppingfield = hoppingfield)
 end
 
-function unitcell(ham::Hamiltonian{LA,L}) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
+function unitcell(ham::Hamiltonian{LA,L}; onsitefield = missing, hoppingfield = missing) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
     lat = ham.lattice
     sc = lat.supercell
     mapping = OffsetArray{Int}(undef, sc.sites, sc.cells.indices...) # store supersite indices newi
@@ -665,7 +660,8 @@ function unitcell(ham::Hamiltonian{LA,L}) where {E,L,T,L´,LA<:Superlattice{E,L,
                 # check: wrapped_dn could exit bounding box along non-periodic direction
                 checkbounds(Bool, mapping, target_i, Tuple(wrapped_dn)...) || continue
                 newrow = mapping[target_i, Tuple(wrapped_dn)...]
-                val = applyfield(ham.field, vals[p], target_i, source_i, source_dn)
+                val = applytransform(vals[p], onsitefield, hoppingfield,
+                                     lat, source_i, source_dn, target_i, target_dn)
                 iszero(newrow) || pushtocolumn!(newh.h, newrow, val)
             end
         end
@@ -673,9 +669,8 @@ function unitcell(ham::Hamiltonian{LA,L}) where {E,L,T,L´,LA<:Superlattice{E,L,
     end
     harmonics = [HamiltonianHarmonic(h.dn, sparse(h.h)) for h in harmonic_builders]
     unitlat = unitcell(lat)
-    field = ham.field
     orbs = ham.orbitals
-    return Hamiltonian(unitlat, harmonics, field, orbs)
+    return Hamiltonian(unitlat, harmonics, orbs)
 end
 
 function get_or_push!(hs::Vector{<:HamiltonianHarmonic{L,B,<:SparseMatrixBuilder}}, dn, dim, currentcol) where {L,B}
@@ -686,6 +681,33 @@ function get_or_push!(hs::Vector{<:HamiltonianHarmonic{L,B,<:SparseMatrixBuilder
     currentcol > 1 && finalizecolumn!(newh.h, currentcol - 1) # for columns that have been already processed
     push!(hs, newh)
     return newh
+end
+
+wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell * newdn
+
+applytransform(val, ::Missing, ::Missing, _...) = val
+
+function applytransform(val, onsite, hopping, lat, isrc, dnsrc, idst, dndst)
+    val´ = isrc == idst && dnsrc == dndst ?
+        _applytransform(val, onsite, lat, isrc, dnsrc) :
+        _applytransform(val, hopping, lat, isrc, dnsrc, idst, dndst)
+    return val´
+end
+
+_applytransform(val, ::Missing, _...) = val
+
+function _applytransform(val, onsite, lat, isrc, dnsrc)
+    rs = sites(lat)
+    br = bravais(lat)
+    r = rs[isrc] + br * dnsrc
+    return onsite(val, r)
+end
+
+function _applytransform(val, hopping, lat, isrc, dnsrc, idst, dndst)
+    rs = sites(lat)
+    br = bravais(lat)
+    r, dr = _rdr(rs[isrc] + br * dnsrc, rs[idst] + br * dndst)
+    return hopping(val, r, dr)
 end
 
 #######################################################################
@@ -719,7 +741,7 @@ function wrap(h::Hamiltonian{<:Lattice,L}, axis; factor = 1) where {L}
     1 <= axis <= L || throw(ArgumentError("wrap axis should be between 1 and the lattice dimension $L"))
     lattice´ = _wrap(h.lattice, axis)
     harmonics´ = _wrap(h.harmonics, axis, factor)
-    return Hamiltonian(lattice´, harmonics´, h.field, h.orbitals)
+    return Hamiltonian(lattice´, harmonics´, h.orbitals)
 end
 
 wrap(axis; kw...) = h -> wrap(h, axis; kw...)
@@ -762,8 +784,7 @@ end
 
 Build a new Hamiltonian `h` that combines all `hams` as diagonal blocks, and applies
 `coupling::Model`, if provided, to build the off-diagonal couplings. Note that the diagonal
-blocks are not modified by the coupling model. Any field in the source Hamiltonians is
-removed.
+blocks are not modified by the coupling model.
 """
 combine(hams::Hamiltonian...; coupling = missing) = _combine(coupling, hams...)
 
@@ -774,8 +795,7 @@ function _combine(model::TightbindingModel, hams::Hamiltonian...)
     orbs = tuplejoin((h -> h.orbitals).(hams)...)
     builder = IJVBuilder(lat, orbs, hams...)
     model´ = nondiagonal(model, nsublats.(hams))
-    field = Field(missing, lat)
-    ham = hamiltonian_sparse!(builder, lat, orbs, model´, field)
+    ham = hamiltonian_sparse!(builder, lat, orbs, model´)
     return ham
 end
 
@@ -1040,9 +1060,8 @@ function flatten(h::Hamiltonian)
     all(isequal(1), norbitals(h)) && return copy(h)
     harmonics´ = [flatten(har, h.orbitals, h.lattice) for har in h.harmonics]
     lattice´ = flatten(h.lattice, h.orbitals)
-    field´ = h.field
     orbitals´ = (_ -> (:flat, )).(h.orbitals)
-    return Hamiltonian(lattice´, harmonics´, field´, orbitals´)
+    return Hamiltonian(lattice´, harmonics´, orbitals´)
 end
 
 flatten(h::HamiltonianHarmonic, orbs, lat) =
@@ -1147,8 +1166,7 @@ end
 
 Base.show(io::IO, pham::ParametricHamiltonian) = print(io, "Parametric ", pham.hamiltonian)
 
-function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, orbs, model, f::F;
-                                field = missing) where {M,E,L,T,F<:Function}
+function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, orbs, model, f::F) where {M,E,L,T,F<:Function}
     builder = IJVBuilder(lat, orbs, M)
     applyterms!(builder, terms(model)...)
     nels = length.(builder.ijvs) # element counters for each harmonic
@@ -1172,8 +1190,8 @@ function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, orbs, mo
     base_harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in base_ijvs]
     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs]
     pointers = [getpointers(harmonics[k].h, builder.ijvs[k], nels[k], lat) for k in eachindex(harmonics)]
-    base_h = Hamiltonian(lat, base_harmonics, missing, orbs, n, n)
-    h = Hamiltonian(lat, harmonics, Field(field, lat), orbs, n, n)
+    base_h = Hamiltonian(lat, base_harmonics, orbs, n, n)
+    h = Hamiltonian(lat, harmonics, orbs, n, n)
     return ParametricHamiltonian(base_h, h, pointers, f)
 end
 
@@ -1235,7 +1253,7 @@ Base.Matrix(h::ParametricHamiltonian) =
     ParametricHamiltonian(Matrix(h.base), Matrix(h.hamiltonian), h.pointers, h.f)
 
 Base.copy(h::ParametricHamiltonian) =
-    ParametricHamiltonian(copy(h.base), copy(h.hamiltonian), copy(h.pointers), h.field)
+    ParametricHamiltonian(copy(h.base), copy(h.hamiltonian), copy(h.pointers))
 
 Base.size(h::ParametricHamiltonian, n...) = size(h.hamiltonian, n...)
 
