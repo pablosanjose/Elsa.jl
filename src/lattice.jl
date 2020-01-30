@@ -367,7 +367,7 @@ function foreach_supersite(f::F, lat::Superlattice) where {F<:Function}
     return nothing
 end
 
-issemibounded(lat::Superlattice) where {L} = issemibounded(lat.supercell)
+issemibounded(lat::Superlattice) = issemibounded(lat.supercell)
 
 #######################################################################
 # AbstractLattice interface
