@@ -692,7 +692,7 @@ function applytransform(val::T, onsite, hopping, lat, isrc, dnsrc, idst, dndst) 
     br = bravais(lat)
     if isrc == idst && dnsrc == dndst
         r = rs[isrc] + br * dnsrc
-        return onsite == missing ? val : T(onsite(val, r))
+        return onsite === missing ? val : T(onsite(val, r))
     else
         r, dr = _rdr(rs[isrc] + br * dnsrc, rs[idst] + br * dndst)
         return hopping === missing ? val : T(hopping(val, r, dr))
