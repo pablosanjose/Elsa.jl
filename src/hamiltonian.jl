@@ -687,27 +687,16 @@ wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell 
 
 applytransform(val, ::Missing, ::Missing, _...) = val
 
-function applytransform(val, onsite, hopping, lat, isrc, dnsrc, idst, dndst)
-    val´ = isrc == idst && dnsrc == dndst ?
-        _applytransform(val, onsite, lat, isrc, dnsrc) :
-        _applytransform(val, hopping, lat, isrc, dnsrc, idst, dndst)
-    return val´
-end
-
-_applytransform(val, ::Missing, _...) = val
-
-function _applytransform(val, onsite, lat, isrc, dnsrc)
+function applytransform(val::T, onsite, hopping, lat, isrc, dnsrc, idst, dndst) where {T}
     rs = sites(lat)
     br = bravais(lat)
-    r = rs[isrc] + br * dnsrc
-    return onsite(val, r)
-end
-
-function _applytransform(val, hopping, lat, isrc, dnsrc, idst, dndst)
-    rs = sites(lat)
-    br = bravais(lat)
-    r, dr = _rdr(rs[isrc] + br * dnsrc, rs[idst] + br * dndst)
-    return hopping(val, r, dr)
+    if isrc == idst && dnsrc == dndst
+        r = rs[isrc] + br * dnsrc
+        return onsite == missing ? val : T(onsite(val, r))
+    else
+        r, dr = _rdr(rs[isrc] + br * dnsrc, rs[idst] + br * dndst)
+        return hopping === missing ? val : T(hopping(val, r, dr))
+    end
 end
 
 #######################################################################
