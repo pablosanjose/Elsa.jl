@@ -194,7 +194,7 @@ function _iterate(m::AbstractSparseMatrix, itr, ptridx, col)
     rows = rowvals(m)
     if ptridx <= length(ptrs)
         row = rows[ptrs[ptridx]]
-        isvalidrowcol(row, col, m, itr) && return (row, col), (ptridx + 1, col)
+        row in itr.rowrange && return (row, col), (ptridx + 1, col)
     end
     ptridx´, col´ = nextnonzero_row_col(m, itr, col + 1)
     return _iterate(m, itr, ptridx´, col´)
