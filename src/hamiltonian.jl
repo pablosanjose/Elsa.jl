@@ -537,6 +537,7 @@ applyterm!(builder::IJVBuilder, term::Union{OnsiteTerm, HoppingTerm}) =
     applyterm!(builder, term, sublats(term, builder.lat))
 
 function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm, termsublats) where {L,M}
+    selector = term.selector
     lat = builder.lat
     for s in termsublats
         is = siterange(lat, s)
@@ -544,6 +545,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm, termsublats) whe
         ijv = builder[dn0]
         offset = lat.unitcell.offsets[s]
         for i in is
+            isinregion(i, selector.region, lat) || continue
             r = lat.unitcell.sites[i]
             vs = orbsized(term(r,r), builder.orbs[s])
             v = padtotype(vs, M)
@@ -554,11 +556,12 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm, termsublats) whe
 end
 
 function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) where {L,M}
-    checkinfinite(term.selector)
+    selector = term.selector
+    checkinfinite(selector)
     lat = builder.lat
     for (s1, s2) in termsublats
         is, js = siterange(lat, s1), siterange(lat, s2)
-        dns = dniter(term.selector.dns, Val(L))
+        dns = dniter(selector.dns, Val(L))
         for dn in dns
             addadjoint = term.forcehermitian
             foundlink = false
@@ -567,16 +570,17 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) wh
             for j in js
                 sitej = lat.unitcell.sites[j]
                 rsource = sitej - lat.bravais.matrix * dn
-                itargets = targets(builder, term.selector.range, rsource, s1)
+                itargets = targets(builder, selector.range, rsource, s1)
                 for i in itargets
                     isselfhopping((i, j), (s1, s2), dn) && continue
+                    isinregion((i, j), selector.region, lat) || continue
                     foundlink = true
                     rtarget = lat.unitcell.sites[i]
                     r, dr = _rdr(rsource, rtarget)
                     vs = orbsized(term(r, dr), builder.orbs[s1], builder.orbs[s2])
                     v = padtotype(vs, M)
                     if addadjoint
-                        v *= redundancyfactor(dn, (s1, s2), term.selector)
+                        v *= redundancyfactor(dn, (s1, s2), selector)
                         push!(ijv, (i, j, v))
                         push!(ijvc, (j, i, v'))
                     else

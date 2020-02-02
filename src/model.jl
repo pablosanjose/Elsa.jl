@@ -4,22 +4,22 @@
 abstract type Selector{M,S} end
 
 struct SelectOnsites{M,S} <: Selector{M,S}
-    mask::M
+    region::M
     sublats::S
 end
 
 struct SelectHoppings{M,S,D,T} <: Selector{M,S}
-    mask::M
+    region::M
     sublats::S
     dns::D
     range::T
 end
 
-selectonsites(; mask = missing, sublats = missing) =
-    SelectOnsites(mask, sanitize_sublats(sublats))
+selectonsites(; region = missing, sublats = missing) =
+    SelectOnsites(region, sanitize_sublats(sublats))
 
-selecthoppings(; mask = missing, sublats = missing, dns = missing, range = missing) =
-    SelectHoppings(mask, sanitize_sublatpairs(sublats), sanitize_dn(missing), sanitize_range(range))
+selecthoppings(; region = missing, sublats = missing, dns = missing, range = missing) =
+    SelectHoppings(region, sanitize_sublatpairs(sublats), sanitize_dn(missing), sanitize_range(range))
 
 sanitize_sublats(s::Missing) = missing
 sanitize_sublats(s::Integer) = (nametype(s),)
@@ -78,8 +78,8 @@ sublats(s::Selector{<:Any,<:Vector}, lat) = s.sublats
 # API
 
 resolve(s::SelectHoppings, lat::Lattice) =
-    SelectHoppings(s.mask, sublats(s, lat), _checkdims(s.dns, lat), s.range)
-resolve(s::SelectOnsites, lat::Lattice) = SelectOnsites(s.mask, sublats(s, lat))
+    SelectHoppings(s.region, sublats(s, lat), _checkdims(s.dns, lat), s.range)
+resolve(s::SelectOnsites, lat::Lattice) = SelectOnsites(s.region, sublats(s, lat))
 
 _checkdims(dns::Missing, lat::Lattice{E,L}) where {E,L} = dns
 _checkdims(dns::Tuple{Vararg{SVector{L,Int}}}, lat::Lattice{E,L}) where {E,L} = dns
@@ -87,18 +87,18 @@ _checkdims(dns, lat::Lattice{E,L}) where {E,L} =
     throw(DimensionMismatch("Specified cell distance `dns` does not match lattice dimension $L"))
 
 (s::SelectOnsites)(ind, sublat, lat::Lattice) =
-    isinmask(ind, s.mask, lat) && isinsublats(sublat, s.sublats)
+    isinregion(ind, s.region, lat) && isinsublats(sublat, s.sublats)
 
 (s::SelectHoppings)(inds, sublats, dn, lat::Lattice) =
-    isinmask(inds, s.mask, lat) && isinsublats(sublats, s.sublats) &&
+    isinregion(inds, s.region, lat) && isinsublats(sublats, s.sublats) &&
     isindns(dn, s.dns) && isinrange(inds, s.range, lat)
 
-isinmask(i::Int, ::Missing, lat) = true
-isinmask(i::Int, mask::Function, lat) = mask(sites(lat)[i])
-isinmask(is::Tuple{Int,Int}, ::Missing, lat) = true
-function isinmask((src, dst)::Tuple{Int,Int}, mask::Function, lat)
+isinregion(i::Int, ::Missing, lat) = true
+isinregion(i::Int, region::Function, lat) = region(sites(lat)[i])
+isinregion(is::Tuple{Int,Int}, ::Missing, lat) = true
+function isinregion((src, dst)::Tuple{Int,Int}, region::Function, lat)
     r, dr = _rdr(sites(lat)[src], sites(lat)[dst])
-    return mask(r, dr)
+    return region(r, dr)
 end
 
 isinsublats(s::Int, ::Missing) = true
