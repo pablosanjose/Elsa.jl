@@ -536,9 +536,6 @@ applyterms!(builder, terms...) = foreach(term -> applyterm!(builder, term), term
 applyterm!(builder::IJVBuilder, term::Union{OnsiteTerm, HoppingTerm}) =
     applyterm!(builder, term, sublats(term, builder.lat))
 
-applyterm!(builder::IJVBuilder, ndterm::NondiagonalTerm) =
-    applyterm!(builder, ndterm.term, sublats(ndterm, builder.lat))
-
 function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm, termsublats) where {L,M}
     lat = builder.lat
     for s in termsublats
@@ -557,11 +554,11 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm, termsublats) whe
 end
 
 function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) where {L,M}
-    checkinfinite(term)
+    checkinfinite(term.selector)
     lat = builder.lat
     for (s1, s2) in termsublats
         is, js = siterange(lat, s1), siterange(lat, s2)
-        dns = dniter(term.dns, Val(L))
+        dns = dniter(term.selector.dns, Val(L))
         for dn in dns
             addadjoint = term.forcehermitian
             foundlink = false
@@ -570,7 +567,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) wh
             for j in js
                 sitej = lat.unitcell.sites[j]
                 rsource = sitej - lat.bravais.matrix * dn
-                itargets = targets(builder, term.range, rsource, s1)
+                itargets = targets(builder, term.selector.range, rsource, s1)
                 for i in itargets
                     isselfhopping((i, j), (s1, s2), dn) && continue
                     foundlink = true
@@ -579,7 +576,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) wh
                     vs = orbsized(term(r, dr), builder.orbs[s1], builder.orbs[s2])
                     v = padtotype(vs, M)
                     if addadjoint
-                        v *= redundancyfactor(dn, (s1, s2), term)
+                        v *= redundancyfactor(dn, (s1, s2), term.selector)
                         push!(ijv, (i, j, v))
                         push!(ijvc, (j, i, v'))
                     else
@@ -611,16 +608,17 @@ end
 
 targets(builder, range::Missing, rsource, s1) = eachindex(builder.lat.sublats[s1].sites)
 
-checkinfinite(term) = term.dns === missing && (term.range === missing || !isfinite(term.range)) &&
+checkinfinite(selector) =
+    selector.dns === missing && (selector.range === missing || !isfinite(selector.range)) &&
     throw(ErrorException("Tried to implement an infinite-range hopping on an unbounded lattice"))
 
 isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero(dn)
 
 # Avoid double-counting hoppings when adding adjoint
-redundancyfactor(dn, ss, term) =
-    isnotredundant(dn, term) || isnotredundant(ss, term) ? 1.0 : 0.5
-isnotredundant(dn::SVector, term) = term.dns !== missing && !iszero(dn)
-isnotredundant((s1, s2)::Tuple{Int,Int}, term) = term.sublats !== missing && s1 != s2
+redundancyfactor(dn, ss, selector) =
+    isnotredundant(dn, selector) || isnotredundant(ss, selector) ? 1.0 : 0.5
+isnotredundant(dn::SVector, selector) = selector.dns !== missing && !iszero(dn)
+isnotredundant((s1, s2)::Tuple{Int,Int}, selector) = selector.sublats !== missing && s1 != s2
 
 #######################################################################
 # unitcell/supercell for Hamiltonians
@@ -783,7 +781,7 @@ function _combine(model::TightbindingModel, hams::Hamiltonian...)
     lat = combine((h -> h.lattice).(hams)...)
     orbs = tuplejoin((h -> h.orbitals).(hams)...)
     builder = IJVBuilder(lat, orbs, hams...)
-    model´ = nondiagonal(model, nsublats.(hams))
+    model´ = offdiagonal(model, lat, nsublats.(hams))
     ham = hamiltonian_sparse!(builder, lat, orbs, model´)
     return ham
 end

@@ -81,6 +81,7 @@ resolve(s::SelectHoppings, lat::Lattice) =
     SelectHoppings(s.mask, sublats(s, lat), _checkdims(s.dns, lat), s.range)
 resolve(s::SelectOnsites, lat::Lattice) = SelectOnsites(s.mask, sublats(s, lat))
 
+_checkdims(dns::Missing, lat::Lattice{E,L}) where {E,L} = dns
 _checkdims(dns::Tuple{Vararg{SVector{L,Int}}}, lat::Lattice{E,L}) where {E,L} = dns
 _checkdims(dns, lat::Lattice{E,L}) where {E,L} =
     throw(DimensionMismatch("Specified cell distance `dns` does not match lattice dimension $L"))
@@ -141,6 +142,8 @@ end
 
 (h::HoppingTerm{<:Function})(r, dr) = h.coefficient * h.h(r, dr)
 (h::HoppingTerm)(r, dr) = h.coefficient * h.h
+
+sublats(t::TightbindingModelTerm, lat) = sublats(t.selector, lat)
 
 displayparameter(::Type{<:Function}) = "Function"
 displayparameter(::Type{T}) where {T} = "$T"
@@ -270,8 +273,8 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 # See also:
     `onsite`
 """
-hopping(h; forcehermitian::Bool = true, kw...) =
-    TightbindingModel(HoppingTerm(h, selecthoppings(;kw...), 1, forcehermitian))
+hopping(h; forcehermitian::Bool = true, range = 1, kw...) =
+    TightbindingModel(HoppingTerm(h, selecthoppings(; range = range, kw...), 1, forcehermitian))
 
 
 Base.:*(x, o::OnsiteTerm) =
@@ -321,49 +324,28 @@ LinearAlgebra.ishermitian(m::TightbindingModel) = all(t -> ishermitian(t), m.ter
 # offdiagonal
 #######################################################################
 """
-    offdiagonal(model, hams::Hamiltonian...)
+    offdiagonal(model, lat, nsublats::NTuple{N,Int})
 
-Build a restricted version of `model` that applies strictly between hamiltonians `hams`,
-but not within each of them.
+Build a restricted version of `model` that applies only to off-diagonal blocks formed by
+sublattice groups of size `nsublats`.
 """
-offdiagonal(m::TightbindingModel{N}, hams) where {N} =
-    TightbindingModel(ntuple(i -> offdiagonal(m.terms[i], hams), Val(N)))
+offdiagonal(m::TightbindingModel, lat, nsublats) =
+    TightbindingModel(offdiagonal.(m.terms, Ref(lat), Ref(nsublats)))
 
-function offdiagonal(m::TightbindingModel{N}, hams::Tuple{Vararg{<:Hamiltonian}}) where {N}
-    sranges = sublatranges(nsublats...)
+offdiagonal(o::OnsiteTerm, lat, nsublats) =
+    throw(ArgumentError("No onsite terms allowed in off-diagonal coupling"))
+
+function offdiagonal(t::HoppingTerm, lat, nsublats)
+    selector´ = resolve(t.selector, lat)
+    s = selector´.sublats
+    sr = sublatranges(nsublats...)
+    filter!(spair ->  findblock(first(spair), sr) != findblock(last(spair), sr), s)
+    return HoppingTerm(t.h, selector´, t.coefficient, t.forcehermitian)
 end
-
-struct NondiagonalTerm{T<:HoppingTerm,S<:Tuple{Vararg{UnitRange{Int}}}} <: AbstractHoppingTerm
-    term::T
-    sublatranges::S
-end
-
-function nondiagonal(m::TightbindingModel{N}, nsublats::Tuple{Vararg{Int}}) where {N}
-    sranges = sublatranges(nsublats...)
-    return TightbindingModel(ntuple(i -> NondiagonalTerm(m.terms[i], sranges), Val(N)))
-end
-
 
 sublatranges(i::Int, is::Int...) = _sublatranges((1:i,), is...)
 _sublatranges(rs::Tuple, i::Int, is...) = _sublatranges((rs..., last(last(rs)) + 1: last(last(rs)) + i), is...)
 _sublatranges(rs::Tuple) = rs
-
-function Base.show(io::IO, h::NondiagonalTerm)
-    i = get(io, :indent, "")
-    show(io, h.term)
-    print(io,"\n$(i)  Nondiagonal only : $(h.sublatranges)")
-end
-
-Base.:*(x, t::NondiagonalTerm) = NondiagonalTerm(x * t.term)
-
-LinearAlgebra.ishermitian(t::NondiagonalTerm) = ishermitian(t.term)
-
-function sublats(t::NondiagonalTerm, lat::AbstractLattice)
-    s = sublats(t.term, lat)
-    sr = t.sublatranges
-    filter!(spair ->  findblock(first(spair), sr) != findblock(last(spair), sr), s)
-    return s
-end
 
 findblock(s, sr) = findfirst(r -> s in r, sr)
 
@@ -386,8 +368,6 @@ function _checkmodelorbs(term::OnsiteTerm, orbs, lat)
     end
     return nothing
 end
-
-_checkmodelorbs(nt::NondiagonalTerm, orbs, lat) = _checkmodelorbs(nt.term, orbs, lat)
 
 _checkmodelorbs(s::SMatrix, m, n = m) =
     size(s) == (m, n) || @warn("Possible dimension mismatch between model and Hamiltonian. Did you correctly specify the `orbitals` in hamiltonian?")
