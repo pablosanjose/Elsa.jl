@@ -1,37 +1,25 @@
 #######################################################################
-# TightbindingModelTerm
+# Onsite/Hopping selectors
 #######################################################################
-abstract type TightbindingModelTerm end
-abstract type AbstractOnsiteTerm <: TightbindingModelTerm end
-abstract type AbstractHoppingTerm <: TightbindingModelTerm end
+abstract type Selector{M,S} end
 
-struct OnsiteTerm{F,
-                  S<:Union{Missing,Tuple{Vararg{NameType}}},
-                  C} <: AbstractOnsiteTerm
-    o::F
+struct SelectOnsites{M,S} <: Selector{M,S}
+    mask::M
     sublats::S
-    coefficient::C
-    forcehermitian::Bool
 end
 
-struct HoppingTerm{F,
-                   S<:Union{Missing,Tuple{Vararg{Tuple{NameType,NameType}}}},
-                   D<:Union{Missing,Tuple{Vararg{SVector{L,Int}}} where L},
-                   R<:Union{Missing,AbstractFloat},
-                   C} <: AbstractHoppingTerm
-    h::F
+struct SelectHoppings{M,S,D,T} <: Selector{M,S}
+    mask::M
     sublats::S
     dns::D
-    range::R
-    coefficient::C
-    forcehermitian::Bool
+    range::T
 end
 
-(o::OnsiteTerm{<:Function})(r,dr) = o.coefficient * o.o(r)
-(o::OnsiteTerm)(r,dr) = o.coefficient * o.o
+selectonsites(; mask = missing, sublats = missing) =
+    SelectOnsites(mask, sanitize_sublats(sublats))
 
-(h::HoppingTerm{<:Function})(r, dr) = h.coefficient * h.h(r, dr)
-(h::HoppingTerm)(r, dr) = h.coefficient * h.h
+selecthoppings(; mask = missing, sublats = missing, dns = missing, range = missing) =
+    SelectHoppings(mask, sanitize_sublatpairs(sublats), sanitize_dn(missing), sanitize_range(range))
 
 sanitize_sublats(s::Missing) = missing
 sanitize_sublats(s::Integer) = (nametype(s),)
@@ -55,29 +43,104 @@ sanitize_dn(dn::Tuple{Vararg{Tuple}}) = SVector.(dn)
 sanitize_dn(dn::Tuple{Vararg{Integer}}) = (SVector(dn),)
 sanitize_dn(dn::Tuple{}) = ()
 
-sublats(t::OnsiteTerm{<:Any,Missing}, lat::AbstractLattice) = collect(1:nsublats(lat))
-function sublats(t::OnsiteTerm{<:Any,<:Tuple}, lat::AbstractLattice)
+sanitize_range(::Missing) = missing
+sanitize_range(range::Real) = float(range) + sqrt(eps(float(range)))
+
+sublats(s::SelectOnsites{<:Any,Missing}, lat::AbstractLattice) = collect(1:nsublats(lat))
+
+function sublats(s::SelectOnsites{<:Any,<:Tuple}, lat::AbstractLattice)
     names = lat.unitcell.names
-    s = Int[]
-    for name in t.sublats
+    ss = Int[]
+    for name in s.sublats
         i = findfirst(isequal(name), names)
-        i !== nothing && push!(s, i)
+        i !== nothing && push!(ss, i)
     end
-    return s
+    return ss
 end
 
-sublats(t::HoppingTerm{<:Any,Missing}, lat::AbstractLattice) =
+sublats(s::SelectHoppings{<:Any,Missing}, lat::AbstractLattice) =
     vec(collect(Iterators.product(1:nsublats(lat), 1:nsublats(lat))))
-function sublats(t::HoppingTerm{<:Any,<:Tuple}, lat::AbstractLattice)
+
+function sublats(s::SelectHoppings{<:Any,<:Tuple}, lat::AbstractLattice)
     names = lat.unitcell.names
-    s = Tuple{Int,Int}[]
-    for (n1, n2) in t.sublats
+    ss = Tuple{Int,Int}[]
+    for (n1, n2) in s.sublats
         i1 = findfirst(isequal(n1), names)
         i2 = findfirst(isequal(n2), names)
-        i1 !== nothing && i2 !== nothing && push!(s, (i1, i2))
+        i1 !== nothing && i2 !== nothing && push!(ss, (i1, i2))
     end
-    return s
+    return ss
 end
+
+# selector already resolved for a lattice
+sublats(s::Selector{<:Any,<:Vector}, lat) = s.sublats
+
+# API
+
+resolve(s::SelectHoppings, lat::Lattice) =
+    SelectHoppings(s.mask, sublats(s, lat), _checkdims(s.dns, lat), s.range)
+resolve(s::SelectOnsites, lat::Lattice) = SelectOnsites(s.mask, sublats(s, lat))
+
+_checkdims(dns::Tuple{Vararg{SVector{L,Int}}}, lat::Lattice{E,L}) where {E,L} = dns
+_checkdims(dns, lat::Lattice{E,L}) where {E,L} =
+    throw(DimensionMismatch("Specified cell distance `dns` does not match lattice dimension $L"))
+
+(s::SelectOnsites)(ind, sublat, lat::Lattice) =
+    isinmask(ind, s.mask, lat) && isinsublats(sublat, s.sublats)
+
+(s::SelectHoppings)(inds, sublats, dn, lat::Lattice) =
+    isinmask(inds, s.mask, lat) && isinsublats(sublats, s.sublats) &&
+    isindns(dn, s.dns) && isinrange(inds, s.range, lat)
+
+isinmask(i::Int, ::Missing, lat) = true
+isinmask(i::Int, mask::Function, lat) = mask(sites(lat)[i])
+isinmask(is::Tuple{Int,Int}, ::Missing, lat) = true
+function isinmask((src, dst)::Tuple{Int,Int}, mask::Function, lat)
+    r, dr = _rdr(sites(lat)[src], sites(lat)[dst])
+    return mask(r, dr)
+end
+
+isinsublats(s::Int, ::Missing) = true
+isinsublats(s::Int, sublats::Tuple{Vararg{Int}}) = s in sublats
+isinsublats(ss::Tuple{Int,Int}, ::Missing) = true
+isinsublats(ss::Tuple{Int,Int}, sublats::Tuple{Vararg{Tuple{Int,Int}}}) = ss in sublats
+isinsublats(s, sublats) =
+    throw(ArgumentError("Sublattices in selector are not resolved, do `resolve(selector, lattice)` first."))
+
+isindns(dn::SVector{L,Int}, dns::Tuple{Vararg{SVector{L,Int}}}) where {L} = dn in dns
+isindns(dn, dns) =
+    throw(ArgumentError("Cell distances dns in selector are incompatible with Lattice, do `resolve(selector, lattice)` first."))
+
+isinrange(inds, ::Missing, lat) = true
+isinrange((src, dst)::Tuple{Int,Int}, range, lat) =
+    norm(sites(lat)[dst] - sites(lat)[src]) <= range
+
+#######################################################################
+# TightbindingModelTerm
+#######################################################################
+abstract type TightbindingModelTerm end
+abstract type AbstractOnsiteTerm <: TightbindingModelTerm end
+abstract type AbstractHoppingTerm <: TightbindingModelTerm end
+
+struct OnsiteTerm{F,S<:SelectOnsites,C} <: AbstractOnsiteTerm
+    o::F
+    selector::S
+    coefficient::C
+    forcehermitian::Bool
+end
+
+struct HoppingTerm{F,S<:SelectHoppings,C} <: AbstractHoppingTerm
+    h::F
+    selector::S
+    coefficient::C
+    forcehermitian::Bool
+end
+
+(o::OnsiteTerm{<:Function})(r,dr) = o.coefficient * o.o(r)
+(o::OnsiteTerm)(r,dr) = o.coefficient * o.o
+
+(h::HoppingTerm{<:Function})(r, dr) = h.coefficient * h.h(r, dr)
+(h::HoppingTerm)(r, dr) = h.coefficient * h.h
 
 displayparameter(::Type{<:Function}) = "Function"
 displayparameter(::Type{T}) where {T} = "$T"
@@ -86,7 +149,7 @@ function Base.show(io::IO, o::OnsiteTerm{F}) where {F}
     i = get(io, :indent, "")
     print(io,
 "$(i)OnsiteTerm{$(displayparameter(F))}:
-$(i)  Sublattices      : $(o.sublats === missing ? "any" : o.sublats)
+$(i)  Sublattices      : $(o.selector.sublats === missing ? "any" : o.selector.sublats)
 $(i)  Force hermitian  : $(o.forcehermitian)
 $(i)  Coefficient      : $(o.coefficient)")
 end
@@ -95,9 +158,9 @@ function Base.show(io::IO, h::HoppingTerm{F}) where {F}
     i = get(io, :indent, "")
     print(io,
 "$(i)HoppingTerm{$(displayparameter(F))}:
-$(i)  Sublattice pairs : $(h.sublats === missing ? "any" : (t -> Pair(reverse(t)...)).(h.sublats))
-$(i)  dn cell jumps    : $(h.dns === missing ? "any" : h.dns)
-$(i)  Hopping range    : $(round(h.range, digits = 6))
+$(i)  Sublattice pairs : $(h.selector.sublats === missing ? "any" : (t -> Pair(reverse(t)...)).(h.selector.sublats))
+$(i)  dn cell jumps    : $(h.selector.dns === missing ? "any" : h.selector.dns)
+$(i)  Hopping range    : $(round(h.selector.range, digits = 6))
 $(i)  Force hermitian  : $(h.forcehermitian)
 $(i)  Coefficient      : $(h.coefficient)")
 end
@@ -151,9 +214,8 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 # See also:
     `hopping`
 """
-function onsite(o; sublats = missing, forcehermitian::Bool = true)
-    return TightbindingModel(OnsiteTerm(o, sanitize_sublats(sublats), 1, forcehermitian))
-end
+onsite(o; forcehermitian::Bool = true, kw...) =
+    TightbindingModel(OnsiteTerm(o, selectonsites(;kw...), 1, forcehermitian))
 
 """
     hopping(h; sublats = missing, range = 1, dn = missing, forcehermitian = true)
@@ -208,16 +270,14 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 # See also:
     `onsite`
 """
-function hopping(h; sublats = missing, range::Real = 1, dn = missing, forcehermitian::Bool = true)
-    return TightbindingModel(HoppingTerm(h, sanitize_sublatpairs(sublats), sanitize_dn(dn),
-        float(range) + sqrt(eps(float(range))), 1, forcehermitian))
-end
+hopping(h; forcehermitian::Bool = true, kw...) =
+    TightbindingModel(HoppingTerm(h, selecthoppings(;kw...), 1, forcehermitian))
 
 
 Base.:*(x, o::OnsiteTerm) =
-    OnsiteTerm(o.o, o.sublats, x * o.coefficient, o.forcehermitian)
+    OnsiteTerm(o.o, o.selector, x * o.coefficient, o.forcehermitian)
 Base.:*(x, t::HoppingTerm) =
-    HoppingTerm(t.h, t.sublats, t.dns, t.range, x * t.coefficient, t.forcehermitian)
+    HoppingTerm(t.h, t.selector, x * t.coefficient, t.forcehermitian)
 Base.:*(t::TightbindingModelTerm, x) = x * t
 Base.:-(t::TightbindingModelTerm) = (-1) * t
 
@@ -258,8 +318,20 @@ end
 LinearAlgebra.ishermitian(m::TightbindingModel) = all(t -> ishermitian(t), m.terms)
 
 #######################################################################
-# nondiagonal
+# offdiagonal
 #######################################################################
+"""
+    offdiagonal(model, hams::Hamiltonian...)
+
+Build a restricted version of `model` that applies strictly between hamiltonians `hams`,
+but not within each of them.
+"""
+offdiagonal(m::TightbindingModel{N}, hams) where {N} =
+    TightbindingModel(ntuple(i -> offdiagonal(m.terms[i], hams), Val(N)))
+
+function offdiagonal(m::TightbindingModel{N}, hams::Tuple{Vararg{<:Hamiltonian}}) where {N}
+    sranges = sublatranges(nsublats...)
+end
 
 struct NondiagonalTerm{T<:HoppingTerm,S<:Tuple{Vararg{UnitRange{Int}}}} <: AbstractHoppingTerm
     term::T
