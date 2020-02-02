@@ -691,17 +691,18 @@ with factors along the diagonal)
 
 Convert Superlattice `slat` into a lattice with its unit cell matching `slat`'s supercell.
 
-    unitcell(h::Hamiltonian, v...; onsitefield = missing, hoppingfield = missing, kw...)
+    unitcell(h::Hamiltonian, v...; onsite! = missing, hopping! = missing, kw...)
 
 Transforms the `Lattice` of `h` to have a larger unitcell, while expanding the Hamiltonian
-accordingly. If not missing, the function `onsitefield(o, r)` is applied to each onsite
-energy 'o' of sites at position `r`, and `hoppingfield(h, r, dr)` is applied to hoppings `h`
-between sites at positions `r1, r2 = r - dr/2, r + dr/2`. 
+accordingly. If not missing, the function `onsite!(o, r)` is applied to each onsite
+energy 'o' of sites at position `r`, and `hopping!(t, r, dr)` is applied to hoppings `t`
+between sites at positions `r1, r2 = r - dr/2, r + dr/2`.
 
-Note: for performance reasons, in sparse hamiltonians only the stored `o`s and `h`s will be
-transformed by these fields, so you might want to add zero onsites or hoppings when building
-`h` to have a field applied to them. Note also that additional `o`s and `h`s may be stored
-when calling `optimize!` or `bloch`/`bloch!` on `h` for the first time.
+Note: for performance reasons, in sparse hamiltonians only the stored `o`s and `t`s will be
+transformed by these functions, so you might want to add zero onsites or hoppings when
+building `h` to have a transformation applied to them later. Note also that additional `o`s
+and `t`s may be stored when calling `optimize!` or `bloch`/`bloch!` on `h` for the first
+time.
 
     lat_or_h |> unitcell(v...; kw...)
 
