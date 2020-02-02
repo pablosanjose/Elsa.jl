@@ -15,7 +15,7 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
 
 using SparseArrays: getcolptr, AbstractSparseMatrixCSC
 
-export sublat, bravais, lattice, dims, hopping, onsite, hamiltonian, randomstate,
+export sublat, bravais, lattice, dims, hopping, onsite, hamiltonian,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!, similarmatrix,
        sites, bandstructure, marchingmesh, defaultmethod, bands, vertices, states,
        flatten, wrap, transform!, combine,
@@ -38,9 +38,7 @@ include("iterators.jl")
 include("presets.jl")
 include("lattice.jl")
 include("model.jl")
-include("field.jl")
 include("hamiltonian.jl")
-include("state.jl")
 include("mesh.jl")
 include("diagonalizer.jl")
 include("bandstructure.jl")
