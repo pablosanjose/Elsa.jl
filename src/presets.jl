@@ -44,19 +44,19 @@ module HamiltonianPresets
 
 using Elsa, LinearAlgebra
 
-function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 = 0.246,
-                            interlayerdistance = 1.36a0, rangeintralayer = a0/sqrt(3),
-                            rangeinterlayer = 4a0/sqrt(3), hopintra = 2.70, hopinter = 0.48,
-                            modelintra = hopping(hopintra, range = rangeintralayer),
-                            kw...)
+function twisted_bilayer_graphene(;
+    twistindex = 1, twistindices = (twistindex, 1), a0 = 0.246, interlayerdistance = 1.36a0,
+    rangeintralayer = a0/sqrt(3), rangeinterlayer = 4a0/sqrt(3), hopintra = 2.70,
+    hopinter = 0.48, modelintra = hopping(hopintra, range = rangeintralayer), kw...)
+
     (m, r) = twistindices
     θ = acos((3m^2 + 3m*r +r^2/2)/(3m^2 + 3m*r + r^2))
     sAbot = sublat((0.0, -0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Ab)
     sBbot = sublat((0.0,  0.5a0/sqrt(3.0), - interlayerdistance / 2); name = :Bb)
     sAtop = sublat((0.0, -0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :At)
     sBtop = sublat((0.0,  0.5a0/sqrt(3.0),   interlayerdistance / 2); name = :Bt)
-    br = a0 * bravais(( cos(pi/3), sin(pi/3), 0),
-                      (-cos(pi/3), sin(pi/3), 0))
+    brbot = a0 * bravais(( cos(pi/3), sin(pi/3), 0), (-cos(pi/3), sin(pi/3), 0))
+    brtop = a0 * bravais((-cos(pi/3), sin(pi/3), 0), ( cos(pi/3), sin(pi/3), 0))
     # Supercell matrices sc.
     # The one here is a [1 0; -1 1] rotation of the one in Phys. Rev. B 86, 155449 (2012)
     if gcd(r, 3) == 1
@@ -66,9 +66,8 @@ function graphene_bilayer(; twistindex = 1, twistindices = (twistindex, 1), a0 =
         scbot = @SMatrix[m+r÷3 -r÷3; r÷3 m+2r÷3] * @SMatrix[1 0; -1 1]
         sctop = @SMatrix[m+2r÷3 r÷3; -r÷3 m+r÷3] * @SMatrix[1 0; -1 1]
     end
-
-    lattop = lattice(br, sAtop, sBtop)
-    latbot = lattice(br, sAbot, sBbot)
+    latbot = lattice(brbot, sAbot, sBbot)
+    lattop = lattice(brtop, sAtop, sBtop)
     htop = hamiltonian(lattop, modelintra; kw...) |> unitcell(sctop)
     hbot = hamiltonian(latbot, modelintra; kw...) |> unitcell(scbot)
     let R = @SMatrix[cos(θ/2) -sin(θ/2) 0; sin(θ/2) cos(θ/2) 0; 0 0 1]

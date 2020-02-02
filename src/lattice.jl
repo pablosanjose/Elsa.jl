@@ -431,7 +431,7 @@ If all `lats` have compatible Bravais vectors, combine them into a single lattic
 Sublattice names are renamed to be unique if necessary.
 """
 function combine(lats::Lattice...)
-    is_bravais_compatible(lats...) || throw(ArgumentError("Lattices must share all Bravais vectors"))
+    is_bravais_compatible(lats...) || throw(ArgumentError("Lattices must share all Bravais vectors, $(bravais.(lats))"))
     bravais´ = first(lats).bravais
     unitcell´ = combine((l -> l.unitcell).(lats)...)
     return Lattice(bravais´, unitcell´)
