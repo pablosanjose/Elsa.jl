@@ -3,6 +3,7 @@ module HamiltonianTest
 using Elsa
 using Test
 using Elsa: Hamiltonian
+using LinearAlgebra: diag
 
 @testset "basic hamiltonians" begin
     presets = (LatticePresets.linear, LatticePresets.square, LatticePresets.triangular,
@@ -34,6 +35,11 @@ end
     h2 = hamiltonian(lat, onsite(1) + hopping(@SMatrix[1 2], sublats = ((:A,:B),)),
                       orbitals = :B => Val(2))
     @test bloch(h1, 1, 2) == bloch(h2, 1, 2)
+end
+
+@testset "fields" begin
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(0)) |> unitcell(2, onsitefield = (o, r) -> 1)
+    @test diag(bloch(h)) == ComplexF64[1, 1, 1, 1, 1, 1, 1, 1]
 end
 
 end # module

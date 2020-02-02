@@ -360,14 +360,14 @@ function foreach_supersite(f::F, lat::Superlattice) where {F<:Function}
         for dn in CartesianIndices(lat.supercell)
             if isinmask(lat.supercell, oldi, dn)
                 newi += 1
-                f(s, oldi, SVector(Tuple(dn)), newi)
+                f(s, oldi, toSVector(Int, Tuple(dn)), newi)
             end
         end
     end
     return nothing
 end
 
-issemibounded(lat::Superlattice) where {L} = issemibounded(lat.supercell)
+issemibounded(lat::Superlattice) = issemibounded(lat.supercell)
 
 #######################################################################
 # AbstractLattice interface
@@ -584,7 +584,7 @@ function _supercell(lat::AbstractLattice{E,L}, scmatrix::SMatrix{L,L´,Int}, reg
     mask = OffsetArray(BitArray(undef, ns, size(cells)...), 1:ns, cells.indices...)
     @inbounds for dn in cells
         dntup = Tuple(dn)
-        dnvec = SVector(dntup)
+        dnvec = toSVector(Int, dntup)
         in_supercell = in_supercell_func(dnvec)
         in_supercell || (mask[:, dntup...] .= false; continue)
         r0 = brmatrix * dnvec
@@ -602,8 +602,6 @@ is_perp_dir(supercell) = let invs = pinvmultiple(supercell); dn -> iszero(new_dn
 
 new_dn(oldndist, (pinvs, n)) = fld.(pinvs * oldndist, n)
 new_dn(oldndist, ::Tuple{<:SMatrix{0,0},Int}) = SVector{0,Int}()
-
-wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell * newdn
 
 function ribbonfunc(bravais::SMatrix{E,L,T}, supercell::SMatrix{L,L´}) where {E,L,T,L´}
     L <= L´ && return r -> true
@@ -630,8 +628,8 @@ function supercell_cells(lat::Lattice{E,L}, regionfunc, in_supercell_func) where
         found = false
         counter += 1; counter == TOOMANYITERS &&
             throw(ArgumentError("`region` seems unbounded (after $TOOMANYITERS iterations)"))
-        in_supercell = in_supercell_func(SVector(Tuple(dn)))
-        r0 = bravais * SVector(Tuple(dn))
+        in_supercell = in_supercell_func(toSVector(Int, dn))
+        r0 = bravais * toSVector(Int, dn)
         for site in lat.unitcell.sites
             r = r0 + site
             found = in_supercell && regionfunc(r)
@@ -689,18 +687,25 @@ Calls `unitcell` with a uniformly scaled `uc = SMatrix{L,L}(factor * I)`
 Calls `unitcell` with different scaling along each Bravais vector (diagonal supercell
 with factors along the diagonal)
 
-    lattice |> unitcell(v...; kw...)
-
-Functional syntax, equivalent to `unitcell(lattice, v...; kw...)
-
     unitcell(slat::Superlattice)
 
 Convert Superlattice `slat` into a lattice with its unit cell matching `slat`'s supercell.
 
-    unitcell(h::Hamiltonian, v...; kw...)
+    unitcell(h::Hamiltonian, v...; onsitefield = missing, hoppingfield = missing, kw...)
 
-Transforms the `Lattice` of `h` to have a larger unitcell, and expanding the Hamiltonian
-accordingly.
+Transforms the `Lattice` of `h` to have a larger unitcell, while expanding the Hamiltonian
+accordingly. If not missing, the function `onsitefield(o, r)` is applied to each onsite
+energy 'o' of sites at position `r`, and `hoppingfield(h, r, dr)` is applied to hoppings `h`
+between sites at positions `r1, r2 = r - dr/2, r + dr/2`. 
+
+Note: for performance reasons, in sparse hamiltonians only the stored `o`s and `h`s will be
+transformed by these fields, so you might want to add zero onsites or hoppings when building
+`h` to have a field applied to them. Note also that additional `o`s and `h`s may be stored
+when calling `optimize!` or `bloch`/`bloch!` on `h` for the first time.
+
+    lat_or_h |> unitcell(v...; kw...)
+
+Functional syntax, equivalent to `unitcell(lat_or_h, v...; kw...)
 
 # Examples
 ```jldoctest
