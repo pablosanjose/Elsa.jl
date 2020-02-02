@@ -631,12 +631,12 @@ function supercell(ham::Hamiltonian, args...; kw...)
 end
 
 function unitcell(ham::Hamiltonian{<:Lattice}, args...;
-                  onsitefield = missing, hoppingfield = missing, kw...)
+                  onsite! = missing, hopping! = missing, kw...)
     sham = supercell(ham, args...; kw...)
-    return unitcell(sham; onsitefield = onsitefield, hoppingfield = hoppingfield)
+    return unitcell(sham; onsite! = onsite!, hopping! = hopping!)
 end
 
-function unitcell(ham::Hamiltonian{LA,L}; onsitefield = missing, hoppingfield = missing) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
+function unitcell(ham::Hamiltonian{LA,L}; onsite! = missing, hopping! = missing) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
     lat = ham.lattice
     sc = lat.supercell
     mapping = OffsetArray{Int}(undef, sc.sites, sc.cells.indices...) # store supersite indices newi
@@ -660,7 +660,7 @@ function unitcell(ham::Hamiltonian{LA,L}; onsitefield = missing, hoppingfield = 
                 # check: wrapped_dn could exit bounding box along non-periodic direction
                 checkbounds(Bool, mapping, target_i, Tuple(wrapped_dn)...) || continue
                 newrow = mapping[target_i, Tuple(wrapped_dn)...]
-                val = applytransform(vals[p], onsitefield, hoppingfield,
+                val = applytransform(vals[p], onsite!, hopping!,
                                      lat, source_i, source_dn, target_i, target_dn)
                 iszero(newrow) || pushtocolumn!(newh.h, newrow, val)
             end

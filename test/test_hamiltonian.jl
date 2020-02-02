@@ -38,7 +38,7 @@ end
 end
 
 @testset "fields" begin
-    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(0)) |> unitcell(2, onsitefield = (o, r) -> 1)
+    h = LatticePresets.honeycomb() |> hamiltonian(hopping(1) + onsite(0)) |> unitcell(2, onsite! = (o, r) -> 1)
     @test diag(bloch(h)) == ComplexF64[1, 1, 1, 1, 1, 1, 1, 1]
 end
 
