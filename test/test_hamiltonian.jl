@@ -10,13 +10,14 @@ using LinearAlgebra: diag
                LatticePresets.honeycomb, LatticePresets.cubic, LatticePresets.fcc,
                LatticePresets.bcc)
     ts = (1, 2.0, @SMatrix[1 2; 3 4])
+    orbs = (Val(1), Val(1), Val(2))
     for preset in presets, lat in (preset(), unitcell(preset()))
         E, L = dims(lat)
         dn0 = ntuple(_ -> 1, Val(L))
-        for t in ts
-            @test hamiltonian(lat, onsite(t) + hopping(t; range = 1)) isa Hamiltonian
-            @test hamiltonian(lat, onsite(t) - hopping(t; dn = dn0)) isa Hamiltonian
-            @test hamiltonian(lat, onsite(t) + hopping(t; dn = dn0, forcehermitian = false)) isa Hamiltonian
+        for (t, o) in zip(ts, orbs)
+            @test hamiltonian(lat, onsite(t) + hopping(t; range = 1), orbitals = o) isa Hamiltonian
+            @test hamiltonian(lat, onsite(t) - hopping(t; dn = dn0), orbitals = o) isa Hamiltonian
+            @test hamiltonian(lat, onsite(t) + hopping(t; dn = dn0, forcehermitian = false), orbitals = o) isa Hamiltonian
         end
     end
 end
