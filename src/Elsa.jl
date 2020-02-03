@@ -16,6 +16,7 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
 using SparseArrays: getcolptr, AbstractSparseMatrixCSC
 
 export sublat, bravais, lattice, dims, hopping, onsite, hamiltonian,
+       onsiteselector, hoppingselector,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!, similarmatrix,
        sites, bandstructure, marchingmesh, defaultmethod, bands, vertices, states,
        flatten, wrap, transform!, combine,
