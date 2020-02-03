@@ -174,12 +174,13 @@ function bandbracketKPM(h, ::Missing)
 end
 bandbracketKPM(h, (ϵmin, ϵmax), pad = 0.01) = ((ϵmax + ϵmin) / 2.0, (ϵmax - ϵmin) / (2.0 - pad))
 
-function bandrangeKPM(h)
+function bandrangeKPM(h::AbstractMatrix{T}) where {T}
     checkloaded(:ArnoldiMethod)
+    R = real(T)
     decompl, _ = Main.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.LR());
     decomps, _ = Main.ArnoldiMethod.partialschur(h, nev=1, tol=1e-4, which = Main.ArnoldiMethod.SR());
-    ϵmax = real(decompl.eigenvalues[1])
-    ϵmin = real(decomps.eigenvalues[1])
+    ϵmax = R(real(decompl.eigenvalues[1]))
+    ϵmin = R(real(decomps.eigenvalues[1]))
     @warn  "Computed bandrange = ($ϵmin, $ϵmax)"
     return (ϵmin, ϵmax)
 end
@@ -276,10 +277,10 @@ averageKPM(h::Hamiltonian, A::Hamiltonian; kw...) = averageKPM(matrixKPM(h), mat
 function averageKPM(momenta::MomentaKPM{T}; kBT = 0.0, Ef = 0.0) where {T}
     (center, halfwidth) = momenta.bandbracket
     order = length(momenta.μlist) - 1
-    if !iszero(kBT)
-        @warn "Finite temperature requires numerical evaluation of the integrals"
-        checkloaded(:QuadGK)
-    end
+    # if !iszero(kBT)
+    #     @warn "Finite temperature requires numerical evaluation of the integrals"
+    #     checkloaded(:QuadGK)
+    # end
     average = sum(n -> momenta.μlist[n + 1] * fermicheby(n, Ef, kBT, center, halfwidth), 0:order)
     return average
 end
@@ -288,18 +289,20 @@ end
 function fermicheby(n, Ef, kBT, center, halfwidth)
     kBT´ = kBT / halfwidth;
     Ef´ = (Ef - center) / halfwidth;
+    T = typeof(Ef´)
     if kBT´ == 0
         int = n == 0 ? 0.5+asin(Ef´)/π : -2.0*sin(n*acos(Ef´))/(n*π)
     else
-        η = 1e-10
-        int = Main.QuadGK.quadgk(E´ -> _intfermi(n, E´, Ef´, kBT´), -1.0+η, 1.0-η, atol= 1e-10, rtol=1e-10)[1]
+        throw(error("Finite temperature not yet implemented"))
+        # η = 1e-10
+        # int = Main.QuadGK.quadgk(E´ -> _intfermi(n, E´, Ef´, kBT´), -1.0+η, 1.0-η, atol= 1e-10, rtol=1e-10)[1]
     end
-    return int
+    return T(int)
 end
 
 _intfermi(n, E´, Ef´, kBT´) = fermifun(E´, Ef´, kBT´) * 2/(π*(1-E´^2)^(1/2)) * chebypol(n, E´) / (1+(n == 0 ? 1 : 0))
 
-fermifun(E´, Ef´, kBT´) = kBT´ == 0 ? (E´<Ef´ ? 1 : 0) : (1/(1+exp((E´-Ef´)/(kBT´))))
+fermifun(E´, Ef´, kBT´) = kBT´ == 0 ? (E´<Ef´ ? 1.0 : 0.0) : (1/(1+exp((E´-Ef´)/(kBT´))))
 
 function chebypol(m::Int, x::T) where {T<:Number}
     cheby0 = one(T)
