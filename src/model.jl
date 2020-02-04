@@ -410,7 +410,7 @@ Onsite!(f, selector) = Onsite!(f, Val(!applicable(f, 0.0)), selector)
 
 struct Hopping!{V<:Val,F<:Function,S<:Selector} <: ElementModifier
     f::F
-    args::V    # Val{false} for f(h; kw...), Val{true} for f(h, r, dr; kw...) or other
+    needspositions::V    # Val{false} for f(h; kw...), Val{true} for f(h, r, dr; kw...) or other
     selector::S
 end
 
@@ -418,8 +418,34 @@ Hopping!(f, selector) = Hopping!(f, Val(!applicable(f, 0.0)), selector)
 
 # API #
 
+"""
+    onsite!(f; kw...)
+    onsite!(f, onsiteselector(; kw...))
+
+Create an `ElementModifier`, to be used with `parametric`, that applies `f` to onsite
+energies specified by `onsiteselector(; kw...)`. The form of `f` may be `f = (o; kw...) ->
+...` or `f = (o, r; kw...) -> ...` if the modification is position (`r`) dependent. The
+former is naturally more efficient, as there is no need to compute the positions of each
+onsite energy.
+
+# See also:
+    `hopping!`, `parametric`
+"""
 onsite!(f; kw...) = onsite!(f, onsiteselector(; kw...))
 onsite!(f, selector) = Onsite!(f, selector)
 
+"""
+    hopping!(f; kw...)
+    hopping!(f, hoppingselector(; kw...))
+
+Create an `ElementModifier`, to be used with `parametric`, that applies `f` to hoppings
+specified by `hoppingselector(; kw...)`. The form of `f` may be `f = (t; kw...) ->
+...` or `f = (t, r, dr; kw...) -> ...` if the modification is position (`r, dr`) dependent. The
+former is naturally more efficient, as there is no need to compute the positions of the
+two sites involved in each hopping.
+
+# See also:
+    `onsite!`, `parametric`
+"""
 hopping!(f; kw...) = onsite!(f, onsiteselector(; kw...))
 hopping!(f, selector) = Hopping!(f, selector)

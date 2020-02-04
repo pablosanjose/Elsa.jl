@@ -16,7 +16,48 @@ function Base.show(io::IO, ::MIME"text/plain", pham::ParametricHamiltonian{N}) w
 end
 
 """
-    parametric
+    parametric(h::Hamiltonian, modifiers::ElementModifier...)
+
+Builds a `ParametricHamiltonian` that can be used to efficiently apply `modifiers` to `h`.
+`modifiers` can be any number of `onsite!(f;...)` and `hopping!(f; ...)` transformations,
+each with a set of parameters given as keyword arguments of functions `f`. The resulting
+`ph::ParamtricHamiltonian` can be used to produced the modified Hamiltonian simply by
+calling it with those same parameters as keyword arguments.
+
+Note that for sparse `h`, `parametric` only modifies existing onsites and hoppings in `h`,
+so be sure to add zero onsites and/or hoppings to `h` if they are originally not present but
+you need to apply modifiers to them.
+
+    h |> parametric(modifiers::ElementModifier...)
+
+Function form of `parametric`, equivalent to `parametric(h, modifiers...)`.
+
+# Examples
+```
+julia> ph = LatticePresets.honeycomb() |> hamiltonian(onsite(0) + hopping(1, range = 1/√3)) |> unitcell(10) |> parametric(onsite!((o; μ) -> o - μ))
+ParametricHamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
+  Harmonic size    : 200 × 200
+  Orbitals         : ((:a,), (:a,))
+  Element type     : scalar (Complex{Float64})
+  Onsites          : 200
+  Hoppings         : 600
+  Coordination     : 3.0
+  Param Modifiers  : 1
+
+julia> ph(; μ = 2)
+Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
+  Bloch harmonics  : 5 (SparseMatrixCSC, sparse)
+  Harmonic size    : 200 × 200
+  Orbitals         : ((:a,), (:a,))
+  Element type     : scalar (Complex{Float64})
+  Onsites          : 200
+  Hoppings         : 600
+  Coordination     : 3.0
+
+# See also
+    `onsite!`, `hopping!`
+```
 """
 parametric(h::Hamiltonian, ts::ElementModifier...) =
     ParametricHamiltonian(h, copy(h), ts, parametric_pointers.(Ref(h), ts))
