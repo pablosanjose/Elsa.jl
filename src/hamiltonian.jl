@@ -248,17 +248,6 @@ where `T` is the number type of `lat`.
 Build the Bloch Hamiltonian matrix `bloch(h, (ϕ₁, ϕ₂, ...))` of a `h::Hamiltonian` on an
 `L`D lattice. (See also `bloch!` for a non-allocating version of `bloch`.)
 
-    hamiltonian(lat, [model,] funcmodel::Function; kw...)
-
-For a function of the form `funcmodel(;params...)::TightbindingModel`, produce a
-`h::ParametricHamiltonian` that efficiently generates a `Hamiltonian` with model `model +
-funcmodel(;params...)` when calling it as in `h(;params...)` (using specific parameters as
-keyword arguments `params`). Additionally, `h(ϕ₁, ϕ₂, ...; params...)` generates the
-corresponding Bloch Hamiltonian matrix (equivalent to `h(;params...)(ϕ₁, ϕ₂, ...)`).
-
-It's important to note that `params` keywords in the definition of `funcmodel` must have
-default values, as in `model(;o = 1) = onsite(o)`.
-
     lat |> hamiltonian(model[, funcmodel]; kw...)
 
 Functional `hamiltonian` form equivalent to `hamiltonian(lat, model[, funcmodel]; kw...)`.
@@ -1145,109 +1134,109 @@ function flatten(unitcell::Unitcell, norbs::NTuple{S,Int}) where {S}
     return unitcell´
 end
 
-#######################################################################
-# parametric hamiltonian
-#######################################################################
-struct ParametricHamiltonian{H,F,E,T}
-    base::H             # Hamiltonian before applying parametrized model
-    hamiltonian::H      # Hamiltonian to update that includes parametrized model
-    pointers::Vector{Vector{Tuple{Int,SVector{E,T},SVector{E,T}}}} # val pointers to modify
-    f::F                                                           # by f on each harmonic
-end
+# #######################################################################
+# # parametric hamiltonian
+# #######################################################################
+# struct ParametricHamiltonian{H,F,E,T}
+#     base::H             # Hamiltonian before applying parametrized model
+#     hamiltonian::H      # Hamiltonian to update that includes parametrized model
+#     pointers::Vector{Vector{Tuple{Int,SVector{E,T},SVector{E,T}}}} # val pointers to modify
+#     f::F                                                           # by f on each harmonic
+# end
 
-Base.show(io::IO, pham::ParametricHamiltonian) = print(io, "Parametric ", pham.hamiltonian)
+# Base.show(io::IO, pham::ParametricHamiltonian) = print(io, "Parametric ", pham.hamiltonian)
 
-function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, orbs, model, f::F) where {M,E,L,T,F<:Function}
-    builder = IJVBuilder(lat, orbs, M)
-    applyterms!(builder, terms(model)...)
-    nels = length.(builder.ijvs) # element counters for each harmonic
-    model_f = f()
-    applyterms!(builder, terms(model_f)...)
-    padright!(nels, 0, length(builder.ijvs)) # in case new harmonics where added
-    nels_f = length.(builder.ijvs) # element counters after adding f model
-    empties = isempty.(builder.ijvs)
-    deleteat!(builder.ijvs, empties)
-    deleteat!(nels, empties)
-    deleteat!(nels_f, empties)
+# function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, orbs, model, f::F) where {M,E,L,T,F<:Function}
+#     builder = IJVBuilder(lat, orbs, M)
+#     applyterms!(builder, terms(model)...)
+#     nels = length.(builder.ijvs) # element counters for each harmonic
+#     model_f = f()
+#     applyterms!(builder, terms(model_f)...)
+#     padright!(nels, 0, length(builder.ijvs)) # in case new harmonics where added
+#     nels_f = length.(builder.ijvs) # element counters after adding f model
+#     empties = isempty.(builder.ijvs)
+#     deleteat!(builder.ijvs, empties)
+#     deleteat!(nels, empties)
+#     deleteat!(nels_f, empties)
 
-    base_ijvs = copy.(builder.ijvs) # ijvs for ham without f, but with structural zeros
-    zeroM = zero(M)
-    for (ijv, nel, nel_f) in zip(base_ijvs, nels, nels_f), p in nel+1:nel_f
-        ijv.v[p] = zeroM
-    end
+#     base_ijvs = copy.(builder.ijvs) # ijvs for ham without f, but with structural zeros
+#     zeroM = zero(M)
+#     for (ijv, nel, nel_f) in zip(base_ijvs, nels, nels_f), p in nel+1:nel_f
+#         ijv.v[p] = zeroM
+#     end
 
-    HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
-    n = nsites(lat)
-    base_harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in base_ijvs]
-    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs]
-    pointers = [getpointers(harmonics[k].h, builder.ijvs[k], nels[k], lat) for k in eachindex(harmonics)]
-    base_h = Hamiltonian(lat, base_harmonics, orbs, n, n)
-    h = Hamiltonian(lat, harmonics, orbs, n, n)
-    return ParametricHamiltonian(base_h, h, pointers, f)
-end
+#     HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
+#     n = nsites(lat)
+#     base_harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in base_ijvs]
+#     harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs]
+#     pointers = [getpointers(harmonics[k].h, builder.ijvs[k], nels[k], lat) for k in eachindex(harmonics)]
+#     base_h = Hamiltonian(lat, base_harmonics, orbs, n, n)
+#     h = Hamiltonian(lat, harmonics, orbs, n, n)
+#     return ParametricHamiltonian(base_h, h, pointers, f)
+# end
 
-function getpointers(h::SparseMatrixCSC, ijv, eloffset, lat::AbstractLattice{E,L,T}) where {E,L,T}
-    rows = rowvals(h)
-    sites = lat.unitcell.sites
-    pointers = Tuple{Int,SVector{E,T},SVector{E,T}}[] # (pointer, r, dr)
-    nelements = length(ijv)
-    for k in eloffset+1:nelements
-        row = ijv.i[k]
-        col = ijv.j[k]
-        for ptr in nzrange(h, col)
-            if row == rows[ptr]
-                r, dr = _rdr(sites[col], sites[row]) # _rdr(source, target)
-                push!(pointers, (ptr, r, dr))
-                break
-            end
-        end
-    end
-    unique!(first, pointers) # adjoint duplicates lead to repeated pointers... remove.
-    return pointers
-end
+# function getpointers(h::SparseMatrixCSC, ijv, eloffset, lat::AbstractLattice{E,L,T}) where {E,L,T}
+#     rows = rowvals(h)
+#     sites = lat.unitcell.sites
+#     pointers = Tuple{Int,SVector{E,T},SVector{E,T}}[] # (pointer, r, dr)
+#     nelements = length(ijv)
+#     for k in eloffset+1:nelements
+#         row = ijv.i[k]
+#         col = ijv.j[k]
+#         for ptr in nzrange(h, col)
+#             if row == rows[ptr]
+#                 r, dr = _rdr(sites[col], sites[row]) # _rdr(source, target)
+#                 push!(pointers, (ptr, r, dr))
+#                 break
+#             end
+#         end
+#     end
+#     unique!(first, pointers) # adjoint duplicates lead to repeated pointers... remove.
+#     return pointers
+# end
 
-function initialize!(ph::ParametricHamiltonian{H}) where {LA,L,M,A<:SparseMatrixCSC,H<:Hamiltonian{LA,L,M,A}}
-    for (bh, h, prdrs) in zip(ph.base.harmonics, ph.hamiltonian.harmonics, ph.pointers)
-        vals = nonzeros(h.h)
-        vals_base = nonzeros(bh.h)
-        for (p,_,_) in prdrs
-            vals[p] = vals_base[p]
-        end
-    end
-    return nothing
-end
+# function initialize!(ph::ParametricHamiltonian{H}) where {LA,L,M,A<:SparseMatrixCSC,H<:Hamiltonian{LA,L,M,A}}
+#     for (bh, h, prdrs) in zip(ph.base.harmonics, ph.hamiltonian.harmonics, ph.pointers)
+#         vals = nonzeros(h.h)
+#         vals_base = nonzeros(bh.h)
+#         for (p,_,_) in prdrs
+#             vals[p] = vals_base[p]
+#         end
+#     end
+#     return nothing
+# end
 
-function applyterm!(ph::ParametricHamiltonian{H}, term::TightbindingModelTerm)  where {LA,L,M,A<:SparseMatrixCSC,H<:Hamiltonian{LA,L,M,A}}
-    for (h, prdrs) in zip(ph.hamiltonian.harmonics, ph.pointers)
-        vals = nonzeros(h.h)
-        for (p, r, dr) in prdrs
-            v = term(r, dr) # should perhaps be v = orbsized(term(r, dr), orb1, orb2)
-            vals[p] += padtotype(v, M)
-        end
-    end
-    return nothing
-end
+# function applyterm!(ph::ParametricHamiltonian{H}, term::TightbindingModelTerm)  where {LA,L,M,A<:SparseMatrixCSC,H<:Hamiltonian{LA,L,M,A}}
+#     for (h, prdrs) in zip(ph.hamiltonian.harmonics, ph.pointers)
+#         vals = nonzeros(h.h)
+#         for (p, r, dr) in prdrs
+#             v = term(r, dr) # should perhaps be v = orbsized(term(r, dr), orb1, orb2)
+#             vals[p] += padtotype(v, M)
+#         end
+#     end
+#     return nothing
+# end
 
-# API #
+# # API #
 
-function (ph::ParametricHamiltonian)(;kw...)
-    isempty(kw) && return ph.hamiltonian
-    model = ph.f(;kw...)
-    initialize!(ph)
-    foreach(term -> applyterm!(ph, term), terms(model))
-    return ph.hamiltonian
-end
+# function (ph::ParametricHamiltonian)(;kw...)
+#     isempty(kw) && return ph.hamiltonian
+#     model = ph.f(;kw...)
+#     initialize!(ph)
+#     foreach(term -> applyterm!(ph, term), terms(model))
+#     return ph.hamiltonian
+# end
 
-(ph::ParametricHamiltonian)(arg, args...; kw...) = ph(;kw...)(arg, args...)
+# (ph::ParametricHamiltonian)(arg, args...; kw...) = ph(;kw...)(arg, args...)
 
-Base.Matrix(h::ParametricHamiltonian) =
-    ParametricHamiltonian(Matrix(h.base), Matrix(h.hamiltonian), h.pointers, h.f)
+# Base.Matrix(h::ParametricHamiltonian) =
+#     ParametricHamiltonian(Matrix(h.base), Matrix(h.hamiltonian), h.pointers, h.f)
 
-Base.copy(h::ParametricHamiltonian) =
-    ParametricHamiltonian(copy(h.base), copy(h.hamiltonian), copy(h.pointers))
+# Base.copy(h::ParametricHamiltonian) =
+#     ParametricHamiltonian(copy(h.base), copy(h.hamiltonian), copy(h.pointers))
 
-Base.size(h::ParametricHamiltonian, n...) = size(h.hamiltonian, n...)
+# Base.size(h::ParametricHamiltonian, n...) = size(h.hamiltonian, n...)
 
-bravais(ph::ParametricHamiltonian) = bravais(ph.hamiltonian.lattice)
+# bravais(ph::ParametricHamiltonian) = bravais(ph.hamiltonian.lattice)
 
-Base.eltype(::ParametricHamiltonian{H}) where {L,M,H<:Hamiltonian{L,M}} = M
+# Base.eltype(::ParametricHamiltonian{H}) where {L,M,H<:Hamiltonian{L,M}} = M

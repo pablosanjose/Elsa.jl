@@ -5,12 +5,12 @@ abstract type Selector{M,S} end
 
 struct OnsiteSelector{M,S} <: Selector{M,S}
     region::M
-    sublats::S
+    sublats::S  # NTuple{N,NameType} (unresolved) or Vector{Int} (resolved on a lattice)
 end
 
 struct HoppingSelector{M,S,D,T} <: Selector{M,S}
     region::M
-    sublats::S
+    sublats::S  # NTuple{N,Tuple{NameType,NameType}} (unres) or Vector{Tuple{Int,Int}} (res)
     dns::D
     range::T
 end
@@ -108,12 +108,12 @@ _checkdims(dns::Tuple{Vararg{SVector{L,Int}}}, lat::Lattice{E,L}) where {E,L} = 
 _checkdims(dns, lat::Lattice{E,L}) where {E,L} =
     throw(DimensionMismatch("Specified cell distance `dn` does not match lattice dimension $L"))
 
-(s::OnsiteSelector)(ind, sublat, lat::Lattice) =
-    isinregion(ind, s.region, lat) && isinsublats(sublat, s.sublats)
+(s::OnsiteSelector)(lat::Lattice, (i, j)::Tuple, dn::SVector) =
+    i == j && iszero(dn) && isinregion(i, s.region, lat) && isinsublats(sublat(lat, i), s.sublats)
 
-(s::HoppingSelector)(inds, sublats, dn, lat::Lattice) =
-    isinregion(inds, s.region, lat) && isinsublats(sublats, s.sublats) &&
-    isindns(dn, s.dns) && isinrange(inds, s.range, lat)
+(s::HoppingSelector)(lat::Lattice, inds, dn) =
+    isinregion(inds, s.region, lat) && isindns(dn, s.dns) &&
+    isinrange(inds, s.range, lat) && isinsublats(sublat.(Ref(lat), inds), s.sublats)
 
 isinregion(i::Int, ::Missing, lat) = true
 isinregion(i::Int, region::Function, lat) = region(sites(lat)[i])
@@ -124,11 +124,11 @@ function isinregion((src, dst)::Tuple{Int,Int}, region::Function, lat)
 end
 
 isinsublats(s::Int, ::Missing) = true
-isinsublats(s::Int, sublats::Tuple{Vararg{Int}}) = s in sublats
+isinsublats(s::Int, sublats::Vector{Int}) = s in sublats
 isinsublats(ss::Tuple{Int,Int}, ::Missing) = true
-isinsublats(ss::Tuple{Int,Int}, sublats::Tuple{Vararg{Tuple{Int,Int}}}) = ss in sublats
+isinsublats(ss::Tuple{Int,Int}, sublats::Vector{Tuple{Int,Int}}) = ss in sublats
 isinsublats(s, sublats) =
-    throw(ArgumentError("Sublattices in selector are not resolved."))
+    throw(ArgumentError("Sublattices $sublats in selector are not resolved."))
 
 isindns(dn::SVector{L,Int}, dns::Tuple{Vararg{SVector{L,Int}}}) where {L} = dn in dns
 isindns(dn, dns) =
@@ -394,3 +394,32 @@ _checkmodelorbs(s::SMatrix, m, n = m) =
     size(s) == (m, n) || @warn("Possible dimension mismatch between model and Hamiltonian. Did you correctly specify the `orbitals` in hamiltonian?")
 
 _checkmodelorbs(s::Number, m, n = m) = _checkmodelorbs(SMatrix{1,1}(s), m, n)
+
+#######################################################################
+# onsite! and hopping!
+#######################################################################
+abstract type ElementModifier end
+
+struct Onsite!{V<:Val,F<:Function,S<:Selector} <: ElementModifier
+    f::F
+    needspositions::V    # Val{false} for f(o; kw...), Val{true} for f(o, r; kw...) or other
+    selector::S
+end
+
+Onsite!(f, selector) = Onsite!(f, Val(!applicable(f, 0.0)), selector)
+
+struct Hopping!{V<:Val,F<:Function,S<:Selector} <: ElementModifier
+    f::F
+    args::V    # Val{false} for f(h; kw...), Val{true} for f(h, r, dr; kw...) or other
+    selector::S
+end
+
+Hopping!(f, selector) = Hopping!(f, Val(!applicable(f, 0.0)), selector)
+
+# API #
+
+onsite!(f; kw...) = onsite!(f, onsiteselector(; kw...))
+onsite!(f, selector) = Onsite!(f, selector)
+
+hopping!(f; kw...) = onsite!(f, onsiteselector(; kw...))
+hopping!(f, selector) = Hopping!(f, selector)

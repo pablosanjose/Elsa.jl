@@ -377,6 +377,8 @@ Base.copy(lat::Lattice) = Lattice(lat.bravais, copy(lat.unitcell))
 Base.copy(lat::Superlattice) = Superlattice(lat.bravais, copy(lat.unitcell), copy(lat.supercell))
 
 numbertype(::AbstractLattice{E,L,T}) where {E,L,T} = T
+positiontype(::AbstractLattice{E,L,T}) where {E,L,T} = SVector{E,T}
+dntype(::AbstractLattice{E,L}) where {E,L} = SVector{L,Int}
 
 sublat(lat::AbstractLattice, siteidx) = sublat(lat.unitcell, siteidx)
 sublats(lat::AbstractLattice) = sublats(lat.unitcell)
