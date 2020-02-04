@@ -99,27 +99,30 @@ sublats(s::Selector{<:Any,<:Vector}, lat) = s.sublats
 
 # API
 
-resolve(s::HoppingSelector, lat::Lattice) =
+resolve(s::HoppingSelector, lat::AbstractLattice) =
     HoppingSelector(s.region, sublats(s, lat), _checkdims(s.dns, lat), s.range)
-resolve(s::OnsiteSelector, lat::Lattice) = OnsiteSelector(s.region, sublats(s, lat))
+resolve(s::OnsiteSelector, lat::AbstractLattice) = OnsiteSelector(s.region, sublats(s, lat))
 
 _checkdims(dns::Missing, lat::Lattice{E,L}) where {E,L} = dns
 _checkdims(dns::Tuple{Vararg{SVector{L,Int}}}, lat::Lattice{E,L}) where {E,L} = dns
 _checkdims(dns, lat::Lattice{E,L}) where {E,L} =
     throw(DimensionMismatch("Specified cell distance `dn` does not match lattice dimension $L"))
 
-(s::OnsiteSelector)(lat::Lattice, (i, j)::Tuple, dn::SVector) =
-    i == j && iszero(dn) && isinregion(i, s.region, lat) && isinsublats(sublat(lat, i), s.sublats)
+# are sites at (i,j) and (dni, dnj) or (dn, 0) selected?
+(s::OnsiteSelector)(lat::AbstractLattice, (i, j)::Tuple, (dni, dnj)::Tuple{SVector, SVector}) =
+    i == j && dni == dnj && isinregion(i, dni, s.region, lat) && isinsublats(sublat(lat, i), s.sublats)
 
-(s::HoppingSelector)(lat::Lattice, inds, dn) =
-    isinregion(inds, s.region, lat) && isindns(dn, s.dns) &&
+(s::HoppingSelector)(lat::AbstractLattice, inds, dns) =
+    isinregion(inds, dns, s.region, lat) && isindns(dns, s.dns) &&
     isinrange(inds, s.range, lat) && isinsublats(sublat.(Ref(lat), inds), s.sublats)
 
-isinregion(i::Int, ::Missing, lat) = true
-isinregion(i::Int, region::Function, lat) = region(sites(lat)[i])
-isinregion(is::Tuple{Int,Int}, ::Missing, lat) = true
-function isinregion((src, dst)::Tuple{Int,Int}, region::Function, lat)
-    r, dr = _rdr(sites(lat)[src], sites(lat)[dst])
+isinregion(i::Int, dn, ::Missing, lat) = true
+isinregion(i::Int, dn, region::Function, lat) = region(sites(lat)[i] + bravais(lat) * dn)
+
+isinregion(is::Tuple{Int,Int}, dns, ::Missing, lat) = true
+function isinregion((row, col)::Tuple{Int,Int}, (dnrow, dncol), region::Function, lat)
+    br = bravais(lat)
+    r, dr = _rdr(sites(lat)[col] + br * dncol, sites(lat)[row] + br * dnrow)
     return region(r, dr)
 end
 
@@ -130,13 +133,14 @@ isinsublats(ss::Tuple{Int,Int}, sublats::Vector{Tuple{Int,Int}}) = ss in sublats
 isinsublats(s, sublats) =
     throw(ArgumentError("Sublattices $sublats in selector are not resolved."))
 
+isindns((dnrow, dncol)::Tuple{SVector,SVector}, dns) = isindns(dnrow - dncol, dns)
 isindns(dn::SVector{L,Int}, dns::Tuple{Vararg{SVector{L,Int}}}) where {L} = dn in dns
 isindns(dn, dns) =
     throw(ArgumentError("Cell distance dn in selector is incompatible with Lattice."))
 
 isinrange(inds, ::Missing, lat) = true
-isinrange((src, dst)::Tuple{Int,Int}, range, lat) =
-    norm(sites(lat)[dst] - sites(lat)[src]) <= range
+isinrange((row, col)::Tuple{Int,Int}, range, lat) =
+    norm(sites(lat)[col] - sites(lat)[row]) <= range
 
 #######################################################################
 # TightbindingModelTerm
@@ -398,9 +402,9 @@ _checkmodelorbs(s::Number, m, n = m) = _checkmodelorbs(SMatrix{1,1}(s), m, n)
 #######################################################################
 # onsite! and hopping!
 #######################################################################
-abstract type ElementModifier end
+abstract type ElementModifier{V,F,S} end
 
-struct Onsite!{V<:Val,F<:Function,S<:Selector} <: ElementModifier
+struct Onsite!{V<:Val,F<:Function,S<:Selector} <: ElementModifier{V,F,S}
     f::F
     needspositions::V    # Val{false} for f(o; kw...), Val{true} for f(o, r; kw...) or other
     selector::S
@@ -408,7 +412,7 @@ end
 
 Onsite!(f, selector) = Onsite!(f, Val(!applicable(f, 0.0)), selector)
 
-struct Hopping!{V<:Val,F<:Function,S<:Selector} <: ElementModifier
+struct Hopping!{V<:Val,F<:Function,S<:Selector} <: ElementModifier{V,F,S}
     f::F
     needspositions::V    # Val{false} for f(h; kw...), Val{true} for f(h, r, dr; kw...) or other
     selector::S
@@ -449,3 +453,6 @@ two sites involved in each hopping.
 """
 hopping!(f; kw...) = onsite!(f, onsiteselector(; kw...))
 hopping!(f, selector) = Hopping!(f, selector)
+
+resolve(o::Onsite!, lat) = Onsite!(o.f, o.needspositions, resolve(o.selector, lat))
+resolve(h::Hopping!, lat) = Hopping!(h.f, h.needspositions, resolve(h.selector, lat))

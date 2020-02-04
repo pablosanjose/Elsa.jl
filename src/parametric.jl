@@ -73,7 +73,7 @@ function parametric_pointers(h::Hamiltonian{LA,L,M,<:AbstractSparseMatrix}, t::E
         rows = rowvals(matrix)
         for col in 1:size(matrix, 2), ptr in nzrange(matrix, col)
             row = rows[ptr]
-            selected = selector(lat, (row, col), dn)
+            selected = selector(lat, (row, col), (dn, zero(dn)))
             selected && push_ptrdata!(ptrdata, ptr, t, lat, (row, col))
         end
     end
@@ -93,8 +93,7 @@ function empty_ptrdata(h, t::Hopping!{Val{true}})
     return [Tuple{Int,S,S}[] for _ in h.harmonics]
 end
 
-push_ptrdata!(ptrdata, ptr, t::Onsite!{Val{false}}, _...) = push!(ptrdata, ptr)
-push_ptrdata!(ptrdata, ptr, t::Hopping!{Val{false}}, _...) = push!(ptrdata, ptr)
+push_ptrdata!(ptrdata, ptr, t::ElementModifier{Val{false}}, _...) = push!(ptrdata, ptr)
 
 function push_ptrdata!(ptrdata, ptr, t::Onsite!{Val{true}}, lat, (row, col))
     r = sites(lat)[col]
@@ -108,26 +107,26 @@ end
 
 function (ph::ParametricHamiltonian)(; kw...)
     checkconsistency(ph, false) # only weak check for performance
-    applymodifier!.(Ref(ph.h), Ref(ph.originalh), ph.modifiers, ph.ptrdata, Ref(values(kw)))
+    applymodifier_ptrdata!.(Ref(ph.h), Ref(ph.originalh), ph.modifiers, ph.ptrdata, Ref(values(kw)))
     return ph.h
 end
 
-function applymodifier!(h, oh, modifier, ptrdata, kw)
+function applymodifier_ptrdata!(h, oh, modifier, ptrdata, kw)
     for (ohar, har, hardata) in zip(oh.harmonics, h.harmonics, ptrdata)
         nz = nonzeros(har.h)
         onz = nonzeros(ohar.h)
         for data in hardata
-            _applymodifier!(nz, onz, modifier, data, kw)
+            _applymodifier_ptrdata!(nz, onz, modifier, data, kw)
         end
     end
     return h
 end
 
-_applymodifier!(nz, onz, modifier, ptr::Int, kw) =
+_applymodifier_ptrdata!(nz, onz, modifier, ptr::Int, kw) =
     nz[ptr] = modifier.f(onz[ptr]; kw...)
-_applymodifier!(nz, onz, modifier, (ptr, r)::Tuple{Int,SVector}, kw) =
+_applymodifier_ptrdata!(nz, onz, modifier, (ptr, r)::Tuple{Int,SVector}, kw) =
     nz[ptr] = modifier.f(onz[ptr], r; kw...)
-_applymodifier!(nz, onz, modifier, (ptr, r, dr)::Tuple{Int,SVector,SVector}, kw) =
+_applymodifier_ptrdata!(nz, onz, modifier, (ptr, r, dr)::Tuple{Int,SVector,SVector}, kw) =
     nz[ptr] = modifier.f(onz[ptr], r, dr; kw...)
 
 function checkconsistency(ph::ParametricHamiltonian, fullcheck = true)

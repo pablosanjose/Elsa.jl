@@ -17,6 +17,9 @@ toSVector(::Type{T}, ::Tuple{}) where {T} = SVector{0,T}()
 # Dynamic dispatch
 toSVector(v::AbstractVector) = SVector(Tuple(v))
 
+ensuretuple(s::Tuple) = s
+ensuretuple(s) = (s,)
+
 # ensureSMatrix(f::Function) = f
 # ensureSMatrix(m::T) where T<:Number = SMatrix{1,1,T,1}(m)
 # ensureSMatrix(m::SMatrix) = m

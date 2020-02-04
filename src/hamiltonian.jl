@@ -534,7 +534,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm, termsublats) whe
         ijv = builder[dn0]
         offset = lat.unitcell.offsets[s]
         for i in is
-            isinregion(i, selector.region, lat) || continue
+            isinregion(i, dn0, selector.region, lat) || continue
             r = lat.unitcell.sites[i]
             vs = orbsized(term(r,r), builder.orbs[s])
             v = padtotype(vs, M)
@@ -562,7 +562,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) wh
                 itargets = targets(builder, selector.range, rsource, s1)
                 for i in itargets
                     isselfhopping((i, j), (s1, s2), dn) && continue
-                    isinregion((i, j), selector.region, lat) || continue
+                    isinregion((i, j), (dn, zero(dn)), selector.region, lat) || continue
                     foundlink = true
                     rtarget = lat.unitcell.sites[i]
                     r, dr = _rdr(rsource, rtarget)
@@ -621,15 +621,15 @@ function supercell(ham::Hamiltonian, args...; kw...)
     return Hamiltonian(slat, ham.harmonics, ham.orbitals)
 end
 
-function unitcell(ham::Hamiltonian{<:Lattice}, args...;
-                  onsite! = missing, hopping! = missing, kw...)
+function unitcell(ham::Hamiltonian{<:Lattice}, args...; modifiers = (), kw...)
     sham = supercell(ham, args...; kw...)
-    return unitcell(sham; onsite! = onsite!, hopping! = hopping!)
+    return unitcell(sham; modifiers = modifiers)
 end
 
-function unitcell(ham::Hamiltonian{LA,L}; onsite! = missing, hopping! = missing) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
+function unitcell(ham::Hamiltonian{LA,L}; modifiers = ()) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
     lat = ham.lattice
     sc = lat.supercell
+    modifiers´ = resolve.(ensuretuple(modifiers), Ref(lat))
     mapping = OffsetArray{Int}(undef, sc.sites, sc.cells.indices...) # store supersite indices newi
     mapping .= 0
     foreach_supersite((s, oldi, olddn, newi) -> mapping[oldi, Tuple(olddn)...] = newi, lat)
@@ -651,8 +651,7 @@ function unitcell(ham::Hamiltonian{LA,L}; onsite! = missing, hopping! = missing)
                 # check: wrapped_dn could exit bounding box along non-periodic direction
                 checkbounds(Bool, mapping, target_i, Tuple(wrapped_dn)...) || continue
                 newrow = mapping[target_i, Tuple(wrapped_dn)...]
-                val = applytransform(vals[p], onsite!, hopping!,
-                                     lat, source_i, source_dn, target_i, target_dn)
+                val = applymodifiers(vals[p], lat, (source_i, target_i), (source_dn, target_dn), modifiers´...)
                 iszero(newrow) || pushtocolumn!(newh.h, newrow, val)
             end
         end
@@ -676,18 +675,35 @@ end
 
 wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell * newdn
 
-applytransform(val, ::Missing, ::Missing, _...) = val
+applymodifiers(val, lat, inds, dns) = val
 
-function applytransform(val::T, onsite, hopping, lat, isrc, dnsrc, idst, dndst) where {T}
-    rs = sites(lat)
-    br = bravais(lat)
-    if isrc == idst && dnsrc == dndst
-        r = rs[isrc] + br * dnsrc
-        return onsite === missing ? val : T(onsite(val, r))
+function applymodifiers(val, lat, inds, dns, m::ElementModifier{Val{false}}, ms...)
+    selected = m.selector(lat, inds, dns)
+    val´ = selected ? m.f(val) : val
+    return applymodifiers(val´, lat, inds, dns, ms...)
+end
+
+function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::Onsite!{Val{true}}, ms...)
+    selected = m.selector(lat, (row, col), (dnrow, dncol))
+    if selected
+        r = sites(lat)[col] + bravais(lat) * dncol
+        val´ = selected ? m.f(val, r) : val
     else
-        r, dr = _rdr(rs[isrc] + br * dnsrc, rs[idst] + br * dndst)
-        return hopping === missing ? val : T(hopping(val, r, dr))
+        val´ = val
     end
+    return applymodifiers(val´, lat, (row, col), (dnrow, dncol), ms...)
+end
+
+function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::Hopping!{Val{true}}, ms...)
+    selected = m.selector(lat, (row, col), (dnrow, dncol))
+    if selected
+        br = bravais(lat)
+        r, dr = _rdr(sites(lat)[col] + br * dncol, sites(lat)[row] + br * dnrow)
+        val´ = selected ? m.f(val, r, dr) : val
+    else
+        val´ = val
+    end
+    return applymodifiers(val´, lat, (row, col), (dnrow, dncol), ms...)
 end
 
 #######################################################################
