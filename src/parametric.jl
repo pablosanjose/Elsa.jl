@@ -145,3 +145,12 @@ function checkconsistency(ph::ParametricHamiltonian, fullcheck = true)
         throw(error("ParametricHamiltonian is not internally consistent, it may have been modified after creation"))
     return nothing
 end
+
+Base.copy(ph::ParametricHamiltonian) =
+    ParametricHamiltonian(copy(ph.originalh), copy(ph.h), ph.modifiers, copy(h.ptrdata))
+
+Base.size(ph::ParametricHamiltonian, n...) = size(ph.h, n...)
+
+bravais(ph::ParametricHamiltonian) = bravais(ph.hamiltonian.lattice)
+
+Base.eltype(ph::ParametricHamiltonian) = eltype(ph.h)
