@@ -59,22 +59,27 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
     `onsite!`, `hopping!`
 ```
 """
-parametric(h::Hamiltonian, ts::ElementModifier...) =
-    ParametricHamiltonian(h, copy(h), ts, parametric_pointers.(Ref(h), ts))
+function parametric(h::Hamiltonian, ts::ElementModifier...)
+    ts´ = resolve.(ts, Ref(h.lattice))
+    return ParametricHamiltonian(h, copy(h), ts´, parametric_ptrdata.(Ref(h), ts´))
+end
+
 parametric(ts::ElementModifier...) = h -> parametric(h, ts...)
 
-function parametric_pointers(h::Hamiltonian{LA,L,M,<:AbstractSparseMatrix}, t::ElementModifier) where {LA,L,M}
+function parametric_ptrdata(h::Hamiltonian{LA,L,M,<:AbstractSparseMatrix}, t::ElementModifier) where {LA,L,M}
     harmonic_ptrdata = empty_ptrdata(h, t)
     lat = h.lattice
-    selector = resolve(t.selector, lat)
+    selector = t.selector
     for (har, ptrdata) in zip(h.harmonics, harmonic_ptrdata)
         matrix = har.h
         dn = har.dn
         rows = rowvals(matrix)
         for col in 1:size(matrix, 2), ptr in nzrange(matrix, col)
             row = rows[ptr]
-            selected = selector(lat, (row, col), (dn, zero(dn)))
-            selected && push_ptrdata!(ptrdata, ptr, t, lat, (row, col))
+            selected  = selector(lat, (row, col), (dn, zero(dn)))
+            selected´ = t.forcehermitian && selector(lat, (col, row), (zero(dn), dn))
+            selected  && push!(ptrdata, ptrdatum(t, lat,  ptr, (row, col)))
+            selected´ && push!(ptrdata, ptrdatum(t, lat, -ptr, (col, row)))
         end
     end
     return harmonic_ptrdata
@@ -93,16 +98,11 @@ function empty_ptrdata(h, t::Hopping!{Val{true}})
     return [Tuple{Int,S,S}[] for _ in h.harmonics]
 end
 
-push_ptrdata!(ptrdata, ptr, t::ElementModifier{Val{false}}, _...) = push!(ptrdata, ptr)
-
-function push_ptrdata!(ptrdata, ptr, t::Onsite!{Val{true}}, lat, (row, col))
-    r = sites(lat)[col]
-    push!(ptrdata, (ptr, r))
-end
-
-function push_ptrdata!(ptrdata, ptr, t::Hopping!{Val{true}}, lat, (row, col))
+ptrdatum(t::ElementModifier{Val{false}}, lat, ptr, (row, col)) = ptr
+ptrdatum(t::Onsite!{Val{true}}, lat, ptr, (row, col)) = (ptr, sites(lat)[col])
+function ptrdatum(t::Hopping!{Val{true}}, lat, ptr, (row, col))
     r, dr = _rdr(sites(lat)[col], sites(lat)[row])
-    push!(ptrdata, (ptr, r, dr))
+    return (ptr, r, dr)
 end
 
 function (ph::ParametricHamiltonian)(; kw...)
@@ -111,23 +111,25 @@ function (ph::ParametricHamiltonian)(; kw...)
     return ph.h
 end
 
-function applymodifier_ptrdata!(h, oh, modifier, ptrdata, kw)
-    for (ohar, har, hardata) in zip(oh.harmonics, h.harmonics, ptrdata)
+function applymodifier_ptrdata!(h, originalh, modifier, ptrdata, kw)
+    for (ohar, har, hardata) in zip(originalh.harmonics, h.harmonics, ptrdata)
         nz = nonzeros(har.h)
         onz = nonzeros(ohar.h)
         for data in hardata
-            _applymodifier_ptrdata!(nz, onz, modifier, data, kw)
+            ptr = first(data)
+            isadjoint = ptr < 0
+            isadjoint && (ptr = -ptr)
+            args = modifier_args(onz, data)
+            val = modifier(args...; kw...)
+            nz[ptr] = isadjoint ? val' : val
         end
     end
     return h
 end
 
-_applymodifier_ptrdata!(nz, onz, modifier, ptr::Int, kw) =
-    nz[ptr] = modifier.f(onz[ptr]; kw...)
-_applymodifier_ptrdata!(nz, onz, modifier, (ptr, r)::Tuple{Int,SVector}, kw) =
-    nz[ptr] = modifier.f(onz[ptr], r; kw...)
-_applymodifier_ptrdata!(nz, onz, modifier, (ptr, r, dr)::Tuple{Int,SVector,SVector}, kw) =
-    nz[ptr] = modifier.f(onz[ptr], r, dr; kw...)
+modifier_args(onz, ptr::Int) = (onz[abs(ptr)],)
+modifier_args(onz, (ptr, r)::Tuple{Int,SVector}) = (onz[abs(ptr)], r)
+modifier_args(onz, (ptr, r, dr)::Tuple{Int,SVector,SVector}) = (onz[abs(ptr)], r, dr)
 
 function checkconsistency(ph::ParametricHamiltonian, fullcheck = true)
     isconsistent = true

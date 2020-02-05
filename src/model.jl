@@ -110,11 +110,13 @@ _checkdims(dns, lat::Lattice{E,L}) where {E,L} =
 
 # are sites at (i,j) and (dni, dnj) or (dn, 0) selected?
 (s::OnsiteSelector)(lat::AbstractLattice, (i, j)::Tuple, (dni, dnj)::Tuple{SVector, SVector}) =
-    i == j && dni == dnj && isinregion(i, dni, s.region, lat) && isinsublats(sublat(lat, i), s.sublats)
+    isonsite((i, j), (dni, dnj)) && isinregion(i, dni, s.region, lat) && isinsublats(sublat(lat, i), s.sublats)
 
 (s::HoppingSelector)(lat::AbstractLattice, inds, dns) =
-    isinregion(inds, dns, s.region, lat) && isindns(dns, s.dns) &&
+    !isonsite(inds, dns) && isinregion(inds, dns, s.region, lat) && isindns(dns, s.dns) &&
     isinrange(inds, s.range, lat) && isinsublats(sublat.(Ref(lat), inds), s.sublats)
+
+isonsite((i, j), (dni, dnj)) = i == j && dni == dnj
 
 isinregion(i::Int, dn, ::Missing, lat) = true
 isinregion(i::Int, dn, region::Function, lat) = region(sites(lat)[i] + bravais(lat) * dn)
@@ -135,11 +137,12 @@ isinsublats(s, sublats) =
 
 isindns((dnrow, dncol)::Tuple{SVector,SVector}, dns) = isindns(dnrow - dncol, dns)
 isindns(dn::SVector{L,Int}, dns::Tuple{Vararg{SVector{L,Int}}}) where {L} = dn in dns
+isindns(dn::SVector, dns::Missing) = true
 isindns(dn, dns) =
     throw(ArgumentError("Cell distance dn in selector is incompatible with Lattice."))
 
 isinrange(inds, ::Missing, lat) = true
-isinrange((row, col)::Tuple{Int,Int}, range, lat) =
+isinrange((row, col)::Tuple{Int,Int}, range::Number, lat) =
     norm(sites(lat)[col] - sites(lat)[row]) <= range
 
 #######################################################################
@@ -408,17 +411,23 @@ struct Onsite!{V<:Val,F<:Function,S<:Selector} <: ElementModifier{V,F,S}
     f::F
     needspositions::V    # Val{false} for f(o; kw...), Val{true} for f(o, r; kw...) or other
     selector::S
+    forcehermitian::Bool
+    addconjugate::Bool   # determines whether to return f(o) or (f(o) + f(o')')/2
 end
 
-Onsite!(f, selector) = Onsite!(f, Val(!applicable(f, 0.0)), selector)
+Onsite!(f, selector, forcehermitian = true) =
+    Onsite!(f, Val(!applicable(f, 0.0)), selector, forcehermitian, false)
 
 struct Hopping!{V<:Val,F<:Function,S<:Selector} <: ElementModifier{V,F,S}
     f::F
     needspositions::V    # Val{false} for f(h; kw...), Val{true} for f(h, r, dr; kw...) or other
     selector::S
+    forcehermitian::Bool
+    addconjugate::Bool   # determines whether to return f(t) or (f(t) + f(t')')/2
 end
 
-Hopping!(f, selector) = Hopping!(f, Val(!applicable(f, 0.0)), selector)
+Hopping!(f, selector, forcehermitian = true) =
+    Hopping!(f, Val(!applicable(f, 0.0)), selector, forcehermitian, false)
 
 # API #
 
@@ -435,8 +444,9 @@ onsite energy.
 # See also:
     `hopping!`, `parametric`
 """
-onsite!(f; kw...) = onsite!(f, onsiteselector(; kw...))
-onsite!(f, selector) = Onsite!(f, selector)
+onsite!(f; forcehermitian = true, kw...) =
+    onsite!(f, onsiteselector(; kw...); forcehermitian = forcehermitian)
+onsite!(f, selector; forcehermitian = true) = Onsite!(f, selector, forcehermitian)
 
 """
     hopping!(f; kw...)
@@ -451,8 +461,30 @@ two sites involved in each hopping.
 # See also:
     `onsite!`, `parametric`
 """
-hopping!(f; kw...) = onsite!(f, onsiteselector(; kw...))
-hopping!(f, selector) = Hopping!(f, selector)
+hopping!(f; forcehermitian = true, kw...) = hopping!(f, hoppingselector(; kw...); forcehermitian = forcehermitian)
+hopping!(f, selector; forcehermitian = true) = Hopping!(f, selector, forcehermitian)
 
-resolve(o::Onsite!, lat) = Onsite!(o.f, o.needspositions, resolve(o.selector, lat))
-resolve(h::Hopping!, lat) = Hopping!(h.f, h.needspositions, resolve(h.selector, lat))
+function resolve(o::Onsite!, lat)
+    addconjugate = o.forcehermitian
+    Onsite!(o.f, o.needspositions, resolve(o.selector, lat), o.forcehermitian, addconjugate)
+end
+
+function resolve(h::Hopping!, lat)
+    addconjugate = h.selector.sublats === missing && h.forcehermitian
+    Hopping!(h.f, h.needspositions, resolve(h.selector, lat), h.forcehermitian, addconjugate)
+end
+
+# Intended for resolved ElementModifiers only
+@inline (o!::Onsite!{Val{false}})(o, r; kw...) = o!(o; kw...)
+@inline (o!::Onsite!{Val{false}})(o, r, dr; kw...) = o!(o; kw...)
+@inline (o!::Onsite!{Val{false}})(o; kw...) =
+    o!.addconjugate ? 0.5 * (o!.f(o; kw...) + o!.f(o'; kw...)') : o!.f(o; kw...)
+@inline (o!::Onsite!{Val{true}})(o, r, dr; kw...) = o!(o, r; kw...)
+@inline (o!::Onsite!{Val{true}})(o, r; kw...) =
+    o!.addconjugate ? 0.5 * (o!.f(o, r; kw...) + o!.f(o', r; kw...)') : o!.f(o, r; kw...)
+
+@inline (h!::Hopping!{Val{false}})(t, r, dr; kw...) = h!(t; kw...)
+@inline (h!::Hopping!{Val{false}})(t; kw...) =
+    h!.addconjugate ? 0.5 * (h!.f(t; kw...) + h!.f(t'; kw...)') : h!.f(t; kw...)
+@inline (h!::Hopping!{Val{true}})(t, r, dr; kw...) =
+    h!.addconjugate ? 0.5 * (h!.f(t, r, dr; kw...) + h!.f(t', r, -dr; kw...)') : h!.f(t, r, dr; kw...)
