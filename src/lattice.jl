@@ -377,6 +377,8 @@ Base.copy(lat::Lattice) = Lattice(lat.bravais, copy(lat.unitcell))
 Base.copy(lat::Superlattice) = Superlattice(lat.bravais, copy(lat.unitcell), copy(lat.supercell))
 
 numbertype(::AbstractLattice{E,L,T}) where {E,L,T} = T
+positiontype(::AbstractLattice{E,L,T}) where {E,L,T} = SVector{E,T}
+dntype(::AbstractLattice{E,L}) where {E,L} = SVector{L,Int}
 
 sublat(lat::AbstractLattice, siteidx) = sublat(lat.unitcell, siteidx)
 sublats(lat::AbstractLattice) = sublats(lat.unitcell)
@@ -431,7 +433,7 @@ If all `lats` have compatible Bravais vectors, combine them into a single lattic
 Sublattice names are renamed to be unique if necessary.
 """
 function combine(lats::Lattice...)
-    is_bravais_compatible(lats...) || throw(ArgumentError("Lattices must share all Bravais vectors"))
+    is_bravais_compatible(lats...) || throw(ArgumentError("Lattices must share all Bravais vectors, $(bravais.(lats))"))
     bravais´ = first(lats).bravais
     unitcell´ = combine((l -> l.unitcell).(lats)...)
     return Lattice(bravais´, unitcell´)
@@ -691,18 +693,18 @@ with factors along the diagonal)
 
 Convert Superlattice `slat` into a lattice with its unit cell matching `slat`'s supercell.
 
-    unitcell(h::Hamiltonian, v...; onsite! = missing, hopping! = missing, kw...)
+    unitcell(h::Hamiltonian, v...; modifiers = (), kw...)
 
 Transforms the `Lattice` of `h` to have a larger unitcell, while expanding the Hamiltonian
-accordingly. If not missing, the function `onsite!(o, r)` is applied to each onsite
-energy 'o' of sites at position `r`, and `hopping!(t, r, dr)` is applied to hoppings `t`
-between sites at positions `r1, r2 = r - dr/2, r + dr/2`.
+accordingly. The modifiers (a tuple of `ElementModifier`s, either `onsite!` or `hopping!`)
+will be applied to onsite and hoppings as the hamiltonian is expanded. See `onsite!` and
+`hopping!` for details
 
-Note: for performance reasons, in sparse hamiltonians only the stored `o`s and `t`s will be
-transformed by these functions, so you might want to add zero onsites or hoppings when
-building `h` to have a transformation applied to them later. Note also that additional `o`s
-and `t`s may be stored when calling `optimize!` or `bloch`/`bloch!` on `h` for the first
-time.
+Note: for performance reasons, in sparse hamiltonians only the stored onsites and hoppings
+will be transformed by `ElementModifier`s, so you might want to add zero onsites or hoppings
+when building `h` to have a modifier applied to them later. Note also that additional
+onsites and hoppings may be stored when calling `optimize!` or `bloch`/`bloch!` on `h` for
+the first time.
 
     lat_or_h |> unitcell(v...; kw...)
 

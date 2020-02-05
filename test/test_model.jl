@@ -2,7 +2,7 @@ module ModelTest
 
 using Test
 using Elsa
-using Elsa: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype
+using Elsa: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype, Selector
 
 @testset "onsite" begin
     r = SVector(0.0, 0.0)
@@ -13,7 +13,7 @@ using Elsa: TightbindingModel, OnsiteTerm, HoppingTerm, padtotype
     for o in os, s in ss, c in cs
         ons = c * onsite(o, sublats = s)
         @test ons isa
-            TightbindingModel{1,Tuple{OnsiteTerm{typeof(o),S,typeof(c)}}} where S
+            TightbindingModel{1,<:Tuple{OnsiteTerm{typeof(o)}}}
         term = first(ons.terms)
         for t in ts
             @test padtotype(term(r, r), t) isa t
@@ -32,7 +32,7 @@ end
     for h in hs, s in ss, c in cs, d in dns, r in rs
         hop = c * hopping(h, sublats = s, dn = d, range = r)
         @test hop isa
-            TightbindingModel{1,Tuple{HoppingTerm{typeof(h),S,D,typeof(float(r)),typeof(c)}}} where {S,D}
+            TightbindingModel{1,<:Tuple{HoppingTerm{typeof(h)}}}
         term = first(hop.terms)
         for t in ts
             @test padtotype(term(r, r), t) isa t

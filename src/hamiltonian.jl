@@ -248,17 +248,6 @@ where `T` is the number type of `lat`.
 Build the Bloch Hamiltonian matrix `bloch(h, (ϕ₁, ϕ₂, ...))` of a `h::Hamiltonian` on an
 `L`D lattice. (See also `bloch!` for a non-allocating version of `bloch`.)
 
-    hamiltonian(lat, [model,] funcmodel::Function; kw...)
-
-For a function of the form `funcmodel(;params...)::TightbindingModel`, produce a
-`h::ParametricHamiltonian` that efficiently generates a `Hamiltonian` with model `model +
-funcmodel(;params...)` when calling it as in `h(;params...)` (using specific parameters as
-keyword arguments `params`). Additionally, `h(ϕ₁, ϕ₂, ...; params...)` generates the
-corresponding Bloch Hamiltonian matrix (equivalent to `h(;params...)(ϕ₁, ϕ₂, ...)`).
-
-It's important to note that `params` keywords in the definition of `funcmodel` must have
-default values, as in `model(;o = 1) = onsite(o)`.
-
     lat |> hamiltonian(model[, funcmodel]; kw...)
 
 Functional `hamiltonian` form equivalent to `hamiltonian(lat, model[, funcmodel]; kw...)`.
@@ -536,10 +525,8 @@ applyterms!(builder, terms...) = foreach(term -> applyterm!(builder, term), term
 applyterm!(builder::IJVBuilder, term::Union{OnsiteTerm, HoppingTerm}) =
     applyterm!(builder, term, sublats(term, builder.lat))
 
-applyterm!(builder::IJVBuilder, ndterm::NondiagonalTerm) =
-    applyterm!(builder, ndterm.term, sublats(ndterm, builder.lat))
-
 function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm, termsublats) where {L,M}
+    selector = term.selector
     lat = builder.lat
     for s in termsublats
         is = siterange(lat, s)
@@ -547,6 +534,7 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm, termsublats) whe
         ijv = builder[dn0]
         offset = lat.unitcell.offsets[s]
         for i in is
+            isinregion(i, dn0, selector.region, lat) || continue
             r = lat.unitcell.sites[i]
             vs = orbsized(term(r,r), builder.orbs[s])
             v = padtotype(vs, M)
@@ -557,11 +545,12 @@ function applyterm!(builder::IJVBuilder{L,M}, term::OnsiteTerm, termsublats) whe
 end
 
 function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) where {L,M}
-    checkinfinite(term)
+    selector = term.selector
+    checkinfinite(selector)
     lat = builder.lat
     for (s1, s2) in termsublats
         is, js = siterange(lat, s1), siterange(lat, s2)
-        dns = dniter(term.dns, Val(L))
+        dns = dniter(selector.dns, Val(L))
         for dn in dns
             addadjoint = term.forcehermitian
             foundlink = false
@@ -570,16 +559,17 @@ function applyterm!(builder::IJVBuilder{L,M}, term::HoppingTerm, termsublats) wh
             for j in js
                 sitej = lat.unitcell.sites[j]
                 rsource = sitej - lat.bravais.matrix * dn
-                itargets = targets(builder, term.range, rsource, s1)
+                itargets = targets(builder, selector.range, rsource, s1)
                 for i in itargets
                     isselfhopping((i, j), (s1, s2), dn) && continue
+                    isinregion((i, j), (dn, zero(dn)), selector.region, lat) || continue
                     foundlink = true
                     rtarget = lat.unitcell.sites[i]
                     r, dr = _rdr(rsource, rtarget)
                     vs = orbsized(term(r, dr), builder.orbs[s1], builder.orbs[s2])
                     v = padtotype(vs, M)
                     if addadjoint
-                        v *= redundancyfactor(dn, (s1, s2), term)
+                        v *= redundancyfactor(dn, (s1, s2), selector)
                         push!(ijv, (i, j, v))
                         push!(ijvc, (j, i, v'))
                     else
@@ -611,16 +601,17 @@ end
 
 targets(builder, range::Missing, rsource, s1) = eachindex(builder.lat.sublats[s1].sites)
 
-checkinfinite(term) = term.dns === missing && (term.range === missing || !isfinite(term.range)) &&
+checkinfinite(selector) =
+    selector.dns === missing && (selector.range === missing || !isfinite(selector.range)) &&
     throw(ErrorException("Tried to implement an infinite-range hopping on an unbounded lattice"))
 
 isselfhopping((i, j), (s1, s2), dn) = i == j && s1 == s2 && iszero(dn)
 
 # Avoid double-counting hoppings when adding adjoint
-redundancyfactor(dn, ss, term) =
-    isnotredundant(dn, term) || isnotredundant(ss, term) ? 1.0 : 0.5
-isnotredundant(dn::SVector, term) = term.dns !== missing && !iszero(dn)
-isnotredundant((s1, s2)::Tuple{Int,Int}, term) = term.sublats !== missing && s1 != s2
+redundancyfactor(dn, ss, selector) =
+    isnotredundant(dn, selector) || isnotredundant(ss, selector) ? 1.0 : 0.5
+isnotredundant(dn::SVector, selector) = selector.dns !== missing && !iszero(dn)
+isnotredundant((s1, s2)::Tuple{Int,Int}, selector) = selector.sublats !== missing && s1 != s2
 
 #######################################################################
 # unitcell/supercell for Hamiltonians
@@ -630,15 +621,15 @@ function supercell(ham::Hamiltonian, args...; kw...)
     return Hamiltonian(slat, ham.harmonics, ham.orbitals)
 end
 
-function unitcell(ham::Hamiltonian{<:Lattice}, args...;
-                  onsite! = missing, hopping! = missing, kw...)
+function unitcell(ham::Hamiltonian{<:Lattice}, args...; modifiers = (), kw...)
     sham = supercell(ham, args...; kw...)
-    return unitcell(sham; onsite! = onsite!, hopping! = hopping!)
+    return unitcell(sham; modifiers = modifiers)
 end
 
-function unitcell(ham::Hamiltonian{LA,L}; onsite! = missing, hopping! = missing) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
+function unitcell(ham::Hamiltonian{LA,L}; modifiers = ()) where {E,L,T,L´,LA<:Superlattice{E,L,T,L´}}
     lat = ham.lattice
     sc = lat.supercell
+    modifiers´ = resolve.(ensuretuple(modifiers), Ref(lat))
     mapping = OffsetArray{Int}(undef, sc.sites, sc.cells.indices...) # store supersite indices newi
     mapping .= 0
     foreach_supersite((s, oldi, olddn, newi) -> mapping[oldi, Tuple(olddn)...] = newi, lat)
@@ -660,8 +651,7 @@ function unitcell(ham::Hamiltonian{LA,L}; onsite! = missing, hopping! = missing)
                 # check: wrapped_dn could exit bounding box along non-periodic direction
                 checkbounds(Bool, mapping, target_i, Tuple(wrapped_dn)...) || continue
                 newrow = mapping[target_i, Tuple(wrapped_dn)...]
-                val = applytransform(vals[p], onsite!, hopping!,
-                                     lat, source_i, source_dn, target_i, target_dn)
+                val = applymodifiers(vals[p], lat, (source_i, target_i), (source_dn, target_dn), modifiers´...)
                 iszero(newrow) || pushtocolumn!(newh.h, newrow, val)
             end
         end
@@ -685,18 +675,35 @@ end
 
 wrap_dn(olddn::SVector, newdn::SVector, supercell::SMatrix) = olddn - supercell * newdn
 
-applytransform(val, ::Missing, ::Missing, _...) = val
+applymodifiers(val, lat, inds, dns) = val
 
-function applytransform(val::T, onsite, hopping, lat, isrc, dnsrc, idst, dndst) where {T}
-    rs = sites(lat)
-    br = bravais(lat)
-    if isrc == idst && dnsrc == dndst
-        r = rs[isrc] + br * dnsrc
-        return onsite === missing ? val : T(onsite(val, r))
+function applymodifiers(val, lat, inds, dns, m::ElementModifier{Val{false}}, ms...)
+    selected = m.selector(lat, inds, dns)
+    val´ = selected ? m.f(val) : val
+    return applymodifiers(val´, lat, inds, dns, ms...)
+end
+
+function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::Onsite!{Val{true}}, ms...)
+    selected = m.selector(lat, (row, col), (dnrow, dncol))
+    if selected
+        r = sites(lat)[col] + bravais(lat) * dncol
+        val´ = selected ? m.f(val, r) : val
     else
-        r, dr = _rdr(rs[isrc] + br * dnsrc, rs[idst] + br * dndst)
-        return hopping === missing ? val : T(hopping(val, r, dr))
+        val´ = val
     end
+    return applymodifiers(val´, lat, (row, col), (dnrow, dncol), ms...)
+end
+
+function applymodifiers(val, lat, (row, col), (dnrow, dncol), m::Hopping!{Val{true}}, ms...)
+    selected = m.selector(lat, (row, col), (dnrow, dncol))
+    if selected
+        br = bravais(lat)
+        r, dr = _rdr(sites(lat)[col] + br * dncol, sites(lat)[row] + br * dnrow)
+        val´ = selected ? m.f(val, r, dr) : val
+    else
+        val´ = val
+    end
+    return applymodifiers(val´, lat, (row, col), (dnrow, dncol), ms...)
 end
 
 #######################################################################
@@ -783,7 +790,7 @@ function _combine(model::TightbindingModel, hams::Hamiltonian...)
     lat = combine((h -> h.lattice).(hams)...)
     orbs = tuplejoin((h -> h.orbitals).(hams)...)
     builder = IJVBuilder(lat, orbs, hams...)
-    model´ = nondiagonal(model, nsublats.(hams))
+    model´ = offdiagonal(model, lat, nsublats.(hams))
     ham = hamiltonian_sparse!(builder, lat, orbs, model´)
     return ham
 end
@@ -1142,110 +1149,3 @@ function flatten(unitcell::Unitcell, norbs::NTuple{S,Int}) where {S}
     unitcell´ = Unitcell(sites´, names´, offsets´)
     return unitcell´
 end
-
-#######################################################################
-# parametric hamiltonian
-#######################################################################
-struct ParametricHamiltonian{H,F,E,T}
-    base::H             # Hamiltonian before applying parametrized model
-    hamiltonian::H      # Hamiltonian to update that includes parametrized model
-    pointers::Vector{Vector{Tuple{Int,SVector{E,T},SVector{E,T}}}} # val pointers to modify
-    f::F                                                           # by f on each harmonic
-end
-
-Base.show(io::IO, pham::ParametricHamiltonian) = print(io, "Parametric ", pham.hamiltonian)
-
-function parametric_hamiltonian(::Type{M}, lat::AbstractLattice{E,L,T}, orbs, model, f::F) where {M,E,L,T,F<:Function}
-    builder = IJVBuilder(lat, orbs, M)
-    applyterms!(builder, terms(model)...)
-    nels = length.(builder.ijvs) # element counters for each harmonic
-    model_f = f()
-    applyterms!(builder, terms(model_f)...)
-    padright!(nels, 0, length(builder.ijvs)) # in case new harmonics where added
-    nels_f = length.(builder.ijvs) # element counters after adding f model
-    empties = isempty.(builder.ijvs)
-    deleteat!(builder.ijvs, empties)
-    deleteat!(nels, empties)
-    deleteat!(nels_f, empties)
-
-    base_ijvs = copy.(builder.ijvs) # ijvs for ham without f, but with structural zeros
-    zeroM = zero(M)
-    for (ijv, nel, nel_f) in zip(base_ijvs, nels, nels_f), p in nel+1:nel_f
-        ijv.v[p] = zeroM
-    end
-
-    HT = HamiltonianHarmonic{L,M,SparseMatrixCSC{M,Int}}
-    n = nsites(lat)
-    base_harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in base_ijvs]
-    harmonics = HT[HT(e.dn, sparse(e.i, e.j, e.v, n, n)) for e in builder.ijvs]
-    pointers = [getpointers(harmonics[k].h, builder.ijvs[k], nels[k], lat) for k in eachindex(harmonics)]
-    base_h = Hamiltonian(lat, base_harmonics, orbs, n, n)
-    h = Hamiltonian(lat, harmonics, orbs, n, n)
-    return ParametricHamiltonian(base_h, h, pointers, f)
-end
-
-function getpointers(h::SparseMatrixCSC, ijv, eloffset, lat::AbstractLattice{E,L,T}) where {E,L,T}
-    rows = rowvals(h)
-    sites = lat.unitcell.sites
-    pointers = Tuple{Int,SVector{E,T},SVector{E,T}}[] # (pointer, r, dr)
-    nelements = length(ijv)
-    for k in eloffset+1:nelements
-        row = ijv.i[k]
-        col = ijv.j[k]
-        for ptr in nzrange(h, col)
-            if row == rows[ptr]
-                r, dr = _rdr(sites[col], sites[row]) # _rdr(source, target)
-                push!(pointers, (ptr, r, dr))
-                break
-            end
-        end
-    end
-    unique!(first, pointers) # adjoint duplicates lead to repeated pointers... remove.
-    return pointers
-end
-
-function initialize!(ph::ParametricHamiltonian{H}) where {LA,L,M,A<:SparseMatrixCSC,H<:Hamiltonian{LA,L,M,A}}
-    for (bh, h, prdrs) in zip(ph.base.harmonics, ph.hamiltonian.harmonics, ph.pointers)
-        vals = nonzeros(h.h)
-        vals_base = nonzeros(bh.h)
-        for (p,_,_) in prdrs
-            vals[p] = vals_base[p]
-        end
-    end
-    return nothing
-end
-
-function applyterm!(ph::ParametricHamiltonian{H}, term::TightbindingModelTerm)  where {LA,L,M,A<:SparseMatrixCSC,H<:Hamiltonian{LA,L,M,A}}
-    for (h, prdrs) in zip(ph.hamiltonian.harmonics, ph.pointers)
-        vals = nonzeros(h.h)
-        for (p, r, dr) in prdrs
-            v = term(r, dr) # should perhaps be v = orbsized(term(r, dr), orb1, orb2)
-            vals[p] += padtotype(v, M)
-        end
-    end
-    return nothing
-end
-
-# API #
-
-function (ph::ParametricHamiltonian)(;kw...)
-    isempty(kw) && return ph.hamiltonian
-    model = ph.f(;kw...)
-    initialize!(ph)
-    foreach(term -> applyterm!(ph, term), terms(model))
-    return ph.hamiltonian
-end
-
-(ph::ParametricHamiltonian)(arg, args...; kw...) = ph(;kw...)(arg, args...)
-
-Base.Matrix(h::ParametricHamiltonian) =
-    ParametricHamiltonian(Matrix(h.base), Matrix(h.hamiltonian), h.pointers, h.f)
-
-Base.copy(h::ParametricHamiltonian) =
-    ParametricHamiltonian(copy(h.base), copy(h.hamiltonian), copy(h.pointers))
-
-Base.size(h::ParametricHamiltonian, n...) = size(h.hamiltonian, n...)
-
-bravais(ph::ParametricHamiltonian) = bravais(ph.hamiltonian.lattice)
-
-Base.eltype(::ParametricHamiltonian{H}) where {L,M,H<:Hamiltonian{L,M}} = M

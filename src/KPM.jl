@@ -102,7 +102,7 @@ _defaultA(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = one(T) * I
 # This iterates bras <psi_n| = <psi_0|T_n(h) instead of kets (faster CSC multiplication)
 # In practice we iterate their conjugate |psi_n> = T_n(h') |psi_0>, and do the projection
 # onto the start ket, A |psi_L>
-function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrixCSC}, pmeter)
+function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, pmeter)
     μlist, ket, ket0, ket1, ket2, ketL = b.μlist, b.ket, b.ket0, b.ket1, b.ket2, b.ketL
     h´, A, bandbracket = b.h', b.A, b.bandbracket
     order = length(μlist) - 1
@@ -122,7 +122,7 @@ function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrixCSC
     return μlist
 end
 
-function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrixCSC}, pmeter)
+function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix}, pmeter)
     μlist, ket, ket0, ket1, ket2 = b.μlist, b.ket, b.ket0, b.ket1, b.ket2
     h´, A, bandbracket = b.h', b.A, b.bandbracket
     order = length(μlist) - 1
