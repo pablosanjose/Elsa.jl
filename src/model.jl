@@ -432,14 +432,15 @@ Hopping!(f, selector, forcehermitian = true) =
 # API #
 
 """
-    onsite!(f; kw...)
-    onsite!(f, onsiteselector(; kw...))
+    onsite!(f; forcehermitian = true, kw...)
+    onsite!(f, onsiteselector(; kw...); forcehermitian = true)
 
 Create an `ElementModifier`, to be used with `parametric`, that applies `f` to onsite
 energies specified by `onsiteselector(; kw...)`. The form of `f` may be `f = (o; kw...) ->
 ...` or `f = (o, r; kw...) -> ...` if the modification is position (`r`) dependent. The
 former is naturally more efficient, as there is no need to compute the positions of each
-onsite energy.
+onsite energy. If `forcehermitian == true` the modification is forced to yield a hermitian
+Hamiltonian if the original was hermitian.
 
 # See also:
     `hopping!`, `parametric`
@@ -449,14 +450,15 @@ onsite!(f; forcehermitian = true, kw...) =
 onsite!(f, selector; forcehermitian = true) = Onsite!(f, selector, forcehermitian)
 
 """
-    hopping!(f; kw...)
-    hopping!(f, hoppingselector(; kw...))
+    hopping!(f; forcehermitian = true, kw...)
+    hopping!(f, hoppingselector(; kw...); forcehermitian = true)
 
 Create an `ElementModifier`, to be used with `parametric`, that applies `f` to hoppings
-specified by `hoppingselector(; kw...)`. The form of `f` may be `f = (t; kw...) ->
-...` or `f = (t, r, dr; kw...) -> ...` if the modification is position (`r, dr`) dependent. The
-former is naturally more efficient, as there is no need to compute the positions of the
-two sites involved in each hopping.
+specified by `hoppingselector(; kw...)`. The form of `f` may be `f = (t; kw...) -> ...` or
+`f = (t, r, dr; kw...) -> ...` if the modification is position (`r, dr`) dependent. The
+former is naturally more efficient, as there is no need to compute the positions of the two
+sites involved in each hopping. If `forcehermitian == true` the modification is forced to
+yield a hermitian Hamiltonian if the original was hermitian.
 
 # See also:
     `onsite!`, `parametric`
