@@ -19,7 +19,7 @@ struct KPMBuilder{A,H<:AbstractMatrix,T,K,B}
     ketL::K
 end
 
-function KPMBuilder(h::AbstractMatrix{Tv}, A = one(Tv) * I; ket = missing, order = 10, bandrange = missing) where {Tv}
+function KPMBuilder(h::AbstractMatrix{Tv}, A = _defaultA(Tv); ket = missing, order = 10, bandrange = missing) where {Tv}
     eh = eltype(eltype(h))
     aA = eltype(eltype(A))
     μlist = zeros(promote_type(eh, aA), order + 1)
@@ -78,9 +78,9 @@ julia> momentaKPM(bloch(h), bandrange = (-6,6))
 Elsa.MomentaKPM{Float64}([0.9594929736144973, -0.005881595972403821, -0.4933354572913581, 0.00359537502632597, 0.09759451291347333, -0.0008081453185250322, -0.00896262538765363, 0.00048205637037715177, -0.0003705198310034668, 9.64901673962623e-20, 9.110915988898614e-18], (0.0, 6.030150753768845))
 ```
 """
-momentaKPM(h::Hamiltonian, A = one(eltype(h)) * I; kw...) = momentaKPM(matrixKPM(h), matrixKPM(A); kw...)
+momentaKPM(h::Hamiltonian, A = _defaultA(eltype(h)); kw...) = momentaKPM(matrixKPM(h), matrixKPM(A); kw...)
 
-function momentaKPM(h::AbstractMatrix, A = one(eltype(h)) * I; randomkets = 1, kw...)
+function momentaKPM(h::AbstractMatrix, A = _defaultA(eltype(h)); randomkets = 1, kw...)
    b = KPMBuilder(h, A; kw...)
     if b.missingket
         pmeter = Progress(b.order * randomkets, "Averaging moments: ")
@@ -95,6 +95,9 @@ function momentaKPM(h::AbstractMatrix, A = one(eltype(h)) * I; randomkets = 1, k
     end
     return MomentaKPM(jackson!(b.μlist), b.bandbracket)
 end
+
+_defaultA(::Type{T}) where {T<:Number} = one(T) * I
+_defaultA(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = one(T) * I
 
 # This iterates bras <psi_n| = <psi_0|T_n(h) instead of kets (faster CSC multiplication)
 # In practice we iterate their conjugate |psi_n> = T_n(h') |psi_0>, and do the projection
