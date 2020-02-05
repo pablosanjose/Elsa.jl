@@ -1114,7 +1114,7 @@ function flattenoffsets(offsets, norbs)
 end
 
 # index of first orbital of site i after flattening
-function flattenind(i, lat, norbs, offsets´) where {S}
+function flattenind(i, lat, norbs, offsets´)
     s = sublat(lat, i)
     offset = lat.unitcell.offsets[s]
     Δi = i - offset
