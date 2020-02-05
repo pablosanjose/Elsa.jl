@@ -109,12 +109,12 @@ function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrixCSC
     μlist[1] += proj(ket0, ketL)
     μlist[2] += proj(ket1, ketL)
     for n in 3:(order+1)
+        ProgressMeter.next!(pmeter; showvalues = ())
         mulscaled!(ket2, h´, ket1, bandbracket)
         @. ket2 = 2 * ket2 - ket0
         μlist[n] += proj(ket2, ketL)
         n + 1 > order + 1 && break
         ket0, ket1, ket2 =  ket1, ket2, ket0
-        ProgressMeter.next!(pmeter; showvalues = ())
     end
     return μlist
 end
@@ -128,14 +128,14 @@ function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrixCS
     μlist[1] += μ0 = 1.0
     μlist[2] += μ1 = proj(ket1, ket0)
     for n in 3:2:(order+1)
+        ProgressMeter.next!(pmeter; showvalues = ())
+        ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
         μlist[n] += 2 * proj(ket1, ket1) - μ0
         n + 1 > order + 1 && break
         mulscaled!(ket2, h´, ket1, bandbracket)
         @. ket2 = 2 * ket2 - ket0
         μlist[n + 1] += 2 * proj(ket1, ket2) - μ1
         ket0, ket1, ket2 = ket1, ket2, ket0
-        ProgressMeter.next!(pmeter; showvalues = ())
-        ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
     end
     A.λ ≈ 1 || (μlist .*= A.λ)
     return μlist
