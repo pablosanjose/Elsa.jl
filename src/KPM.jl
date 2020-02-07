@@ -16,7 +16,6 @@ struct KPMBuilder{A,H<:AbstractMatrix,T,K,B}
     ket0::K
     ket1::K
     ket2::K
-    ketL::K
 end
 
 function KPMBuilder(h::AbstractMatrix{Tv}, A = _defaultA(Tv); ket = missing, order = 10, bandrange = missing) where {Tv}
@@ -26,9 +25,9 @@ function KPMBuilder(h::AbstractMatrix{Tv}, A = _defaultA(Tv); ket = missing, ord
     bandbracket = bandbracketKPM(h, bandrange)
     missingket = ket === missing
     ket´ = missingket ? ketundef(h) : ket
-    iscompatibleket(h, ket´) || throw(ArgumentError("ket is incomatible with Hamiltonian"))
+    iscompatibleket(h, ket´) || throw(ArgumentError("ket is incompatible with Hamiltonian"))
     builder = KPMBuilder(A, h, bandbracket, order, missingket,
-        μlist, ket´, similar(ket´), similar(ket´), similar(ket´), similar(ket´))
+        μlist, ket´, similar(ket´), similar(ket´), similar(ket´))
 end
 KPMBuilder(μlist, ket) =
     KPMBuilder(μlist, ket, similar(ket), similar(ket), similar(ket), similar(ket))
@@ -99,23 +98,22 @@ end
 _defaultA(::Type{T}) where {T<:Number} = one(T) * I
 _defaultA(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = one(T) * I
 
-# This iterates bras <psi_n| = <psi_0|T_n(h) instead of kets (faster CSC multiplication)
-# In practice we iterate their conjugate |psi_n> = T_n(h') |psi_0>, and do the projection
-# onto the start ket, A |psi_L>
+# This iterates bras <psi_n| = <psi_0|AT_n(h) instead of kets (faster CSC multiplication)
+# In practice we iterate their conjugate |psi_n> = T_n(h') A'|psi_0>, and do the projection
+# onto the start ket, |psi_0>
 function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, pmeter)
-    μlist, ket, ket0, ket1, ket2, ketL = b.μlist, b.ket, b.ket0, b.ket1, b.ket2, b.ketL
-    h´, A, bandbracket = b.h', b.A, b.bandbracket
+    μlist, ket, ket0, ket1, ket2 = b.μlist, b.ket, b.ket0, b.ket1, b.ket2
+    h´, A´, bandbracket = b.h', b.A', b.bandbracket
     order = length(μlist) - 1
-    ket0 .= ket
-    mul!(ketL, A, ket)
+    mul!(ket0, A´, ket)
     mulscaled!(ket1, h´, ket0, bandbracket)
-    μlist[1] += proj(ket0, ketL)
-    μlist[2] += proj(ket1, ketL)
+    μlist[1] += proj(ket0, ket)
+    μlist[2] += proj(ket1, ket)
     for n in 3:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
         mulscaled!(ket2, h´, ket1, bandbracket)
         @. ket2 = 2 * ket2 - ket0
-        μlist[n] += proj(ket2, ketL)
+        μlist[n] += proj(ket2, ket)
         n + 1 > order + 1 && break
         ket0, ket1, ket2 =  ket1, ket2, ket0
     end
