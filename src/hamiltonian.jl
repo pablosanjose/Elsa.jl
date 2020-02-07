@@ -99,6 +99,9 @@ blockdim(h::Hamiltonian) = blockdim(blocktype(h))
 blockdim(::Type{S}) where {N,S<:SMatrix{N,N}} = N
 blockdim(::Type{T}) where {T<:Number} = 1
 
+checkfinitedim(h::Hamiltonian{LA,L}) where {LA,L} =
+    L == 0 && throw(ArgumentError("A finite-dimensional Hamiltonian is required, not zero-dimensional"))
+
 function nhoppings(ham::Hamiltonian)
     count = 0
     for h in ham.harmonics

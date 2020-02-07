@@ -13,6 +13,8 @@ end
 diagonalizer(h::Hamiltonian, mesh::Mesh, method, minprojection) =
     Diagonalizer(method, codiagonalizer(h, mesh), minprojection)
 
+## Diagonalize methods ##
+
 function defaultmethod(h::Hamiltonian)
     if eltype(h) <: Number
         # method = issparse(h) ? ArpackPackage() : LinearAlgebraPackage()
@@ -34,8 +36,8 @@ end
 
 LinearAlgebraPackage(; kw...) = LinearAlgebraPackage(values(kw))
 
-function diagonalize(matrix, d::Diagonalizer{<:LinearAlgebraPackage})
-    ϵ, ψ = eigen!(matrix; (d.method.kw)...)
+function diagonalize(matrix, method::LinearAlgebraPackage)
+    ϵ, ψ = eigen!(matrix; (method.kw)...)
     return ϵ, ψ
 end
 
@@ -48,8 +50,8 @@ end
 
 ArpackPackage(; kw...) = (checkloaded(:Arpack); ArpackPackage(values(kw)))
 
-function diagonalize(matrix, d::Diagonalizer{<:ArpackPackage})
-    ϵ, ψ = Main.Arpack.eigs(matrix; (d.method.kw)...)
+function diagonalize(matrix, method::ArpackPackage)
+    ϵ, ψ = Main.Arpack.eigs(matrix; (method.kw)...)
     return ϵ, ψ
 end
 
@@ -63,11 +65,11 @@ end
 
 KrylovKitPackage(; kw...) = (checkloaded(:KrylovKit); KrylovKitPackage(values(kw)))
 
-function diagonalize(matrix::AbstractMatrix{M}, d::Diagonalizer{<:KrylovKitPackage}) where {M}
+function diagonalize(matrix::AbstractMatrix{M}, method::KrylovKitPackage) where {M}
     ishermitian(matrix) || throw(ArgumentError("Only Hermitian matrices supported with KrylovKitPackage for the moment"))
-    origin = get(d.method.kw, :origin, 0.0)
-    howmany = get(d.method.kw, :howmany, 1)
-    kw´ = Base.structdiff(d.method.kw, NamedTuple{(:origin,:howmany)}) # Remove origin option
+    origin = get(method.kw, :origin, 0.0)
+    howmany = get(method.kw, :howmany, 1)
+    kw´ = Base.structdiff(method.kw, NamedTuple{(:origin,:howmany)}) # Remove origin option
     lmap = shiftandinvert(matrix, origin)
     T = eltypevec(matrix)
     n = size(matrix, 2)

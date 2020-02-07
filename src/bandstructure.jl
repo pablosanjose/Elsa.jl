@@ -1,4 +1,57 @@
 #######################################################################
+# Spectrum
+#######################################################################
+struct Spectrum{E,T,A<:AbstractMatrix{T}}
+    energies::E
+    states::A
+end
+
+"""
+    spectrum(h; method = defaultmethod(h))
+
+Compute the spectrum of a 0D Hamiltonian `h` (or alternatively of the bounded unit cell of a
+finite dimensional `h`) using one of the following `method`s
+
+    method                    diagonalization function
+    --------------------------------------------------------------
+    LinearAlgebraPackage()     LinearAlgebra.eigen!
+    ArpackPackage()            Arpack.eigs (must be `using Arpack`)
+
+The energies and eigenstates in the resulting `s::Spectrum` object can be accessed with
+`energies(s)` and `states(s)`
+
+# See also
+    `energies`, `states`, `bandstructure`
+
+"""
+function spectrum(h; method = defaultmethod(h))
+    matrix = similarmatrix(h, method)
+    bloch!(matrix, h)
+    (ϵk, ψk) = diagonalize(matrix, method)
+    return Spectrum(ϵk, ψk)
+end
+
+"""
+    energies(s::Spectrum)
+
+Return the energies of `s` as a `Vector`
+
+# See also
+    `spectrum`, `states`
+"""
+energies(s::Spectrum) = s.energies
+
+"""
+    states(s::Spectrum)
+
+Return the states of `s` as the columns of a `Matrix`
+
+# See also
+    `spectrum`, `energies`
+"""
+states(s::Spectrum) = s.states
+
+#######################################################################
 # Bandstructure
 #######################################################################
 struct Band{M,A<:AbstractVector{M},MD<:Mesh,S<:AbstractArray}
@@ -101,11 +154,13 @@ Bandstructure: bands for a 2D hamiltonian
     marchingmesh
 """
 function bandstructure(h::Hamiltonian{<:Any,L,M}; resolution = 13, shift = missing, kw...) where {L,M}
+    checkfinitedim(h)
     mesh = marchingmesh(h; npoints = resolution, shift = shift)
     return bandstructure(h,  mesh; kw...)
 end
 
 function bandstructure(h::Hamiltonian, mesh::Mesh; method = defaultmethod(h), minprojection = 0.5)
+    checkfinitedim(h)
     ishermitian(h) || throw(ArgumentError("Hamiltonian must be hermitian"))
     d = diagonalizer(h, mesh, method, minprojection)
     matrix = similarmatrix(h, method)
@@ -126,7 +181,7 @@ function bandstructure!(matrix::AbstractMatrix, h::Hamiltonian{<:Lattice,<:Any,M
     for (n, ϕs) in enumerate(vertices(mesh))
         bloch!(matrix, h, ϕs)
         # (ϵk, ψk) = diagonalize(Hermitian(matrix), d)  ## This is faster (!)
-        (ϵk, ψk) = diagonalize(matrix, d)
+        (ϵk, ψk) = diagonalize(matrix, d.method)
         resolve_degeneracies!(ϵk, ψk, ϕs, matrix, d.codiag)
         if n == 1  # With first vertex can now know the number of eigenvalues... Reassign
             nϵ = size(ϵk, 1)

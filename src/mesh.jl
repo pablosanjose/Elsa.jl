@@ -145,7 +145,10 @@ function marchingmesh(npoints::Vararg{Integer,L}; axes = 1.0 * I, shift = missin
     return _marchingmesh(ranges´, SMatrix{L,L}(axes))
 end
 
+marchingmesh(; kw...) = throw(ArgumentError("Need a finite number of points"))
+
 function marchingmesh(h::Hamiltonian{<:Lattice,L}; npoints = 13, shift = missing) where {L}
+    checkfinitedim(h)
     ranges = meshranges(npoints, Val(L))
     ranges´ = shiftranges(ranges, shift)
     return _marchingmesh(ranges´, SMatrix{L,L}(I))
@@ -158,7 +161,7 @@ shiftranges(rs, shift::Missing) = rs
 shiftranges(rs::NTuple{L}, shift::Number) where {L} = shiftranges(rs, filltuple(shift, Val(L)))
 shiftranges(rs::NTuple{L}, shifts::NTuple{L}) where {L} = ((r, s) -> r .+ s).(rs, shifts)
 
-function _marchingmesh(ranges::NTuple{D,AbstractRange}, axes::SMatrix{D,D}) where {D,T<:AbstractFloat}
+function _marchingmesh(ranges::NTuple{D,AbstractRange}, axes::SMatrix{D,D}) where {D}
     npoints = length.(ranges)
     projection = axes' # ./ (SVector(npoints) - 1)' # Projects binary vector to m box with npoints
     cs = CartesianIndices(ntuple(n -> 1:npoints[n], Val(D)))

@@ -15,11 +15,11 @@ using StaticArrays, NearestNeighbors, SparseArrays, LinearAlgebra, OffsetArrays,
 
 using SparseArrays: getcolptr, AbstractSparseMatrix
 
-export sublat, bravais, lattice, dims, hopping, onsite, hamiltonian, parametric,
+export sublat, bravais, lattice, dims, sites, hopping, onsite, hamiltonian, parametric,
        onsiteselector, hoppingselector, onsite!, hopping!,
        mul!, supercell, unitcell, semibounded, bloch, bloch!, optimize!, similarmatrix,
-       sites, bandstructure, marchingmesh, defaultmethod, bands, vertices, states,
-       flatten, wrap, transform!, combine,
+       spectrum, bandstructure, marchingmesh, defaultmethod, bands, vertices,
+       energies, states, flatten, wrap, transform!, combine,
        momentaKPM, dosKPM, averageKPM, densityKPM
 
 export LatticePresets, RegionPresets, HamiltonianPresets
