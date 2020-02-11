@@ -24,9 +24,12 @@ each with a set of parameters given as keyword arguments of functions `f`. The r
 `ph::ParamtricHamiltonian` can be used to produced the modified Hamiltonian simply by
 calling it with those same parameters as keyword arguments.
 
-Note that for sparse `h`, `parametric` only modifies existing onsites and hoppings in `h`,
+Note 1: for sparse `h`, `parametric` only modifies existing onsites and hoppings in `h`,
 so be sure to add zero onsites and/or hoppings to `h` if they are originally not present but
 you need to apply modifiers to them.
+
+Note 2: `optimize!(h)` is called prior to building the parametric Hamiltonian. This can lead
+to extra zero onsites and hoppings being stored in sparse `h`s.
 
     h |> parametric(modifiers::ElementModifier...)
 
@@ -61,6 +64,7 @@ Hamiltonian{<:Lattice} : Hamiltonian on a 2D Lattice in 2D space
 """
 function parametric(h::Hamiltonian, ts::ElementModifier...)
     ts´ = resolve.(ts, Ref(h.lattice))
+    optimize!(h)  # to avoid ptrs getting out of sync if optimize! later
     return ParametricHamiltonian(h, copy(h), ts´, parametric_ptrdata.(Ref(h), ts´))
 end
 
