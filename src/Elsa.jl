@@ -21,7 +21,7 @@ export sublat, bravais, lattice, dims, sites, supercell, unitcell,
        flatten, wrap, transform!, combine,
        spectrum, bandstructure, marchingmesh, defaultmethod, bands, vertices,
        energies, states,
-       momentaKPM, dosKPM, averageKPM, densityKPM
+       momentaKPM, dosKPM, averageKPM, densityKPM, bandrangeKPM
 
 export LatticePresets, RegionPresets, HamiltonianPresets
 
