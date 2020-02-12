@@ -105,41 +105,83 @@ function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, 
     μlist, ket, ket0, ket1, ket2 = b.μlist, b.ket, b.ket0, b.ket1, b.ket2
     h´, A´, bandbracket = b.h', b.A', b.bandbracket
     order = length(μlist) - 1
-    mul!(ket0, A´, ket)
-    mulscaled!(ket1, h´, ket0, bandbracket)
-    μlist[1] += proj(ket0, ket)
-    μlist[2] += proj(ket1, ket)
-    for n in 3:(order+1)
+    fill!(ket0, zero(eltype(ket0)))
+    mul!(ket1, A´, ket)
+    μlist[1] += proj(ket1, ket)
+    ProgressMeter.next!(pmeter; showvalues = ())
+    for n in 2:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
-        mulscaled!(ket2, h´, ket1, bandbracket)
-        @. ket2 = 2 * ket2 - ket0
-        μlist[n] += proj(ket2, ket)
+        μ = iterate_KPM!(ket0, ket1, ket, h´, bandbracket)
+        μlist[n] += μ
         n + 1 > order + 1 && break
-        ket0, ket1, ket2 =  ket1, ket2, ket0
+        ket0, ket1 = ket1, ket0
     end
     return μlist
+end
+
+function iterate_KPM!(ket0::A, ket1::A, kini::A, adjh::Adjoint, (center, halfwidth)) where {T,A<:AbstractArray{T}}
+    h = adjh.parent
+    nzv = nonzeros(h)
+    rv = rowvals(h)
+    μ = zero(eltype(T))
+    α = - 2.0 * center / halfwidth
+    β = 2.0 / halfwidth
+    for k in 1:size(ket0, 2)
+        for col in 1:size(h, 2)
+            @inbounds begin
+                tmp = α * ket1[col, k] - ket0[col, k]
+                for ptr in nzrange(h, col)
+                    tmp += β * adjoint(nzv[ptr]) * ket1[rv[ptr],k]
+                end
+                ket0[col, k] = tmp
+                μ += dot(tmp, kini[col, k])
+            end
+        end
+    end
+    return μ
 end
 
 function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix}, pmeter)
     μlist, ket, ket0, ket1, ket2 = b.μlist, b.ket, b.ket0, b.ket1, b.ket2
     h´, A, bandbracket = b.h', b.A, b.bandbracket
     order = length(μlist) - 1
-    ket0 .= ket
-    mulscaled!(ket1, h´, ket0, bandbracket)
-    μlist[1] += μ0 = 1.0
-    μlist[2] += μ1 = proj(ket1, ket0)
-    for n in 3:2:(order+1)
+    fill!(ket0, zero(eltype(ket0)))
+    ket1 .= ket
+    for n in 1:2:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
         ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
-        μlist[n] += 2 * proj(ket1, ket1) - μ0
+        μ, μ´ = iterate_KPM!(ket0, ket1, h´, bandbracket)
+        μlist[n] += μ
         n + 1 > order + 1 && break
-        mulscaled!(ket2, h´, ket1, bandbracket)
-        @. ket2 = 2 * ket2 - ket0
-        μlist[n + 1] += 2 * proj(ket1, ket2) - μ1
-        ket0, ket1, ket2 = ket1, ket2, ket0
+        μlist[n + 1] += μ´
+        ket0, ket1 = ket1, ket0
     end
     A.λ ≈ 1 || (μlist .*= A.λ)
     return μlist
+end
+
+function iterate_KPM!(ket0::A, ket1::A, adjh::Adjoint, (center, halfwidth)) where {T,A<:AbstractArray{T}}
+    h = adjh.parent
+    nzv = nonzeros(h)
+    rv = rowvals(h)
+    μ = μ´ = zero(eltype(T))
+    α = - 2.0 * center / halfwidth
+    β = 2.0 / halfwidth
+    for k in 1:size(ket0, 2)
+        for col in 1:size(h, 2)
+            @inbounds begin
+                k1 = ket1[col, k]
+                tmp = α * k1 - ket0[col, k]
+                for ptr in nzrange(h, col)
+                    tmp += β * adjoint(nzv[ptr]) * ket1[rv[ptr],k]
+                end
+                ket0[col, k] = tmp
+                μ  += dot(k1, k1)
+                μ´ += dot(tmp, k1)
+            end
+        end
+    end
+    return μ, μ´
 end
 
 function mulscaled!(y, h, x, (center, halfwidth))
