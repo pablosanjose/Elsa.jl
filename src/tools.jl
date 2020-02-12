@@ -59,7 +59,7 @@ filltuple(x, ::Val{L}) where {L} = ntuple(_ -> x, Val(L))
 
 ## Work around BUG: -SVector{0,Int}() isa SVector{0,Union{}}
 negative(s::SVector{L,<:Number}) where {L} = -s
-negative(s::SVector{0,<:Number}) where {L} = s
+negative(s::SVector{0,<:Number}) = s
 
 empty_sparse(::Type{M}, n, m) where {M} = sparse(Int[], Int[], M[], n, m)
 

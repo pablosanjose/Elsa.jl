@@ -262,7 +262,7 @@ Lattice{2,2,Float64} : 2D lattice in 2D space
 # See also:
     LatticePresets, bravais, sublat, supercell, intracell
 """
-lattice(s::Sublat, ss::Sublat...; kw...) where {E,T} = _lattice(Unitcell(s, ss...; kw...))
+lattice(s::Sublat, ss::Sublat...; kw...) = _lattice(Unitcell(s, ss...; kw...))
 _lattice(u::Unitcell{E,T}) where {E,T} = Lattice(Bravais{E,T}(), u)
 lattice(br::Bravais, s::Sublat, ss::Sublat...; kw...) = lattice(br, Unitcell(s, ss...; kw...))
 
@@ -271,7 +271,7 @@ function lattice(bravais::Bravais{E2,L2}, unitcell::Unitcell{E,T}) where {E2,L2,
     Lattice(convert(Bravais{E,L,T}, bravais), unitcell)
 end
 
-issemibounded(lat::Lattice) where {L} = issemibounded(lat.bravais)
+issemibounded(lat::Lattice) = issemibounded(lat.bravais)
 
 """
     dims(lat::Lattice{E,L}) -> (E, L)
@@ -320,7 +320,7 @@ isinmask(s::Supercell{L,L´,Missing}, site, dn) where {L,L´} = true
 isinmask(s::Supercell{L,L´,<:OffsetArray}, site) where {L,L´} = s.mask[site]
 isinmask(s::Supercell{L,L´,Missing}, site) where {L,L´} = true
 
-issemibounded(sc::Supercell) where {L} = !iszero(sc.semibounded)
+issemibounded(sc::Supercell) = !iszero(sc.semibounded)
 
 Base.copy(s::Supercell{<:Any,<:Any,Missing}) =
     Supercell(copy(s.matrix), s.sites, s.cells, s.mask, s.semibounded)
@@ -566,7 +566,7 @@ supercell(lat::AbstractLattice, vecs::NTuple{L,Integer}...; region = missing) wh
     _supercell(lat, toSMatrix(Int, vecs...), region)
 supercell(lat::AbstractLattice, s::SMatrix; region = missing) = _supercell(lat, s, region)
 
-function _supercell(lat::AbstractLattice{E,L}, factors::Vararg{Integer,L}) where {E,L,L´}
+function _supercell(lat::AbstractLattice{E,L}, factors::Vararg{Integer,L}) where {E,L}
     scmatrix = SMatrix{L,L,Int}(Diagonal(SVector(factors)))
     sites = 1:nsites(lat)
     cells = CartesianIndices((i -> 0 : i - 1).(factors))

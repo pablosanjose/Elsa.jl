@@ -46,7 +46,7 @@ hoppingselector(; region = missing, sublats = missing, dn = missing, range = mis
 sanitize_sublats(s::Missing) = missing
 sanitize_sublats(s::Integer) = (nametype(s),)
 sanitize_sublats(s::NameType) = (s,)
-sanitize_sublats(s::Tuple) where {N} = nametype.(s)
+sanitize_sublats(s::Tuple) = nametype.(s)
 sanitize_sublats(s::Tuple{}) = ()
 sanitize_sublats(n) = throw(ErrorException(
     "`sublats` for `onsite` must be either `missing`, an `s` or a tuple of `s`s, with `s::$NameType` is a sublattice name"))

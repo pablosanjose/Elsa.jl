@@ -72,7 +72,7 @@ matrixtype(::Hamiltonian{LA,L,M,A}) where {LA,L,M,A} = A
 realtype(::Hamiltonian{<:Any,<:Any,M}) where {M} = real(eltype(M))
 
 # find SVector type that can hold all orbital amplitudes in any lattice sites
-orbitaltype(orbs, type::Type{Tv} = Complex{T}) where {E,L,T,Tv} =
+orbitaltype(orbs, type::Type{Tv} = Complex{T}) where {T,Tv} =
     _orbitaltype(SVector{1,Tv}, orbs...)
 _orbitaltype(::Type{S}, ::NTuple{D,NameType}, os...) where {N,Tv,D,S<:SVector{N,Tv}} =
     (M = max(N,D); _orbitaltype(SVector{M,Tv}, os...))
@@ -80,7 +80,7 @@ _orbitaltype(t::Type{SVector{N,Tv}}) where {N,Tv} = t
 _orbitaltype(t::Type{SVector{1,Tv}}) where {Tv} = Tv
 
 # find SMatrix type that can hold all matrix elements between lattice sites
-blocktype(orbs, type::Type{Tv}) where {E,L,Tv} =
+blocktype(orbs, type::Type{Tv}) where {Tv} =
     _blocktype(orbitaltype(orbs, Tv))
 _blocktype(::Type{S}) where {N,Tv,S<:SVector{N,Tv}} = SMatrix{N,N,Tv,N*N}
 _blocktype(::Type{S}) where {S<:Number} = S
@@ -314,9 +314,6 @@ _hamiltonian(lat::AbstractLattice, orbs; kw...) = _hamiltonian(lat, orbs, Tightb
 _hamiltonian(lat::AbstractLattice, orbs, f::Function; kw...) = _hamiltonian(lat, orbs, TightbindingModel(), f; kw...)
 _hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel; type::Type = Complex{numbertype(lat)}, kw...) =
     hamiltonian_sparse(blocktype(orbs, type), lat, orbs, m; kw...)
-_hamiltonian(lat::AbstractLattice, orbs, m::TightbindingModel, f::Function;
-            type::Type = Complex{numbertype(lat)}, kw...) =
-    parametric_hamiltonian(blocktype(orbs, type), lat, orbs, m, f; kw...)
 
 hamiltonian(t::TightbindingModel...; kw...) =
     z -> hamiltonian(z, t...; kw...)
@@ -981,7 +978,7 @@ Note that when calling `similarmatrix(h)` on a sparse `h`, `optimize!` is called
 # See also:
     bloch, bloch!
 """
-function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {LA,L,M,A<:SparseMatrixCSC}
+function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {L,M,A<:SparseMatrixCSC}
     h0 = first(ham.harmonics)
     n, m = size(h0.h)
     iszero(h0.dn) || throw(ArgumentError("First Hamiltonian harmonic is not the fundamental"))
@@ -1006,7 +1003,7 @@ end
 # IDEA: could sum and subtract all harmonics instead
 # Tested, it is slower
 
-function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {LA,L,M,A<:AbstractMatrix}
+function optimize!(ham::Hamiltonian{<:Lattice,L,M,A}) where {L,M,A<:AbstractMatrix}
     # @warn "Hamiltonian is not sparse. Nothing changed."
     return ham
 end
