@@ -774,55 +774,55 @@ function supercell_sites(lat::Superlattice)
     return newsites
 end
 
-#######################################################################
-# semibounded
-#######################################################################
-"""
-    semibounded(lat::AbstractLattice, axes)
+# #######################################################################
+# # semibounded
+# #######################################################################
+# """
+#     semibounded(lat::AbstractLattice, axes)
 
-Create an AbstractLattice like `lat` but with a specific set of semibound axes. These can be
-a boolean (i.e. all or none are semibounded), a tuple of booleans (one per axis) or a
-collection of axis indices to make semibounded
+# Create an AbstractLattice like `lat` but with a specific set of semibound axes. These can be
+# a boolean (i.e. all or none are semibounded), a tuple of booleans (one per axis) or a
+# collection of axis indices to make semibounded
 
-    lat |> semibounded(axes)
+#     lat |> semibounded(axes)
 
-Function form equivalent to semibounded(lat, axes)
+# Function form equivalent to semibounded(lat, axes)
 
-# Examples
-```jldoctest
-julia> semibounded(LatticePresets.honeycomb(), 2)
-Lattice{2,2,Float64} : 2D lattice in 2D space
-  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
-    Semibounded   : (2)
-  Sublattices     : 2
-    Names         : (:A, :B)
-    Sites         : (1, 1) --> 2 total per unit cell
+# # Examples
+# ```jldoctest
+# julia> semibounded(LatticePresets.honeycomb(), 2)
+# Lattice{2,2,Float64} : 2D lattice in 2D space
+#   Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+#     Semibounded   : (2)
+#   Sublattices     : 2
+#     Names         : (:A, :B)
+#     Sites         : (1, 1) --> 2 total per unit cell
 
-julia> LatticePresets.honeycomb() |> supercell(4) |> semibounded((true, false))
-Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
-  Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
-  Sublattices     : 2
-    Names         : (:A, :B)
-    Sites         : (1, 1) --> 2 total per unit cell
-  Supercell{2,2} for 2D superlattice of the base 2D lattice
-    Supervectors  : ((4, 0), (0, 4))
-    Supersites    : 32
-    Semibounded   : (1)
-```
-"""
-semibounded(axes) = lat -> semibounded(lat, axes)
+# julia> LatticePresets.honeycomb() |> supercell(4) |> semibounded((true, false))
+# Superlattice{2,2,Float64,2} : 2D lattice in 2D space, filling a 2D supercell
+#   Bravais vectors : ((0.5, 0.866025), (-0.5, 0.866025))
+#   Sublattices     : 2
+#     Names         : (:A, :B)
+#     Sites         : (1, 1) --> 2 total per unit cell
+#   Supercell{2,2} for 2D superlattice of the base 2D lattice
+#     Supervectors  : ((4, 0), (0, 4))
+#     Supersites    : 32
+#     Semibounded   : (1)
+# ```
+# """
+# semibounded(axes) = lat -> semibounded(lat, axes)
 
-function semibounded(lat::Lattice, axes = true)
-    matrix = lat.bravais.matrix
-    sb = sanitize_semibounded(axes, matrix)
-    br = Bravais(matrix, sb)
-    return Lattice(br, lat.unitcell)
-end
+# function semibounded(lat::Lattice, axes = true)
+#     matrix = lat.bravais.matrix
+#     sb = sanitize_semibounded(axes, matrix)
+#     br = Bravais(matrix, sb)
+#     return Lattice(br, lat.unitcell)
+# end
 
-function semibounded(lat::Superlattice, axes = true)
-    sc = lat.supercell
-    matrix = lat.bravais.matrix * sc.matrix
-    sb = sanitize_semibounded(axes, matrix)
-    scell = Supercell(sc.matrix, sc.sites, sc.cells, sc.mask, sb)
-    return Superlattice(lat.bravais, lat.unitcell, scell)
-end
+# function semibounded(lat::Superlattice, axes = true)
+#     sc = lat.supercell
+#     matrix = lat.bravais.matrix * sc.matrix
+#     sb = sanitize_semibounded(axes, matrix)
+#     scell = Supercell(sc.matrix, sc.sites, sc.cells, sc.mask, sb)
+#     return Superlattice(lat.bravais, lat.unitcell, scell)
+# end
