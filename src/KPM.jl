@@ -28,6 +28,7 @@ function KPMBuilder(h::AbstractMatrix{Tv}, A = _defaultA(Tv); ket = missing, ord
     iscompatibleket(h, ket´) || throw(ArgumentError("ket is incompatible with Hamiltonian"))
     builder = KPMBuilder(A, h, bandbracket, order, missingket,
         μlist, ket´, similar(ket´), similar(ket´), similar(ket´))
+    return builder
 end
 KPMBuilder(μlist, ket) =
     KPMBuilder(μlist, ket, similar(ket), similar(ket), similar(ket), similar(ket))
@@ -119,13 +120,14 @@ function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, 
     return μlist
 end
 
-function iterate_KPM!(ket0::A, ket1::A, kini::A, adjh::Adjoint, (center, halfwidth)) where {T,A<:AbstractArray{T}}
+function iterate_KPM!(ket0::A, ket1::A, kini::A, adjh::Adjoint, (center, halfwidth)) where {S,A<:AbstractArray{S}}
     h = adjh.parent
     nzv = nonzeros(h)
     rv = rowvals(h)
-    μ = zero(eltype(T))
-    α = - 2.0 * center / halfwidth
-    β = 2.0 / halfwidth
+    T = eltype(S)
+    μ = zero(T)
+    α = T(-2 * center / halfwidth)
+    β = T(2 / halfwidth)
     for k in 1:size(ket0, 2)
         for col in 1:size(h, 2)
             @inbounds begin
@@ -160,13 +162,14 @@ function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix},
     return μlist
 end
 
-function iterate_KPM!(ket0::A, ket1::A, adjh::Adjoint, (center, halfwidth)) where {T,A<:AbstractArray{T}}
+function iterate_KPM!(ket0::A, ket1::A, adjh::Adjoint, (center, halfwidth)) where {S,A<:AbstractArray{S}}
     h = adjh.parent
     nzv = nonzeros(h)
     rv = rowvals(h)
-    μ = μ´ = zero(eltype(T))
-    α = - 2.0 * center / halfwidth
-    β = 2.0 / halfwidth
+    T = eltype(S)
+    μ = μ´ = zero(T)
+    α = T(-2 * center / halfwidth)
+    β = T(2 / halfwidth)
     for k in 1:size(ket0, 2)
         for col in 1:size(h, 2)
             @inbounds begin
