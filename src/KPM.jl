@@ -192,8 +192,8 @@ function randomize!(v::AbstractVector{T}) where {T}
     normalize!(v)
     return v
 end
-@inline _randomize(v::T) where {T<:Real} = 2 * rand(T) - 1
-@inline _randomize(v::T) where {R,T<:Complex{R}} = (2rand(R) - 1) + (2rand(R) - 1)im
+@inline _randomize(v::T) where {T<:Real} = randn(R)
+@inline _randomize(v::T) where {R,T<:Complex{R}} = randn(R) + im * randn(R)
 @inline _randomize(v::T) where {T<:SArray} = _randomize.(v)
 
 function jackson!(μ::AbstractVector)
@@ -209,7 +209,7 @@ function bandbracketKPM(h, ::Missing)
     @warn "Computing spectrum bounds... Consider using the `bandrange` kwargs for faster performance."
     bandbracketKPM(h, bandrangeKPM(h))
 end
-bandbracketKPM(h, (ϵmin, ϵmax)::Tuple{T,T}, pad = T(0.01)) where {T} = ((ϵmax + ϵmin) / t, (ϵmax - ϵmin) / (2 - pad))
+bandbracketKPM(h, (ϵmin, ϵmax)::Tuple{T,T}, pad = float(T)(0.01)) where {T} = ((ϵmax + ϵmin) / 2, (ϵmax - ϵmin) / (2 - pad))
 
 function bandrangeKPM(h::AbstractMatrix{T}) where {T}
     checkloaded(:ArnoldiMethod)
