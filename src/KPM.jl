@@ -15,7 +15,6 @@ struct KPMBuilder{A,H<:AbstractMatrix,T,K,B}
     ket::K
     ket0::K
     ket1::K
-    ket2::K
 end
 
 function KPMBuilder(h::AbstractMatrix{Tv}, A = _defaultA(Tv); ket = missing, order = 10, bandrange = missing) where {Tv}
@@ -27,11 +26,9 @@ function KPMBuilder(h::AbstractMatrix{Tv}, A = _defaultA(Tv); ket = missing, ord
     ket´ = missingket ? ketundef(h) : ket
     iscompatibleket(h, ket´) || throw(ArgumentError("ket is incompatible with Hamiltonian"))
     builder = KPMBuilder(A, h, bandbracket, order, missingket,
-        μlist, ket´, similar(ket´), similar(ket´), similar(ket´))
+        μlist, ket´, similar(ket´), similar(ket´))
     return builder
 end
-KPMBuilder(μlist, ket) =
-    KPMBuilder(μlist, ket, similar(ket), similar(ket), similar(ket), similar(ket))
 
 ketundef(h::AbstractMatrix{T}) where {T<:Number} =
     Vector{T}(undef, size(h, 2))
@@ -103,7 +100,7 @@ _defaultA(::Type{S}) where {N,T,S<:SMatrix{N,N,T}} = one(T) * I
 # In practice we iterate their conjugate |psi_n> = T_n(h') A'|psi_0>, and do the projection
 # onto the start ket, |psi_0>
 function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, pmeter)
-    μlist, ket, ket0, ket1, ket2 = b.μlist, b.ket, b.ket0, b.ket1, b.ket2
+    μlist, ket, ket0, ket1 = b.μlist, b.ket, b.ket0, b.ket1
     h´, A´, bandbracket = b.h', b.A', b.bandbracket
     order = length(μlist) - 1
     fill!(ket0, zero(eltype(ket0)))
@@ -112,7 +109,7 @@ function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, 
     ProgressMeter.next!(pmeter; showvalues = ())
     for n in 2:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
-        μ = iterate_KPM!(ket0, ket1, ket, h´, bandbracket)
+        μ = iterateKPM!(ket0, ket1, ket, h´, bandbracket)
         μlist[n] += μ
         n + 1 > order + 1 && break
         ket0, ket1 = ket1, ket0
@@ -120,7 +117,7 @@ function addmomentaKPM!(b::KPMBuilder{<:AbstractMatrix,<:AbstractSparseMatrix}, 
     return μlist
 end
 
-function iterate_KPM!(ket0::A, ket1::A, kini::A, adjh::Adjoint, (center, halfwidth)) where {S,A<:AbstractArray{S}}
+function iterateKPM!(ket0::A, ket1::A, kini::A, adjh::Adjoint, (center, halfwidth)) where {S,A<:AbstractArray{S}}
     h = adjh.parent
     nzv = nonzeros(h)
     rv = rowvals(h)
@@ -144,7 +141,7 @@ function iterate_KPM!(ket0::A, ket1::A, kini::A, adjh::Adjoint, (center, halfwid
 end
 
 function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix}, pmeter)
-    μlist, ket, ket0, ket1, ket2 = b.μlist, b.ket, b.ket0, b.ket1, b.ket2
+    μlist, ket, ket0, ket1 = b.μlist, b.ket, b.ket0, b.ket1
     h´, A, bandbracket = b.h', b.A, b.bandbracket
     order = length(μlist) - 1
     fill!(ket0, zero(eltype(ket0)))
@@ -152,7 +149,7 @@ function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix},
     for n in 1:2:(order+1)
         ProgressMeter.next!(pmeter; showvalues = ())
         ProgressMeter.next!(pmeter; showvalues = ()) # twice because of 2-step
-        μ, μ´ = iterate_KPM!(ket0, ket1, h´, bandbracket)
+        μ, μ´ = iterateKPM!(ket0, ket1, h´, bandbracket)
         μlist[n] += μ
         n + 1 > order + 1 && break
         μlist[n + 1] += μ´
@@ -162,7 +159,7 @@ function addmomentaKPM!(b::KPMBuilder{<:UniformScaling, <:AbstractSparseMatrix},
     return μlist
 end
 
-function iterate_KPM!(ket0::A, ket1::A, adjh::Adjoint, (center, halfwidth)) where {S,A<:AbstractArray{S}}
+function iterateKPM!(ket0::A, ket1::A, adjh::Adjoint, (center, halfwidth)) where {S,A<:AbstractArray{S}}
     h = adjh.parent
     nzv = nonzeros(h)
     rv = rowvals(h)
@@ -185,12 +182,6 @@ function iterate_KPM!(ket0::A, ket1::A, adjh::Adjoint, (center, halfwidth)) wher
         end
     end
     return μ, μ´
-end
-
-function mulscaled!(y, h, x, (center, halfwidth))
-    mul!(y, h, x)
-    @. y = (y - center * x) / halfwidth
-    return y
 end
 
 # This is equivalent to tr(ket1'*ket2) for matrices, and ket1'*ket2 for vectors
@@ -218,7 +209,7 @@ function bandbracketKPM(h, ::Missing)
     @warn "Computing spectrum bounds... Consider using the `bandrange` kwargs for faster performance."
     bandbracketKPM(h, bandrangeKPM(h))
 end
-bandbracketKPM(h, (ϵmin, ϵmax), pad = 0.01) = ((ϵmax + ϵmin) / 2.0, (ϵmax - ϵmin) / (2.0 - pad))
+bandbracketKPM(h, (ϵmin, ϵmax)::Tuple{T,T}, pad = T(0.01)) where {T} = ((ϵmax + ϵmin) / t, (ϵmax - ϵmin) / (2 - pad))
 
 function bandrangeKPM(h::AbstractMatrix{T}) where {T}
     checkloaded(:ArnoldiMethod)
