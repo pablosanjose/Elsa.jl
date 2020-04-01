@@ -66,7 +66,7 @@ sanitize_dn(dn::Tuple{Vararg{Number,N}}) where {N} = (SVector{N,Int}(dn),)
 sanitize_dn(dn::Tuple{}) = ()
 
 sanitize_range(::Missing) = missing
-sanitize_range(range::Real) = float(range) + sqrt(eps(float(range)))
+sanitize_range(range::Real) = isfinite(range) ? float(range) + sqrt(eps(float(range))) : float(range)
 
 sublats(s::OnsiteSelector{<:Any,Missing}, lat::AbstractLattice) = collect(1:nsublats(lat))
 
