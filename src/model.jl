@@ -61,8 +61,8 @@ sanitize_sublatpairs(s) = throw(ErrorException(
     "`sublats` for `hopping` must be either `missing`, a tuple `(s₁, s₂)`, or a tuple of such tuples, with `sᵢ::$NameType` a sublattice name"))
 
 sanitize_dn(dn::Missing) = missing
-sanitize_dn(dn::Tuple{Vararg{Tuple}}) = SVector.(dn)
-sanitize_dn(dn::Tuple{Vararg{Integer}}) = (SVector(dn),)
+sanitize_dn(dn::Tuple{Vararg{NTuple{N}}}) where {N} = SVector{N,Int}.(dn)
+sanitize_dn(dn::Tuple{Vararg{Number,N}}) where {N} = (SVector{N,Int}(dn),)
 sanitize_dn(dn::Tuple{}) = ()
 
 sanitize_range(::Missing) = missing
